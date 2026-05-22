@@ -40,6 +40,8 @@ gradle shadowJar
 # JAR: build/libs/clan-capes-paper-1.0.0.jar → plugins/
 ```
 
+> **Загрузка на хостинг:** файл должен быть **~20 MB** (не 0 KB). В логе `zip file is empty` — JAR обрезался при FTP/панели; залейте заново в **binary** режиме. После старта появится `plugins/ClanCapes/config.yml`.
+
 Настройте `plugins/ClanCapes/config.yml`:
 
 - `api.port` — REST для клиента (по умолчанию **8080**)
@@ -65,13 +67,19 @@ gradle build
 
 Конфиг клиента: `config/clancapes.json` (см. `fabric-mod/config/clancapes.example.json`)
 
+По умолчанию мод **сам подставляет API** при входе на мультиплеер: из адреса сервера в списке (`play.example.com` → `http://play.example.com:8080`). Плагин при входе может прислать точный URL через `api.public-url` в `plugins/ClanCapes/config.yml`.
+
 ```json
 {
-  "apiBaseUrl": "http://YOUR_SERVER:8080",
+  "autoDetectApiFromServer": true,
+  "apiPort": 8080,
+  "apiBaseUrl": "http://127.0.0.1:8080",
   "refreshIntervalSeconds": 60,
   "cacheTtlSeconds": 300
 }
 ```
+
+Ручной `apiBaseUrl` нужен только для одиночной игры / LAN или если API на другом хосте, чем Minecraft (тогда на сервере задайте `api.public-url`).
 
 ### 3. Web panel
 
@@ -85,6 +93,8 @@ npm run dev
 
 - UI: http://localhost:3000  
 - API: http://localhost:3001  
+
+**Railway (один сервис):** ветка `deploy/panel`, деплой из **корня** репозитория (`Dockerfile` + `railway.toml`). API и Next.js в одном инстансе, без `Root Directory`. Подробнее: `deploy/panel/README.md`.
 
 Логин по умолчанию (`.env`): `admin` / `change-me`
 

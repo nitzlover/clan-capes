@@ -2,6 +2,7 @@ package dev.clancapes;
 
 import dev.clancapes.cape.CapeManager;
 import dev.clancapes.config.ClanCapesConfig;
+import dev.clancapes.network.CapeSyncNetworking;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
@@ -14,16 +15,21 @@ public class ClanCapesClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ClanCapesConfig.load();
+        CapeSyncNetworking.register();
         CapeManager.get().start();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> CapeManager.get().tick());
 
-        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) ->
-                CapeManager.get().onWorldJoin());
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+            CapeSyncNetworking.resolveApiForCurrentConnection(client);
+            CapeManager.get().onWorldJoin();
+        });
 
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
-                CapeManager.get().onWorldLeave());
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            ClanCapesConfig.clearSessionApiBaseUrl();
+            CapeManager.get().onWorldLeave();
+        });
 
-        LOGGER.info("Clan Capes client initialized (API: {})", ClanCapesConfig.get().apiBaseUrl);
+        LOGGER.info("Clan Capes client initialized (fallback API: {})", ClanCapesConfig.get().apiBaseUrl);
     }
 }

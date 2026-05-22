@@ -3,9 +3,9 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { CapePreview } from '@/components/CapePreview';
 import { fetchClanOptions, type ClanOption } from '@/lib/api';
+import { getApiBaseUrl } from '@/lib/api-base';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-const TEMPLATE_URL = `${API_URL}/static/templates/template_64x32.png`;
+const TEMPLATE_URL = `${getApiBaseUrl()}/static/templates/template_64x32.png`;
 
 type Props = {
   tag: string;

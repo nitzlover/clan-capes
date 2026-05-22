@@ -44,6 +44,19 @@ public final class CapeSyncChannel implements PluginMessageListener {
         }
     }
 
+    /** Tells the Fabric mod which REST base URL to use (empty string = auto-detect on client). */
+    public void sendServerConfig(Player player, String apiPublicUrl) {
+        try {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            DataOutputStream out = new DataOutputStream(bytes);
+            out.writeUTF("config");
+            out.writeUTF(apiPublicUrl == null ? "" : apiPublicUrl);
+            player.sendPluginMessage(plugin, CHANNEL, bytes.toByteArray());
+        } catch (IOException e) {
+            plugin.getLogger().warning("Failed to send cape config: " + e.getMessage());
+        }
+    }
+
     @Override
     public void onPluginMessageReceived(String channel, Player player, byte[] message) {
         // Server is sender only for reload packets

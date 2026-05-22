@@ -1,0 +1,16 @@
+**/.gradle
+**/build
+**/.tools
+**/.git
+**/.idea
+**/.vscode
+fabric-mod
+paper-plugin
+docs
+scripts
+*.md
+!deploy/panel/README.md
+web-panel/node_modules
+web-panel/apps/*/node_modules
+web-panel/apps/*/.next
+web-panel/apps/api/data

@@ -35,6 +35,11 @@ public final class PluginConfig {
         return config.getInt("api.port", 8080);
     }
 
+    /** Optional override for mod clients; empty = client auto-detect from multiplayer address. */
+    public String getApiPublicUrl() {
+        return config.getString("api.public-url", "").trim();
+    }
+
     public String getApiToken() {
         return config.getString("api.token", "change-me");
     }

@@ -4,6 +4,7 @@ import multer from 'multer';
 import { requireAuth } from '../lib/auth.js';
 import { validateAndNormalizePng } from '../lib/capeValidate.js';
 import * as mc from '../lib/minecraft.js';
+import { getCdnPublicUrl } from '../lib/public-url.js';
 import { appendAudit, capeFilePath } from '../lib/storage.js';
 
 const upload = multer({
@@ -51,7 +52,7 @@ clansRouter.get('/', async (_req, res) => {
   } catch {
     files = [];
   }
-  const cdn = (process.env.CDN_PUBLIC_URL ?? 'http://localhost:3001/static/capes').replace(/\/$/, '');
+  const cdn = getCdnPublicUrl();
   const clans = await Promise.all(
     files.map(async (file) => {
       const tag = file.replace(/\.png$/i, '');
@@ -107,7 +108,7 @@ clansRouter.post('/:tag/cape', upload.single('cape'), async (req, res) => {
     const outPath = capeFilePath(tag);
     await fs.writeFile(outPath, normalized);
 
-    const cdn = (process.env.CDN_PUBLIC_URL ?? 'http://localhost:3001/static/capes').replace(/\/$/, '');
+    const cdn = getCdnPublicUrl();
     const publicUrl = `${cdn}/${tag}.png`;
     const actor = (req as typeof req & { user?: string }).user ?? 'panel';
     await mc.setClanCape(tag, publicUrl, actor);

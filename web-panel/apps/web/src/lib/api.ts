@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { getApiBaseUrl } from './api-base';
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -7,7 +7,7 @@ export function getToken(): string | null {
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
     headers: {
       ...(init?.headers ?? {}),
@@ -22,7 +22,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function login(username: string, password: string) {
-  const res = await fetch(`${API_URL}/auth/login`, {
+  const res = await fetch(`${getApiBaseUrl()}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),

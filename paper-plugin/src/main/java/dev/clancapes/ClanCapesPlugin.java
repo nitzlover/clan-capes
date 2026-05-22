@@ -5,6 +5,7 @@ import dev.clancapes.command.ClanCapeCommand;
 import dev.clancapes.config.PluginConfig;
 import dev.clancapes.hook.PowerClansHook;
 import dev.clancapes.hook.PlaceholderHook;
+import dev.clancapes.listener.PlayerJoinListener;
 import dev.clancapes.service.CapeService;
 import dev.clancapes.sync.CapeSyncChannel;
 import dev.clancapes.storage.StorageFactory;
@@ -36,6 +37,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
 
         syncChannel = new CapeSyncChannel(this);
         syncChannel.register();
+        getServer().getPluginManager().registerEvents(new PlayerJoinListener(this, syncChannel), this);
 
         capeService = new CapeService(this, storage, pluginConfig, syncChannel, powerClansHook);
 

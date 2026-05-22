@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { CapePreview } from '@/components/CapePreview';
 import { UploadSection } from '@/components/UploadSection';
 import { api, type ClanRow, getToken } from '@/lib/api';
+import { getApiBaseUrl } from '@/lib/api-base';
 
 type AuditEntry = { timestamp: string; raw: string };
 
@@ -60,7 +61,7 @@ export default function DashboardPage() {
     fd.append('cape', file);
     const token = getToken();
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/panel/clans/${tag.toUpperCase()}/cape`,
+      `${getApiBaseUrl()}/panel/clans/${tag.toUpperCase()}/cape`,
       {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},

@@ -27,7 +27,7 @@ public final class CapeApiClient {
     }
 
     public CompletableFuture<PlayerCapeResponse> fetchPlayer(UUID uuid) {
-        String base = ClanCapesConfig.get().apiBaseUrl.replaceAll("/$", "");
+        String base = ClanCapesConfig.get().getActiveApiBaseUrl();
         URI uri = URI.create(base + "/api/player/" + uuid);
 
         HttpRequest request = HttpRequest.newBuilder(uri)

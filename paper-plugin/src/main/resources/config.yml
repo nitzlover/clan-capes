@@ -8,6 +8,9 @@ api:
   enabled: true
   host: 0.0.0.0
   port: 8080
+  # Optional: full URL sent to Fabric clients on join (e.g. http://play.example.com:8080).
+  # Leave empty to let the mod build http://<server-address>:port from the address the player used.
+  public-url: ''
   # Shared secret for web panel / internal calls (header: X-ClanCapes-Token)
   token: change-me-in-production
   # Public CDN/base URL returned to clients (no trailing slash)

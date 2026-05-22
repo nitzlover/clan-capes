@@ -1,0 +1,12 @@
+# Clan Capes panel API — use with Railway Root Directory: web-panel/apps/api
+# In service Settings → Config file path: /web-panel/apps/api/railway.toml
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+watchPatterns = ["web-panel/apps/api/**"]
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"

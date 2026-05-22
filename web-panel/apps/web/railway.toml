@@ -1,0 +1,13 @@
+# Clan Capes panel UI — use with Railway Root Directory: web-panel/apps/web
+# In service Settings → Config file path: /web-panel/apps/web/railway.toml
+# Set NEXT_PUBLIC_API_URL in Variables (used as Docker build ARG in Dockerfile).
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+watchPatterns = ["web-panel/apps/web/**"]
+
+[deploy]
+healthcheckPath = "/"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"

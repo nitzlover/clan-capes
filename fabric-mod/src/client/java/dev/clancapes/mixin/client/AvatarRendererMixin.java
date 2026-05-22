@@ -7,7 +7,7 @@ import net.minecraft.client.renderer.entity.player.AvatarRenderer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.core.ClientAsset;
 import net.minecraft.resources.Identifier;
-import net.minecraft.client.entity.ClientAvatarEntity;
+import net.minecraft.world.entity.Avatar;
 import net.minecraft.world.entity.player.PlayerSkin;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -23,11 +23,11 @@ import java.util.Optional;
 public abstract class AvatarRendererMixin {
 
     @Inject(
-            method = "extractCapeState(Lnet/minecraft/client/entity/ClientAvatarEntity;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V",
+            method = "extractCapeState(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V",
             at = @At("TAIL")
     )
     private void clancapes$applyClanCape(
-            ClientAvatarEntity entity,
+            Avatar entity,
             AvatarRenderState state,
             float partialTicks,
             CallbackInfo ci
