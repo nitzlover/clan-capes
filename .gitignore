@@ -27,3 +27,8 @@ paper-plugin/run/
 # OS
 .DS_Store
 Thumbs.db
+
+# Build artifacts
+build/
+.gradle/
+.tools/

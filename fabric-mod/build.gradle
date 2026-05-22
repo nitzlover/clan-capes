@@ -26,11 +26,12 @@ repositories {
 }
 
 dependencies {
+    // MC 26.1 ships unobfuscated. Loom 1.16+ auto-skips both mappings configuration
+    // and the modImplementation/modApi configurations in this case — declaring either
+    // would fail at configuration time. Use plain 'implementation' here.
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    // MC 26.1 is unobfuscated — use official Mojang mappings (no Yarn).
-    mappings loom.officialMojangMappings()
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 }
 
 processResources {
