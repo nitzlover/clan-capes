@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "dev.clancapes.mixin.client",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "AvatarRendererMixin",
+    "AbstractClientPlayerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

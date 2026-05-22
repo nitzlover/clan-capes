@@ -1,0 +1,55 @@
+services:
+  minecraft-api:
+    image: eclipse-temurin:21-jre
+    volumes:
+      - ./paper-plugin/build/libs:/plugins-src:ro
+      - mc-data:/server
+    ports:
+      - "25565:25565"
+      - "8080:8080"
+    # Mount built ClanCapes.jar into your Paper 26.1 server plugins folder manually or via init script.
+    profiles: ["full"]
+
+  panel-api:
+    build:
+      context: ./web-panel/apps/api
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      JWT_SECRET: ${JWT_SECRET:-change-me}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me}
+      MINECRAFT_API_URL: http://host.docker.internal:8080
+      MINECRAFT_API_TOKEN: ${MINECRAFT_API_TOKEN:-change-me-in-production}
+      CDN_PUBLIC_URL: http://localhost:3001/static/capes
+      UPLOAD_DIR: /app/data/capes
+      AUDIT_LOG: /app/data/audit.log
+      CORS_ORIGIN: http://localhost:3000
+    volumes:
+      - cape-uploads:/app/data
+
+  panel-web:
+    build:
+      context: ./web-panel/apps/web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - panel-api
+
+  nginx-cdn:
+    image: nginx:alpine
+    ports:
+      - "3080:80"
+    volumes:
+      - ./deploy/nginx/cdn.conf:/etc/nginx/conf.d/default.conf:ro
+      - cape-uploads:/usr/share/nginx/html/capes:ro
+    profiles: ["cdn"]
+
+volumes:
+  mc-data:
+  cape-uploads:

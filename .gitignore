@@ -1,0 +1,29 @@
+# Gradle
+**/.gradle/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Node
+node_modules/
+.next/
+dist/
+*.log
+
+# Secrets & data
+.env
+**/.env
+!**/.env.example
+web-panel/apps/api/data/
+paper-plugin/run/
+
+# Local JDK used for builds (not committed)
+.tools/
+
+# OS
+.DS_Store
+Thumbs.db

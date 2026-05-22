@@ -1,0 +1,61 @@
+plugins {
+    id 'java'
+    id 'com.gradleup.shadow' version '8.3.6'
+}
+
+group = 'dev.clancapes'
+version = '1.0.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        name = 'papermc'
+        url = 'https://repo.papermc.io/repository/maven-public/'
+    }
+    maven {
+        name = 'placeholderapi'
+        url = 'https://repo.extendedclip.com/content/repositories/placeholderapi/'
+    }
+    maven {
+        name = 'jitpack'
+        url = 'https://jitpack.io'
+    }
+}
+
+dependencies {
+    // Use API line matching your server (26.1 / 1.21.x)
+    compileOnly 'io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT'
+    compileOnly 'me.clip:placeholderapi:2.11.6'
+    // PowerClans: reflective hook at runtime (no compile-time dep — JitPack may be unavailable)
+
+    implementation 'io.javalin:javalin:6.3.0'
+    implementation 'com.google.code.gson:gson:2.11.0'
+    implementation 'org.xerial:sqlite-jdbc:3.47.2.0'
+    implementation 'com.zaxxer:HikariCP:6.2.1'
+    implementation 'org.slf4j:slf4j-simple:2.0.16'
+}
+
+processResources {
+    def props = [version: version]
+    inputs.properties props
+    filteringCharset = 'UTF-8'
+    filesMatching('plugin.yml') {
+        expand props
+    }
+}
+
+shadowJar {
+    archiveClassifier.set('')
+    relocate 'io.javalin', 'dev.clancapes.lib.javalin'
+    relocate 'org.eclipse.jetty', 'dev.clancapes.lib.jetty'
+    relocate 'com.zaxxer.hikari', 'dev.clancapes.lib.hikari'
+    minimize()
+}
+
+tasks.build.dependsOn shadowJar

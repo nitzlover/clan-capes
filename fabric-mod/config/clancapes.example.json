@@ -1,0 +1,9 @@
+{
+  "apiBaseUrl": "http://127.0.0.1:8080",
+  "refreshIntervalSeconds": 60,
+  "cacheTtlSeconds": 300,
+  "downloadTimeoutMs": 8000,
+  "maxConcurrentDownloads": 4,
+  "enableVanillaCapeFallback": true,
+  "debugLogging": false
+}
