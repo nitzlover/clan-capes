@@ -12,7 +12,10 @@ import dev.clancapes.service.CapeService;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
+import io.javalin.json.JsonMapper;
+import org.jetbrains.annotations.NotNull;
 
+import java.lang.reflect.Type;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +38,20 @@ public final class RestApiServer {
     }
 
     public void start() {
-        app = Javalin.create(cfg -> cfg.showJavalinBanner = false);
+        app = Javalin.create(cfg -> {
+            cfg.showJavalinBanner = false;
+            cfg.jsonMapper(new JsonMapper() {
+                @Override
+                public @NotNull String toJsonString(@NotNull Object obj, @NotNull Type type) {
+                    return GSON.toJson(obj, type);
+                }
+
+                @Override
+                public <T> @NotNull T fromJsonString(@NotNull String json, @NotNull Type targetType) {
+                    return GSON.fromJson(json, targetType);
+                }
+            });
+        });
 
         app.before(ctx -> {
             ctx.header("Access-Control-Allow-Origin", String.join(",", config.getCorsOrigins()));
