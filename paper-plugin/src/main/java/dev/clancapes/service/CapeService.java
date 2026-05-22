@@ -82,6 +82,8 @@ public final class CapeService {
         storage.appendAudit(clanTag, "SET_URL", actor, url);
         webhookNotifier.notifyCapeUpdated(clanTag, publicUrl);
         notifyClanMembers(clanTag);
+        plugin.getLogger().info("Cape SET clan=" + clanTag.toUpperCase()
+                + " by=" + actor + " url=" + publicUrl);
     }
 
     public void setCapeFile(String clanTag, Path sourceFile, String actor) throws IOException {
@@ -118,6 +120,7 @@ public final class CapeService {
         storage.appendAudit(clanTag, "REMOVE", actor, null);
         webhookNotifier.notifyCapeRemoved(clanTag);
         notifyClanMembers(clanTag);
+        plugin.getLogger().info("Cape REMOVE clan=" + clanTag.toUpperCase() + " by=" + actor);
     }
 
     public void reloadCache() {

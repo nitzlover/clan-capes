@@ -3,7 +3,6 @@ package dev.clancapes.command;
 import dev.clancapes.ClanCapesPlugin;
 import dev.clancapes.config.PluginConfig;
 import dev.clancapes.hook.PowerClansHook;
-import dev.clancapes.model.ClanCapeRecord;
 import dev.clancapes.service.CapeService;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -17,6 +16,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Top-level command {@code /clancape [set <url>|remove|reload]}.
+ * Renamed from {@code /clan cape ...} so it does not collide with PowerClans' {@code /clan} command.
+ */
 public final class ClanCapeCommand implements CommandExecutor, TabCompleter {
     private final ClanCapesPlugin plugin;
     private final CapeService capeService;
@@ -32,42 +35,42 @@ public final class ClanCapeCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
-        if (args.length == 0 || !"cape".equalsIgnoreCase(args[0])) {
-            sender.sendMessage(config.msg("prefix") + "Usage: /clan cape [set <url>|remove|reload]");
-            return true;
+        if (args.length == 0) {
+            return showCurrent(sender);
         }
 
-        if (args.length == 1) {
-            if (!(sender instanceof Player player)) {
-                sender.sendMessage("Players only");
-                return true;
-            }
-            if (!sender.hasPermission("clan.cape")) {
-                sender.sendMessage(config.msg("no-permission"));
-                return true;
-            }
-            Optional<String> clan = powerClansHook.getClanTag(player);
-            if (clan.isEmpty()) {
-                sender.sendMessage(config.msg("no-clan"));
-                return true;
-            }
-            capeService.getClanCape(clan.get()).ifPresentOrElse(
-                    r -> sender.sendMessage(config.msg("prefix") + "Cape: " + r.capeUrl()),
-                    () -> sender.sendMessage(config.msg("prefix") + "No clan cape set.")
-            );
-            return true;
-        }
-
-        String sub = args[1].toLowerCase();
+        String sub = args[0].toLowerCase();
         return switch (sub) {
             case "set" -> handleSet(sender, args);
-            case "remove" -> handleRemove(sender);
+            case "remove", "delete" -> handleRemove(sender);
             case "reload" -> handleReload(sender);
+            case "info", "show" -> showCurrent(sender);
             default -> {
-                sender.sendMessage(config.msg("prefix") + "Unknown subcommand.");
+                sender.sendMessage(config.prefix() + "Usage: /clancape [set <url>|remove|reload]");
                 yield true;
             }
         };
+    }
+
+    private boolean showCurrent(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage("Players only");
+            return true;
+        }
+        if (!sender.hasPermission("clan.cape")) {
+            sender.sendMessage(config.msg("no-permission"));
+            return true;
+        }
+        Optional<String> clan = powerClansHook.getClanTag(player);
+        if (clan.isEmpty()) {
+            sender.sendMessage(config.msg("no-clan"));
+            return true;
+        }
+        capeService.getClanCape(clan.get()).ifPresentOrElse(
+                r -> sender.sendMessage(config.prefix() + "Cape: " + r.capeUrl()),
+                () -> sender.sendMessage(config.prefix() + "No clan cape set.")
+        );
+        return true;
     }
 
     private boolean handleSet(CommandSender sender, String[] args) {
@@ -75,8 +78,8 @@ public final class ClanCapeCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(config.msg("no-permission"));
             return true;
         }
-        if (args.length < 3) {
-            sender.sendMessage(config.msg("prefix") + "Usage: /clan cape set <url>");
+        if (args.length < 2) {
+            sender.sendMessage(config.prefix() + "Usage: /clancape set <url>");
             return true;
         }
         if (!(sender instanceof Player player)) {
@@ -88,7 +91,7 @@ public final class ClanCapeCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(config.msg("no-clan"));
             return true;
         }
-        String url = args[2];
+        String url = args[1];
         try {
             capeService.setCapeUrl(clan.get(), url, player.getName());
             sender.sendMessage(config.msg("cape-set"));
@@ -122,6 +125,7 @@ public final class ClanCapeCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(config.msg("no-permission"));
             return true;
         }
+        plugin.reloadConfig();
         capeService.reloadCache();
         sender.sendMessage(config.msg("cape-reloaded"));
         return true;
@@ -131,12 +135,8 @@ public final class ClanCapeCommand implements CommandExecutor, TabCompleter {
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
-            if ("cape".startsWith(args[0].toLowerCase())) {
-                out.add("cape");
-            }
-        } else if (args.length == 2 && "cape".equalsIgnoreCase(args[0])) {
-            for (String s : List.of("set", "remove", "reload")) {
-                if (s.startsWith(args[1].toLowerCase())) {
+            for (String s : List.of("set", "remove", "reload", "info")) {
+                if (s.startsWith(args[0].toLowerCase())) {
                     out.add(s);
                 }
             }

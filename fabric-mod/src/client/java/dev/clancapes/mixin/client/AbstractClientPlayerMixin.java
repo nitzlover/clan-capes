@@ -19,6 +19,9 @@ public abstract class AbstractClientPlayerMixin {
     private void clancapes$onInit(CallbackInfo ci) {
         AbstractClientPlayer self = (AbstractClientPlayer) (Object) this;
         UUID uuid = self.getUUID();
+        if (uuid == null) {
+            return;
+        }
         CapeManager.get().refreshPlayer(uuid, false);
     }
 }

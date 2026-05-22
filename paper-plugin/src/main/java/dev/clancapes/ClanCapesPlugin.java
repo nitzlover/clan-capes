@@ -43,8 +43,14 @@ public final class ClanCapesPlugin extends JavaPlugin {
         placeholderHook.register();
 
         var command = new ClanCapeCommand(this, capeService, powerClansHook);
-        getCommand("clan").setExecutor(command);
-        getCommand("clan").setTabCompleter(command);
+        var pluginCommand = getCommand("clancape");
+        if (pluginCommand == null) {
+            getLogger().severe("Command 'clancape' missing from plugin.yml — disabling plugin");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        pluginCommand.setExecutor(command);
+        pluginCommand.setTabCompleter(command);
 
         if (pluginConfig.isApiEnabled()) {
             apiServer = new RestApiServer(this, capeService, pluginConfig, powerClansHook);

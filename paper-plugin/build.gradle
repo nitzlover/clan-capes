@@ -38,7 +38,7 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.11.0'
     implementation 'org.xerial:sqlite-jdbc:3.47.2.0'
     implementation 'com.zaxxer:HikariCP:6.2.1'
-    implementation 'org.slf4j:slf4j-simple:2.0.16'
+    // slf4j-api is provided by Paper at runtime — do not bundle slf4j-simple, it would clash.
 }
 
 processResources {
@@ -55,7 +55,11 @@ shadowJar {
     relocate 'io.javalin', 'dev.clancapes.lib.javalin'
     relocate 'org.eclipse.jetty', 'dev.clancapes.lib.jetty'
     relocate 'com.zaxxer.hikari', 'dev.clancapes.lib.hikari'
-    minimize()
+    // minimize() strips reflectively-loaded Jetty/Javalin classes — keep everything to be safe.
+    // Exclude duplicated SLF4J bindings that Paper already provides.
+    exclude 'org/slf4j/impl/**'
+    exclude 'META-INF/versions/**/org/slf4j/**'
+    mergeServiceFiles()
 }
 
 tasks.build.dependsOn shadowJar

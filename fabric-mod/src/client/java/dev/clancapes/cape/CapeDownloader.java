@@ -1,6 +1,7 @@
 package dev.clancapes.cape;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import dev.clancapes.ClanCapesClient;
 import dev.clancapes.config.ClanCapesConfig;
 
 import java.io.InputStream;
@@ -32,6 +33,8 @@ public final class CapeDownloader {
 
     public CompletableFuture<NativeImage> download(String url) {
         return CompletableFuture.supplyAsync(() -> {
+            boolean debug = ClanCapesConfig.get().debugLogging;
+            long start = System.currentTimeMillis();
             try {
                 concurrency.acquire();
                 HttpRequest request = HttpRequest.newBuilder(URI.create(url))
@@ -42,17 +45,26 @@ public final class CapeDownloader {
 
                 HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
                 if (response.statusCode() != 200) {
+                    ClanCapesClient.LOGGER.warn("Cape download {} HTTP {}", url, response.statusCode());
                     return null;
                 }
                 try (InputStream stream = response.body()) {
                     NativeImage image = NativeImage.read(stream);
                     if (!isValidCapeSize(image.getWidth(), image.getHeight())) {
+                        ClanCapesClient.LOGGER.warn("Cape {} rejected: size {}x{}",
+                                url, image.getWidth(), image.getHeight());
                         image.close();
                         return null;
+                    }
+                    if (debug) {
+                        ClanCapesClient.LOGGER.info("Cape downloaded {} ({}x{}, {}ms)",
+                                url, image.getWidth(), image.getHeight(),
+                                System.currentTimeMillis() - start);
                     }
                     return image;
                 }
             } catch (Exception e) {
+                ClanCapesClient.LOGGER.warn("Cape download {} failed: {}", url, e.getMessage());
                 return null;
             } finally {
                 concurrency.release();

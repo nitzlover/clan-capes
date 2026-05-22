@@ -88,11 +88,20 @@ public final class PowerClansHook {
         try {
             Object clan = getClanByPlayer.invoke(powerClansApi, player);
             if (clan == null) {
+                if (config.isDebugLogging()) {
+                    plugin.getLogger().info("PowerClans: " + player.getName() + " not in any clan");
+                }
                 return Optional.empty();
             }
             String tag = (String) getTag.invoke(clan);
-            return Optional.ofNullable(tag).map(t -> t.toUpperCase(Locale.ROOT));
+            Optional<String> result = Optional.ofNullable(tag).map(t -> t.toUpperCase(Locale.ROOT));
+            if (config.isDebugLogging() && result.isPresent()) {
+                plugin.getLogger().info("PowerClans: " + player.getName() + " -> " + result.get());
+            }
+            return result;
         } catch (Exception e) {
+            plugin.getLogger().warning("PowerClans getClanByPlayer failed for "
+                    + player.getName() + ": " + e.getMessage());
             return Optional.empty();
         }
     }

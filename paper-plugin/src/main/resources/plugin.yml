@@ -7,10 +7,10 @@ description: Clan custom capes — REST API, PowerClans integration, web panel s
 website: https://github.com/clancapes/clan-capes
 softdepend: [PowerClans, PlaceholderAPI]
 commands:
-  clan:
+  clancape:
     description: Clan cape management
-    usage: /clan cape [set|remove|reload] [url]
-    aliases: [clancape, clancapes]
+    usage: /clancape [set <url>|remove|reload]
+    aliases: [clancapes, ccape]
 permissions:
   clan.cape:
     description: Manage your clan cape

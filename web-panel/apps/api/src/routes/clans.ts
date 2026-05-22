@@ -91,15 +91,22 @@ clansRouter.post('/:tag/cape', upload.single('cape'), async (req, res) => {
     return;
   }
   try {
-    const powerClans = await mc.fetchPowerClans().catch(() => null);
-    if (powerClans && powerClans.length > 0) {
-      const known = powerClans.some((c) => c.tag.toUpperCase() === tag);
-      if (!known) {
-        res.status(400).json({
-          error: `Clan tag "${tag}" is not in PowerClans. Choose a clan from the list.`,
-        });
-        return;
-      }
+    let powerClans: Awaited<ReturnType<typeof mc.fetchPowerClans>> | null = null;
+    try {
+      powerClans = await mc.fetchPowerClans();
+    } catch (e) {
+      res.status(502).json({
+        error: 'PowerClans list unavailable from Paper API — refusing upload. ' +
+          (e instanceof Error ? e.message : ''),
+      });
+      return;
+    }
+    const known = powerClans.some((c) => c.tag.toUpperCase() === tag);
+    if (!known) {
+      res.status(400).json({
+        error: `Clan tag "${tag}" is not in PowerClans. Choose a clan from the list.`,
+      });
+      return;
     }
 
     const maxKb = Number(process.env.MAX_UPLOAD_KB) || 256;
@@ -113,8 +120,10 @@ clansRouter.post('/:tag/cape', upload.single('cape'), async (req, res) => {
     await mc.setClanCape(tag, publicUrl, actor);
     await appendAudit(`${actor}\tUPLOAD\t${tag}\t${publicUrl}`);
 
+    console.log(`[upload] tag=${tag} actor=${actor} bytes=${normalized.length} url=${publicUrl}`);
     res.json({ ok: true, tag, capeUrl: publicUrl });
   } catch (e) {
+    console.warn(`[upload] tag=${tag} FAILED: ${e instanceof Error ? e.message : e}`);
     res.status(400).json({ error: e instanceof Error ? e.message : 'upload failed' });
   }
 });
@@ -126,8 +135,10 @@ clansRouter.delete('/:tag/cape', async (req, res) => {
     await fs.unlink(capeFilePath(tag)).catch(() => undefined);
     const actor = (req as typeof req & { user?: string }).user ?? 'panel';
     await appendAudit(`${actor}\tDELETE\t${tag}`);
+    console.log(`[delete] tag=${tag} actor=${actor}`);
     res.json({ ok: true, tag });
   } catch (e) {
+    console.warn(`[delete] tag=${tag} FAILED: ${e instanceof Error ? e.message : e}`);
     res.status(500).json({ error: e instanceof Error ? e.message : 'delete failed' });
   }
 });

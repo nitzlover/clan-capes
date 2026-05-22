@@ -34,8 +34,9 @@ public final class SqliteCapeStorage implements CapeStorage {
         config.setPoolName("ClanCapes-SQLite");
         dataSource = new HikariDataSource(config);
 
-        try (Connection conn = dataSource.getConnection()) {
-            conn.createStatement().execute("""
+        try (Connection conn = dataSource.getConnection();
+             java.sql.Statement stmt = conn.createStatement()) {
+            stmt.execute("""
                 CREATE TABLE IF NOT EXISTS clan_capes (
                     clan_tag TEXT PRIMARY KEY,
                     cape_url TEXT NOT NULL,
@@ -44,7 +45,7 @@ public final class SqliteCapeStorage implements CapeStorage {
                     updated_by TEXT
                 );
                 """);
-            conn.createStatement().execute("""
+            stmt.execute("""
                 CREATE TABLE IF NOT EXISTS audit_logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     clan_tag TEXT NOT NULL,
@@ -54,6 +55,7 @@ public final class SqliteCapeStorage implements CapeStorage {
                     created_at INTEGER NOT NULL
                 );
                 """);
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_audit_clan ON audit_logs(clan_tag)");
         } catch (Exception e) {
             plugin.getLogger().severe("Failed to initialize SQLite: " + e.getMessage());
         }

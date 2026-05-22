@@ -25,17 +25,23 @@ export default function DashboardPage() {
       return;
     }
     try {
-      const [clanRes, auditRes] = await Promise.all([
-        api<{ clans: ClanRow[] }>('/panel/clans'),
-        api<{ entries: AuditEntry[] }>('/panel/audit'),
-      ]);
+      const clanRes = await api<{ clans: ClanRow[] }>('/panel/clans');
       setClans(clanRes.clans);
+    } catch (e) {
+      // Auth failure → kick to login. Network/server errors → keep dashboard but show empty list.
+      if (e instanceof Error && /unauthor|invalid token/i.test(e.message)) {
+        router.replace('/');
+        return;
+      }
+      setClans([]);
+    }
+    try {
+      const auditRes = await api<{ entries: AuditEntry[] }>('/panel/audit');
       setAudit(auditRes.entries);
     } catch {
-      router.replace('/');
-    } finally {
-      setLoading(false);
+      setAudit([]);
     }
+    setLoading(false);
   }, [router]);
 
   useEffect(() => {

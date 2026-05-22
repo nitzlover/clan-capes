@@ -52,7 +52,8 @@ public final class CapeManager {
         }
 
         tickCounter++;
-        long refreshTicks = ClanCapesConfig.get().refreshIntervalSeconds * 20L;
+        int refreshSec = Math.max(5, ClanCapesConfig.get().refreshIntervalSeconds);
+        long refreshTicks = refreshSec * 20L;
         if (tickCounter % refreshTicks != 0) {
             return;
         }

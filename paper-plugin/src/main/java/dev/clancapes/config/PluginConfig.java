@@ -80,7 +80,18 @@ public final class PluginConfig {
         return config.getString("webhook.secret", "");
     }
 
+    public boolean isDebugLogging() {
+        return config.getBoolean("logging.debug", false);
+    }
+
+    public String prefix() {
+        return colorize(config.getString("messages.prefix", ""));
+    }
+
     public String msg(String key) {
+        if ("prefix".equals(key)) {
+            return prefix();
+        }
         return colorize(config.getString("messages.prefix", "") + config.getString("messages." + key, ""));
     }
 

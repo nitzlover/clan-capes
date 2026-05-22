@@ -21,6 +21,18 @@ app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost
 app.use(express.json({ limit: '32kb' }));
 app.use(rateLimit({ windowMs: 60_000, max: 120 }));
 
+// Request logger — every API hit logs method, path, status, latency (omits health spam).
+app.use((req, res, next) => {
+  if (req.path === '/health') return next();
+  const start = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    const ip = req.ip ?? req.socket.remoteAddress ?? '-';
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms ip=${ip}`);
+  });
+  next();
+});
+
 const staticCapes = path.resolve(process.env.UPLOAD_DIR ?? './data/capes');
 app.use('/static/capes', express.static(staticCapes, {
   maxAge: '7d',

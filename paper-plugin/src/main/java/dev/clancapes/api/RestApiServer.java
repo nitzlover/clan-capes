@@ -41,9 +41,27 @@ public final class RestApiServer {
             ctx.header("Access-Control-Allow-Origin", String.join(",", config.getCorsOrigins()));
             ctx.header("Access-Control-Allow-Headers", "Content-Type, X-ClanCapes-Token");
             ctx.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+            ctx.attribute("clancapes-start", System.currentTimeMillis());
             if ("OPTIONS".equalsIgnoreCase(ctx.method().name())) {
                 ctx.status(HttpStatus.OK);
             }
+        });
+
+        app.after(ctx -> {
+            if (!config.isDebugLogging()) {
+                return;
+            }
+            Long start = ctx.attribute("clancapes-start");
+            long ms = start == null ? 0 : System.currentTimeMillis() - start;
+            plugin.getLogger().info(String.format(
+                    "REST %s %s -> %d (%dms) ip=%s",
+                    ctx.method().name(), ctx.path(), ctx.statusCode(), ms, ctx.ip()));
+        });
+
+        app.exception(Exception.class, (e, ctx) -> {
+            plugin.getLogger().warning("REST " + ctx.method().name() + " " + ctx.path()
+                    + " failed: " + e.getMessage());
+            ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).json(Map.of("error", "internal"));
         });
 
         app.get("/api/player/{uuid}", this::getPlayer);

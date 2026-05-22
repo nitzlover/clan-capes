@@ -46,14 +46,16 @@ gradle shadowJar
 - `api.token` — секрет для POST/DELETE и web panel
 - `api.cdn-base-url` — публичный URL PNG (например `http://your-cdn/capes`)
 
-Команды:
+Команды (top-level, чтобы не конфликтовать с `/clan` от PowerClans):
 
 | Команда | Permission |
 |---------|------------|
-| `/clan cape` | `clan.cape` |
-| `/clan cape set <url>` | `clan.cape` |
-| `/clan cape remove` | `clan.cape` |
-| `/clan cape reload` | `clan.cape.admin` |
+| `/clancape` | `clan.cape` |
+| `/clancape set <url>` | `clan.cape` |
+| `/clancape remove` | `clan.cape` |
+| `/clancape reload` | `clan.cape.admin` |
+
+Aliases: `/clancapes`, `/ccape`.
 
 ### 2. Fabric mod
 

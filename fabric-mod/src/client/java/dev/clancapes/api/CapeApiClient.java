@@ -1,6 +1,7 @@
 package dev.clancapes.api;
 
 import com.google.gson.Gson;
+import dev.clancapes.ClanCapesClient;
 import dev.clancapes.config.ClanCapesConfig;
 
 import java.net.URI;
@@ -39,15 +40,27 @@ public final class CapeApiClient {
         return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenApplyAsync(response -> {
                     if (response.statusCode() != 200) {
+                        if (response.statusCode() != 404) {
+                            ClanCapesClient.LOGGER.warn("API /player/{} HTTP {}", uuid, response.statusCode());
+                        }
                         return PlayerCapeResponse.empty();
                     }
                     try {
                         PlayerCapeResponse parsed = GSON.fromJson(response.body(), PlayerCapeResponse.class);
+                        if (ClanCapesConfig.get().debugLogging) {
+                            ClanCapesClient.LOGGER.info("API /player/{} -> hasCape={} clan={}",
+                                    uuid, parsed != null && parsed.hasCape(),
+                                    parsed != null ? parsed.clan() : null);
+                        }
                         return parsed != null ? parsed : PlayerCapeResponse.empty();
                     } catch (Exception e) {
+                        ClanCapesClient.LOGGER.warn("API /player/{} parse failed: {}", uuid, e.getMessage());
                         return PlayerCapeResponse.empty();
                     }
                 }, executor)
-                .exceptionally(ex -> PlayerCapeResponse.empty());
+                .exceptionally(ex -> {
+                    ClanCapesClient.LOGGER.warn("API /player/{} failed: {}", uuid, ex.getMessage());
+                    return PlayerCapeResponse.empty();
+                });
     }
 }
