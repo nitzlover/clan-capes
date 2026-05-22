@@ -14,6 +14,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -21,7 +22,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Reflective PowerClans integration so the plugin builds without PowerClans on the classpath at runtime only.
+ * Reflective PowerClans integration with a {@code data.yml} fallback so clan
+ * resolution still works when the PowerClans API signature differs or the
+ * reflective lookup fails. Player→clan mapping is built from
+ * {@code clans.<id>.leader|officers|members} indexed by UUID.
  */
 public final class PowerClansHook {
     private final ClanCapesPlugin plugin;
@@ -31,6 +35,11 @@ public final class PowerClansHook {
     private Method getTag;
     private Method listClansMethod;
     private Method getNameMethod;
+
+    // data.yml cache (rebuilt when mtime changes)
+    private long cachedDataFileMtime = -1L;
+    private Map<UUID, String> uuidToTag = Map.of();
+    private List<PowerClanEntry> cachedEntries = List.of();
 
     public PowerClansHook(ClanCapesPlugin plugin) {
         this.plugin = plugin;
@@ -66,44 +75,79 @@ public final class PowerClansHook {
                     getNameMethod = null;
                 }
             }
-            plugin.getLogger().info("PowerClans hook enabled");
+            plugin.getLogger().info("PowerClans hook enabled (API)");
         } catch (Exception e) {
-            plugin.getLogger().warning("PowerClans API mismatch: " + e.getMessage());
+            plugin.getLogger().warning("PowerClans API mismatch (" + e.getMessage()
+                    + ") — falling back to data.yml lookup");
             powerClansApi = null;
         }
+        // Warm the data.yml index so first command is fast and logs cluster at startup.
+        refreshDataFileCache();
     }
 
     public Optional<String> getClanTag(UUID uuid) {
-        Player player = Bukkit.getPlayer(uuid);
-        if (player == null) {
+        if (uuid == null) {
             return Optional.empty();
         }
-        return getClanTag(player);
+        Player player = Bukkit.getPlayer(uuid);
+        if (player != null) {
+            Optional<String> viaApi = resolveViaApi(player);
+            if (viaApi.isPresent()) {
+                return viaApi;
+            }
+        }
+        Optional<String> viaData = resolveViaDataFile(uuid);
+        if (config.isDebugLogging()) {
+            plugin.getLogger().info("PowerClans data.yml lookup " + uuid
+                    + " -> " + viaData.orElse("<none>"));
+        }
+        return viaData;
     }
 
     public Optional<String> getClanTag(Player player) {
+        if (player == null) {
+            return Optional.empty();
+        }
+        Optional<String> viaApi = resolveViaApi(player);
+        if (viaApi.isPresent()) {
+            return viaApi;
+        }
+        Optional<String> viaData = resolveViaDataFile(player.getUniqueId());
+        if (config.isDebugLogging()) {
+            plugin.getLogger().info("PowerClans data.yml lookup " + player.getName()
+                    + "/" + player.getUniqueId() + " -> " + viaData.orElse("<none>"));
+        }
+        return viaData;
+    }
+
+    private Optional<String> resolveViaApi(Player player) {
         if (powerClansApi == null || getClanByPlayer == null) {
             return Optional.empty();
         }
         try {
             Object clan = getClanByPlayer.invoke(powerClansApi, player);
             if (clan == null) {
-                if (config.isDebugLogging()) {
-                    plugin.getLogger().info("PowerClans: " + player.getName() + " not in any clan");
-                }
                 return Optional.empty();
             }
             String tag = (String) getTag.invoke(clan);
             Optional<String> result = Optional.ofNullable(tag).map(t -> t.toUpperCase(Locale.ROOT));
             if (config.isDebugLogging() && result.isPresent()) {
-                plugin.getLogger().info("PowerClans: " + player.getName() + " -> " + result.get());
+                plugin.getLogger().info("PowerClans API " + player.getName() + " -> " + result.get());
             }
             return result;
         } catch (Exception e) {
             plugin.getLogger().warning("PowerClans getClanByPlayer failed for "
-                    + player.getName() + ": " + e.getMessage());
+                    + player.getName() + ": " + e.getMessage() + " — using data.yml");
             return Optional.empty();
         }
+    }
+
+    private Optional<String> resolveViaDataFile(UUID uuid) {
+        refreshDataFileCache();
+        if (uuid == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(uuidToTag.get(uuid));
     }
 
     /**
@@ -114,7 +158,8 @@ public final class PowerClansHook {
         if (!fromApi.isEmpty()) {
             return fromApi;
         }
-        return listClansFromDataFile();
+        refreshDataFileCache();
+        return cachedEntries;
     }
 
     private List<PowerClanEntry> listClansFromApi() {
@@ -182,30 +227,70 @@ public final class PowerClansHook {
         out.add(new PowerClanEntry(id, tag.toUpperCase(Locale.ROOT), leader, level));
     }
 
-    private List<PowerClanEntry> listClansFromDataFile() {
+    private synchronized void refreshDataFileCache() {
         File dataFile = resolveDataFile();
         if (dataFile == null || !dataFile.isFile()) {
-            plugin.getLogger().warning("PowerClans data.yml not found — clan list empty for panel");
-            return List.of();
+            if (cachedDataFileMtime != 0L) {
+                plugin.getLogger().warning("PowerClans data.yml not found at "
+                        + (dataFile == null ? "<unresolved>" : dataFile.getAbsolutePath())
+                        + " — clan list empty");
+                cachedDataFileMtime = 0L;
+                uuidToTag = Map.of();
+                cachedEntries = List.of();
+            }
+            return;
+        }
+        long mtime = dataFile.lastModified();
+        if (mtime == cachedDataFileMtime) {
+            return;
         }
         YamlConfiguration yaml = YamlConfiguration.loadConfiguration(dataFile);
         ConfigurationSection section = yaml.getConfigurationSection("clans");
         if (section == null) {
-            return List.of();
+            uuidToTag = Map.of();
+            cachedEntries = List.of();
+            cachedDataFileMtime = mtime;
+            plugin.getLogger().warning("PowerClans data.yml has no 'clans' section");
+            return;
         }
+        Map<UUID, String> uuidIndex = new HashMap<>();
         List<PowerClanEntry> out = new ArrayList<>();
         for (String id : section.getKeys(false)) {
             String tag = section.getString(id + ".tag");
             if (tag == null || tag.isBlank()) {
                 continue;
             }
+            String tagUpper = tag.toUpperCase(Locale.ROOT);
             String leader = section.getString(id + ".leader", "");
             int level = section.getInt(id + ".level", 1);
-            out.add(new PowerClanEntry(id, tag.toUpperCase(Locale.ROOT), leader, level));
+            out.add(new PowerClanEntry(id, tagUpper, leader, level));
+
+            addUuid(uuidIndex, leader, tagUpper);
+            for (String officer : section.getStringList(id + ".officers")) {
+                addUuid(uuidIndex, officer, tagUpper);
+            }
+            for (String member : section.getStringList(id + ".members")) {
+                addUuid(uuidIndex, member, tagUpper);
+            }
         }
         out.sort(Comparator.comparing(PowerClanEntry::tag));
-        plugin.getLogger().info("Loaded " + out.size() + " clans from PowerClans data.yml");
-        return out;
+        cachedEntries = List.copyOf(out);
+        uuidToTag = Map.copyOf(uuidIndex);
+        cachedDataFileMtime = mtime;
+        plugin.getLogger().info("PowerClans data.yml indexed: " + out.size()
+                + " clans, " + uuidIndex.size() + " members from "
+                + dataFile.getAbsolutePath());
+    }
+
+    private static void addUuid(Map<UUID, String> index, String raw, String tag) {
+        if (raw == null || raw.isBlank()) {
+            return;
+        }
+        try {
+            index.put(UUID.fromString(raw.trim()), tag);
+        } catch (IllegalArgumentException ignored) {
+            /* skip malformed uuid */
+        }
     }
 
     private File resolveDataFile() {
