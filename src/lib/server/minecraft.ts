@@ -70,6 +70,63 @@ export type PowerClanRow = {
   level: number;
 };
 
+// ----- Clan banner (shield NBT) -----------------------------------------------
+
+export type BannerPatternSpec = {
+  color: number;
+  pattern: string;
+};
+
+export type ClanBannerDto = {
+  clan: string;
+  baseColor: number;
+  patterns: BannerPatternSpec[];
+  updatedAt: number;
+  updatedBy: string;
+};
+
+export async function fetchClanBanner(tag: string): Promise<ClanBannerDto | null> {
+  const res = await fetch(`${BASE()}/api/clan/${encodeURIComponent(tag)}/banner`, {
+    headers: { 'X-ClanCapes-Token': TOKEN() },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(body || `Banner API error ${res.status}`);
+  }
+  return res.json() as Promise<ClanBannerDto>;
+}
+
+export async function setClanBanner(
+  tag: string,
+  baseColor: number,
+  patterns: BannerPatternSpec[],
+  actor: string
+): Promise<ClanBannerDto> {
+  const res = await fetch(`${BASE()}/api/clan/${encodeURIComponent(tag)}/banner`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-ClanCapes-Token': TOKEN(),
+    },
+    body: JSON.stringify({ baseColor, patterns, actor }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(body || `Banner save failed ${res.status}`);
+  }
+  return res.json() as Promise<ClanBannerDto>;
+}
+
+export async function deleteClanBanner(tag: string) {
+  const res = await fetch(`${BASE()}/api/clan/${encodeURIComponent(tag)}/banner`, {
+    method: 'DELETE',
+    headers: { 'X-ClanCapes-Token': TOKEN() },
+  });
+  if (!res.ok) throw new Error(`Banner delete failed ${res.status}`);
+  return res.json();
+}
+
 export async function fetchPowerClans(): Promise<PowerClanRow[]> {
   const res = await fetch(`${BASE()}/api/powerclans/clans`, {
     headers: { 'X-ClanCapes-Token': TOKEN() },

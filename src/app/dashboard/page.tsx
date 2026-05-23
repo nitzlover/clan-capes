@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { BannerSection } from '@/components/BannerSection';
 import { CapeBackPreview } from '@/components/CapeBackPreview';
 import { UploadSection } from '@/components/UploadSection';
 import { api, type ClanRow, getToken } from '@/lib/api';
@@ -143,6 +144,8 @@ export default function DashboardPage() {
           {clans.length === 0 && <p className="text-muted">No capes yet.</p>}
         </div>
       </section>
+
+      <BannerSection />
 
       <section>
         <h2 className="mb-4 font-semibold">Audit log</h2>

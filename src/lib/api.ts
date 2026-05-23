@@ -55,3 +55,42 @@ export type ClanOption = {
 export async function fetchClanOptions() {
   return api<{ clans: ClanOption[] }>('/panel/clans/options');
 }
+
+export type ClanBannerDto = {
+  clan: string;
+  baseColor: number;
+  patterns: Array<{ color: number; pattern: string }>;
+  updatedAt: number;
+  updatedBy: string;
+};
+
+export async function fetchClanBanner(tag: string): Promise<ClanBannerDto | null> {
+  const token = getToken();
+  const res = await fetch(`/api/panel/clans/${encodeURIComponent(tag)}/banner`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((err as { error?: string }).error ?? 'Request failed');
+  }
+  return res.json() as Promise<ClanBannerDto>;
+}
+
+export async function saveClanBanner(
+  tag: string,
+  baseColor: number,
+  patterns: Array<{ color: number; pattern: string }>
+): Promise<ClanBannerDto> {
+  return api<ClanBannerDto>(`/panel/clans/${encodeURIComponent(tag)}/banner`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ baseColor, patterns }),
+  });
+}
+
+export async function deleteClanBanner(tag: string) {
+  return api<{ ok: boolean }>(`/panel/clans/${encodeURIComponent(tag)}/banner`, {
+    method: 'DELETE',
+  });
+}
