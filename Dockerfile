@@ -24,10 +24,9 @@ COPY --from=build /app/next.config.ts ./
 # Prod-only install (sharp + bcrypt + jwt still needed at runtime)
 RUN npm install --omit=dev --no-audit --no-fund
 
-# Persistent capes + audit log live here. On Railway, attach a Volume
-# via the dashboard with Mount Path = /app/data (Railway disallows the
-# Dockerfile VOLUME directive — volumes are configured at the service
-# level instead). The mkdir below is a fallback for local Docker runs.
+# Persistent capes + audit log live here. On Railway, attach a disk
+# via the dashboard with Mount Path = /app/data (configured at the
+# service level). The mkdir below is a fallback for local Docker runs.
 RUN mkdir -p /app/data/capes
 
 EXPOSE 3000
