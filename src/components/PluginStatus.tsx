@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from 'react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-
 type Status = 'checking' | 'online' | 'offline';
 
 export function PluginStatus({ pollMs = 15000 }: { pollMs?: number }) {
@@ -14,7 +12,7 @@ export function PluginStatus({ pollMs = 15000 }: { pollMs?: number }) {
 
     async function check() {
       try {
-        const r = await fetch(`${API_URL}/health/plugin`, { cache: 'no-store' });
+        const r = await fetch('/api/health/plugin', { cache: 'no-store' });
         if (cancelled) return;
         const data = (await r.json()) as { ok?: boolean };
         setStatus(data.ok ? 'online' : 'offline');

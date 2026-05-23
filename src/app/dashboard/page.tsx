@@ -65,14 +65,11 @@ export default function DashboardPage() {
     const fd = new FormData();
     fd.append('cape', file);
     const token = getToken();
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/panel/clans/${tag.toUpperCase()}/cape`,
-      {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: fd,
-      }
-    );
+    const res = await fetch(`/api/panel/clans/${tag.toUpperCase()}/cape`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: fd,
+    });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       setMessage((err as { error?: string }).error ?? 'Upload failed');
