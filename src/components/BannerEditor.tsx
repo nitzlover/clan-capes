@@ -5,6 +5,8 @@ import {
   BANNER_COLORS,
   BANNER_PATTERNS,
   EMPTY_SPEC,
+  parseNbtSpec,
+  specToNbt,
   type BannerSpec,
 } from '@/lib/banners';
 import { BannerPreview } from '@/components/BannerPreview';
@@ -42,6 +44,40 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
     baseColor: initial?.baseColor ?? EMPTY_SPEC.baseColor,
     patterns: initial?.patterns ? [...initial.patterns] : [],
   }));
+  const [nbtText, setNbtText] = useState('');
+  const [nbtMsg, setNbtMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  function importNbt() {
+    const parsed = parseNbtSpec(nbtText);
+    if (!parsed) {
+      setNbtMsg({
+        kind: 'err',
+        text: 'Could not parse NBT (need Base + at least one {Color,Pattern}).',
+      });
+      return;
+    }
+    if (parsed.patterns.length > MAX_LAYERS) {
+      setSpec({ ...parsed, patterns: parsed.patterns.slice(0, MAX_LAYERS) });
+      setNbtMsg({
+        kind: 'err',
+        text: `NBT had ${parsed.patterns.length} layers, trimmed to ${MAX_LAYERS}.`,
+      });
+      return;
+    }
+    setSpec(parsed);
+    setNbtMsg({ kind: 'ok', text: `Loaded ${parsed.patterns.length} layer(s).` });
+  }
+
+  async function copyNbt() {
+    const nbt = specToNbt(spec);
+    setNbtText(nbt);
+    try {
+      await navigator.clipboard.writeText(nbt);
+      setNbtMsg({ kind: 'ok', text: 'NBT copied to clipboard.' });
+    } catch {
+      setNbtMsg({ kind: 'err', text: 'Clipboard blocked — copy from the textarea.' });
+    }
+  }
 
   function updateBase(value: number) {
     setSpec((s) => ({ ...s, baseColor: value }));
@@ -203,6 +239,52 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
 
       <div className="flex flex-col items-center justify-start gap-2">
         <BannerPreview spec={spec} width={120} label="Preview" />
+      </div>
+
+      <div className="md:col-span-2 mt-2 border-t border-white/10 pt-4">
+        <div className="label-mono mb-1.5">Import / Export NBT</div>
+        <p className="mb-2 font-mono text-[11px] text-white/40">
+          Paste a vanilla banner NBT like
+          {' '}
+          <code className="text-white/70">{'{BlockEntityTag:{Base:14,Patterns:[{Color:15,Pattern:"gra"},...]}}'}</code>
+          {' '}
+          and hit Import. Copy NBT writes the current spec back out in the same format.
+        </p>
+        <textarea
+          value={nbtText}
+          onChange={(e) => setNbtText(e.target.value)}
+          disabled={busy}
+          spellCheck={false}
+          placeholder='{BlockEntityTag:{Base:14,Patterns:[{Color:15,Pattern:"gra"},{Color:15,Pattern:"cbo"}]}}'
+          className="h-24 w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 font-mono text-[11px] text-white/90 outline-none placeholder:text-white/25 focus:border-white/40 disabled:opacity-50"
+        />
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={importNbt}
+            disabled={busy || !nbtText.trim()}
+            className="rounded-md border border-white/15 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-white/80 hover:text-white disabled:opacity-40"
+          >
+            Import NBT
+          </button>
+          <button
+            type="button"
+            onClick={copyNbt}
+            disabled={busy}
+            className="rounded-md border border-white/15 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-white/80 hover:text-white disabled:opacity-40"
+          >
+            Copy NBT
+          </button>
+          {nbtMsg && (
+            <span
+              className={`font-mono text-[11px] uppercase tracking-[0.18em] ${
+                nbtMsg.kind === 'ok' ? 'text-emerald-300' : 'text-amber-300'
+              }`}
+            >
+              {nbtMsg.text}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

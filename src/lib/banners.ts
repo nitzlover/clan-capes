@@ -103,3 +103,51 @@ export type BannerSpec = {
 };
 
 export const EMPTY_SPEC: BannerSpec = { baseColor: 0, patterns: [] };
+
+/**
+ * Parse a vanilla-style NBT blob like:
+ *
+ *   {BlockEntityTag:{Base:14,Patterns:[
+ *     {Color:15,Pattern:"gra"},
+ *     {Color:15,Pattern:"cbo"}
+ *   ]}}
+ *
+ * into a BannerSpec. The parser is deliberately permissive — vanilla NBT
+ * isn't strict JSON (unquoted keys, double-or-no quotes around values)
+ * so we extract Base and each {Color, Pattern} block with regex rather
+ * than fighting a strict parser. Returns null when no valid spec can be
+ * recovered (no Base, or zero patterns and the input clearly wasn't a
+ * banner NBT).
+ */
+export function parseNbtSpec(input: string): BannerSpec | null {
+  if (!input || !input.trim()) return null;
+  const baseMatch = input.match(/Base\s*:\s*(\d+)/i);
+  if (!baseMatch) return null;
+  const baseColor = clampOrdinal(parseInt(baseMatch[1], 10));
+
+  const patterns: Array<{ color: number; pattern: string }> = [];
+  const blockRe = /\{[^{}]+\}/g;
+  for (const block of input.matchAll(blockRe)) {
+    const c = block[0].match(/Color\s*:\s*(\d+)/i);
+    const p = block[0].match(/Pattern\s*:\s*"?([A-Za-z0-9_]+)"?/i);
+    if (!c || !p) continue;
+    patterns.push({
+      color: clampOrdinal(parseInt(c[1], 10)),
+      pattern: p[1].toLowerCase(),
+    });
+  }
+  return { baseColor, patterns };
+}
+
+/** Round-trip a BannerSpec back to the vanilla NBT format. */
+export function specToNbt(spec: BannerSpec): string {
+  const layers = spec.patterns
+    .map((p) => `{Color:${p.color},Pattern:"${p.pattern}"}`)
+    .join(',');
+  return `{BlockEntityTag:{Base:${spec.baseColor},Patterns:[${layers}]}}`;
+}
+
+function clampOrdinal(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(15, Math.trunc(n)));
+}
