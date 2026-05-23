@@ -21,6 +21,19 @@ async function fetchPlugin(
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     return await fetch(`${BASE()}${path}`, { ...init, signal: ctl.signal });
+  } catch (e) {
+    // Translate the raw AbortError / fetch-failed exception into a message
+    // the panel UI can show without exposing internal details. The plugin
+    // is genuinely unreachable in most of these cases (Apex firewall blocks
+    // Railway egress, server restarting, port closed) and a generic message
+    // is more honest than "This operation was aborted".
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new Error(`plugin unreachable (timed out after ${timeoutMs}ms)`);
+    }
+    if (e instanceof Error && /aborted|network|fetch failed|ECONNREFUSED|ETIMEDOUT/i.test(e.message)) {
+      throw new Error(`plugin unreachable (${e.message})`);
+    }
+    throw e;
   } finally {
     clearTimeout(timer);
   }
