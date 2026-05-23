@@ -4,29 +4,29 @@ import dev.clancapes.ClanCapesClient;
 import dev.clancapes.cape.CapeManager;
 import dev.clancapes.config.ClanCapesConfig;
 import net.minecraft.client.player.AbstractClientPlayer;
-import net.minecraft.client.renderer.entity.player.AvatarRenderer;
+import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
+import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.core.ClientAsset;
 import net.minecraft.resources.Identifier;
-import net.minecraft.world.entity.Avatar;
+import net.minecraft.world.entity.LivingEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Hooks {@link AvatarRenderer#extractRenderState(Avatar, AvatarRenderState, float)}
- * at TAIL. This fires AFTER the full vanilla subclass extract has run —
- * which is critical, because {@code AvatarRenderer} writes back cape data
- * from the entity's profile on top of whatever the parent class set.
- *
- * Earlier we hooked the parent {@code LivingEntityRenderer.extractRenderState},
- * which fired correctly but AvatarRenderer then clobbered our patch a few
- * lines later. Signature confirmed by the {@code MinecraftCapes} mod's
- * MC 26.1 branch (which uses the same hook).
+ * Universal hook into the base {@code LivingEntityRenderer.extractRenderState}.
+ * On MC 26.1 the {@code PlayerSkin.Patch}/{@code .with()} round-trip doesn't
+ * reliably populate {@code state.skin.cape} for the renderer (possibly because
+ * a downstream mod such as skinlayers3d / Iris rewrites {@code state.skin}
+ * after our handler), so this mixin force-constructs a new {@code PlayerSkin}
+ * record via reflection and writes it directly into the state field every
+ * frame. That's a bigger hammer than {@code Patch}, but it survives any
+ * downstream mutator that doesn't itself clobber the field afterwards.
  */
-@Mixin(AvatarRenderer.class)
-public abstract class AvatarRendererMixin {
+@Mixin(LivingEntityRenderer.class)
+public abstract class LivingEntityRendererMixin {
 
     private static int debugTickCounter = 0;
     private static volatile java.lang.reflect.Constructor<?> CACHED_PLAYERSKIN_CTOR;
@@ -34,18 +34,21 @@ public abstract class AvatarRendererMixin {
     private static volatile String[] CACHED_COMP_NAMES;
 
     @Inject(
-            method = "extractRenderState(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V",
+            method = "extractRenderState(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/client/renderer/entity/state/LivingEntityRenderState;F)V",
             at = @At("TAIL"),
             require = 0,
             expect = 0
     )
-    private void clancapes$onExtractAvatar(
-            Avatar avatar,
-            AvatarRenderState state,
+    private void clancapes$onExtractLiving(
+            LivingEntity entity,
+            LivingEntityRenderState state,
             float partialTicks,
             CallbackInfo ci
     ) {
-        if (!(avatar instanceof AbstractClientPlayer player)) {
+        if (!(entity instanceof AbstractClientPlayer player)) {
+            return;
+        }
+        if (!(state instanceof AvatarRenderState avatarState)) {
             return;
         }
 
@@ -57,7 +60,7 @@ public abstract class AvatarRendererMixin {
         if (!shouldRender) {
             if (!ClanCapesConfig.get().enableVanillaCapeFallback
                     && manager.getState(player.getUUID()).hasCape()) {
-                state.showCape = false;
+                avatarState.showCape = false;
             }
             return;
         }
@@ -66,27 +69,27 @@ public abstract class AvatarRendererMixin {
         if (texture == null) {
             return;
         }
-        if (state.skin == null) {
+        if (avatarState.skin == null) {
             return;
         }
 
         try {
             ClientAsset.ResourceTexture capeAsset = new ClientAsset.ResourceTexture(texture);
-            Object oldSkin = state.skin;
+            Object oldSkin = avatarState.skin;
             Object newSkin = buildSkinWithCape(oldSkin, capeAsset);
             if (newSkin != null) {
                 java.lang.reflect.Field skinField = CACHED_SKIN_FIELD;
                 if (skinField == null) {
-                    skinField = state.getClass().getField("skin");
+                    skinField = avatarState.getClass().getField("skin");
                     CACHED_SKIN_FIELD = skinField;
                 }
-                skinField.set(state, newSkin);
+                skinField.set(avatarState, newSkin);
             }
-            state.showCape = true;
+            avatarState.showCape = true;
 
             if (throttledLog) {
                 ClanCapesClient.LOGGER.info(
-                        "AvatarRendererMixin cape applied for {}: oldCape={} newSkin={}",
+                        "Cape force-applied for {}: oldCape={} newSkin={}",
                         player.getName().getString(),
                         invokeAccessor(oldSkin, "cape"),
                         newSkin);
@@ -94,12 +97,18 @@ public abstract class AvatarRendererMixin {
         } catch (Throwable t) {
             if (throttledLog) {
                 ClanCapesClient.LOGGER.warn(
-                        "AvatarRendererMixin cape force-apply failed for {}: {}",
+                        "Cape force-apply failed for {}: {}",
                         player.getName().getString(), t.toString());
             }
         }
     }
 
+    /**
+     * Build a new PlayerSkin record copying every component from {@code old}
+     * except {@code cape}, which is replaced with {@code capeAsset}. Caches
+     * the resolved constructor and component-name array on the first call so
+     * subsequent frames are cheap.
+     */
     private static Object buildSkinWithCape(Object old, ClientAsset.ResourceTexture capeAsset)
             throws Throwable {
         Class<?> cls = old.getClass();

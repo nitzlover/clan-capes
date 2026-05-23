@@ -54,6 +54,7 @@ public final class RestApiServer {
     }
 
     public void start() {
+        preloadJettyShutdownClasses();
         app = Javalin.create(cfg -> {
             cfg.showJavalinBanner = false;
             cfg.jsonMapper(new JsonMapper() {
@@ -113,6 +114,40 @@ public final class RestApiServer {
     public void stop() {
         if (app != null) {
             app.stop();
+        }
+    }
+
+    /**
+     * Force-load every Jetty inner class that the graceful shutdown path
+     * touches so {@code onDisable()} doesn't crash when the plugin is
+     * unloaded by PlugManX (or any other hot-reload tool) — those tools
+     * zap our PluginClassLoader the moment {@code disablePlugin} starts,
+     * which means class lookups against {@code dev/clancapes/lib/jetty/...}
+     * fail with NoClassDefFoundError mid-stop. Touching the classes once
+     * here keeps them in the JVM's already-loaded set and the shutdown
+     * walks all the way to {@code Server.doStop()} without exploding.
+     *
+     * If the relocation pattern ever changes, only the prefix below has
+     * to be updated.
+     */
+    private static void preloadJettyShutdownClasses() {
+        String[] inner = {
+                "dev.clancapes.lib.jetty.servlet.BaseHolder$Wrapped",
+                "dev.clancapes.lib.jetty.util.thread.ReservedThreadExecutor$ReservedThread",
+                "dev.clancapes.lib.jetty.io.ManagedSelector$CloseConnections",
+                "dev.clancapes.lib.jetty.io.ManagedSelector$StopSelector",
+                "dev.clancapes.lib.jetty.io.ManagedSelector$Acceptor",
+                "dev.clancapes.lib.jetty.util.thread.QueuedThreadPool$Runner",
+                "dev.clancapes.lib.jetty.server.AbstractConnector$Acceptor",
+        };
+        ClassLoader cl = RestApiServer.class.getClassLoader();
+        for (String name : inner) {
+            try {
+                Class.forName(name, true, cl);
+            } catch (Throwable ignored) {
+                // Class may be absent in this Jetty release — not fatal,
+                // the rest of the preload still protects the common paths.
+            }
         }
     }
 
