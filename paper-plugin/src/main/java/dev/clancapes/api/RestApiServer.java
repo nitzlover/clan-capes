@@ -2,17 +2,23 @@ package dev.clancapes.api;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
 import dev.clancapes.ClanCapesPlugin;
 import dev.clancapes.config.PluginConfig;
 import dev.clancapes.hook.PowerClansHook;
+import dev.clancapes.model.BannerPatternSpec;
+import dev.clancapes.model.ClanBannerRecord;
 import dev.clancapes.model.ClanCapeRecord;
 import dev.clancapes.model.PlayerCapeDto;
 import dev.clancapes.model.PowerClanEntry;
+import dev.clancapes.service.BannerService;
 import dev.clancapes.service.CapeService;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
 import io.javalin.json.JsonMapper;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
 import java.lang.reflect.Type;
@@ -23,16 +29,26 @@ import java.util.UUID;
 
 public final class RestApiServer {
     private static final Gson GSON = new GsonBuilder().create();
+    private static final Type PATTERNS_TYPE =
+            new TypeToken<List<BannerPatternSpec>>() {}.getType();
 
     private final ClanCapesPlugin plugin;
     private final CapeService capeService;
+    private final BannerService bannerService;
     private final PluginConfig config;
     private final PowerClansHook powerClansHook;
     private Javalin app;
 
-    public RestApiServer(ClanCapesPlugin plugin, CapeService capeService, PluginConfig config, PowerClansHook powerClansHook) {
+    public RestApiServer(
+            ClanCapesPlugin plugin,
+            CapeService capeService,
+            BannerService bannerService,
+            PluginConfig config,
+            PowerClansHook powerClansHook
+    ) {
         this.plugin = plugin;
         this.capeService = capeService;
+        this.bannerService = bannerService;
         this.config = config;
         this.powerClansHook = powerClansHook;
     }
@@ -85,6 +101,9 @@ public final class RestApiServer {
         app.get("/api/clan/{tag}", this::getClan);
         app.post("/api/clan/{tag}/cape", this::setClanCape);
         app.delete("/api/clan/{tag}/cape", this::deleteClanCape);
+        app.get("/api/clan/{tag}/banner", this::getClanBanner);
+        app.post("/api/clan/{tag}/banner", this::setClanBanner);
+        app.delete("/api/clan/{tag}/banner", this::deleteClanBanner);
         app.get("/api/health", ctx -> ctx.json(Map.of("status", "ok")));
 
         app.start(config.getApiHost(), config.getApiPort());
@@ -164,6 +183,77 @@ public final class RestApiServer {
         ctx.json(Map.of("ok", true, "clan", tag));
     }
 
+    // ----- Banner -------------------------------------------------------------
+
+    private void getClanBanner(Context ctx) {
+        if (!isAuthorized(ctx)) {
+            ctx.status(HttpStatus.UNAUTHORIZED);
+            return;
+        }
+        String tag = ctx.pathParam("tag").toUpperCase();
+        bannerService.getBanner(tag).ifPresentOrElse(
+                record -> ctx.json(toBannerJson(record)),
+                () -> ctx.status(HttpStatus.NOT_FOUND).json(Map.of("error", "not found"))
+        );
+    }
+
+    private void setClanBanner(Context ctx) {
+        if (!isAuthorized(ctx)) {
+            ctx.status(HttpStatus.UNAUTHORIZED);
+            return;
+        }
+        String tag = ctx.pathParam("tag").toUpperCase();
+        BannerSetRequest body = GSON.fromJson(ctx.body(), BannerSetRequest.class);
+        if (body == null) {
+            ctx.status(HttpStatus.BAD_REQUEST).json(Map.of("error", "body required"));
+            return;
+        }
+        if (body.baseColor() < 0 || body.baseColor() > 15) {
+            ctx.status(HttpStatus.BAD_REQUEST).json(Map.of("error", "baseColor must be 0..15"));
+            return;
+        }
+        List<BannerPatternSpec> patterns = body.patterns() != null ? body.patterns() : List.of();
+        try {
+            ClanBannerRecord record = bannerService.setBanner(
+                    tag,
+                    body.baseColor(),
+                    patterns,
+                    body.actor() != null ? body.actor() : "api"
+            );
+            reapplyForOnlineClanMembers(tag);
+            ctx.json(toBannerJson(record));
+        } catch (Exception e) {
+            ctx.status(HttpStatus.BAD_REQUEST).json(Map.of("error", e.getMessage()));
+        }
+    }
+
+    private void deleteClanBanner(Context ctx) {
+        if (!isAuthorized(ctx)) {
+            ctx.status(HttpStatus.UNAUTHORIZED);
+            return;
+        }
+        String tag = ctx.pathParam("tag").toUpperCase();
+        bannerService.removeBanner(tag, "api");
+        ctx.json(Map.of("ok", true, "clan", tag));
+    }
+
+    /**
+     * After the panel updates a banner, push the new design out to every
+     * online clan member's held shield immediately — they don't have to
+     * re-equip the shield to see the change.
+     */
+    private void reapplyForOnlineClanMembers(String clanTag) {
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            for (Player online : Bukkit.getOnlinePlayers()) {
+                powerClansHook.getClanTag(online).ifPresent(tag -> {
+                    if (tag.equalsIgnoreCase(clanTag)) {
+                        bannerService.applyToHeldShields(online);
+                    }
+                });
+            }
+        });
+    }
+
     private boolean isAuthorized(Context ctx) {
         String token = ctx.header("X-ClanCapes-Token");
         return config.getApiToken() != null && config.getApiToken().equals(token);
@@ -179,6 +269,19 @@ public final class RestApiServer {
         );
     }
 
+    private static Map<String, Object> toBannerJson(ClanBannerRecord record) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("clan", record.clanTag());
+        body.put("baseColor", record.baseColor());
+        body.put("patterns", record.patterns());
+        body.put("updatedAt", record.updatedAt());
+        body.put("updatedBy", record.updatedBy() != null ? record.updatedBy() : "");
+        return body;
+    }
+
     private record CapeSetRequest(String capeUrl, String actor) {
+    }
+
+    private record BannerSetRequest(int baseColor, List<BannerPatternSpec> patterns, String actor) {
     }
 }

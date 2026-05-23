@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import dev.clancapes.ClanCapesPlugin;
+import dev.clancapes.model.ClanBannerRecord;
 import dev.clancapes.model.ClanCapeRecord;
 
 import java.io.File;
@@ -18,72 +19,134 @@ import java.util.Optional;
 
 public final class JsonCapeStorage implements CapeStorage {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final Type MAP_TYPE = new TypeToken<Map<String, ClanCapeRecord>>() {}.getType();
+    private static final Type CAPE_MAP_TYPE = new TypeToken<Map<String, ClanCapeRecord>>() {}.getType();
+    private static final Type BANNER_MAP_TYPE = new TypeToken<Map<String, ClanBannerRecord>>() {}.getType();
 
     private final ClanCapesPlugin plugin;
-    private final File file;
-    private final Map<String, ClanCapeRecord> cache = new LinkedHashMap<>();
+    private final File capesFile;
+    private final File bannersFile;
+    private final Map<String, ClanCapeRecord> capes = new LinkedHashMap<>();
+    private final Map<String, ClanBannerRecord> banners = new LinkedHashMap<>();
 
     public JsonCapeStorage(ClanCapesPlugin plugin, String path) {
         this.plugin = plugin;
-        this.file = new File(path);
+        this.capesFile = new File(path);
+        // Banner file lives next to the cape file, with a fixed suffix so it
+        // shows up clearly in the storage directory.
+        this.bannersFile = new File(capesFile.getParentFile(), "clan_banners.json");
     }
 
     @Override
     public void init() {
-        file.getParentFile().mkdirs();
-        if (!file.exists()) {
-            persist();
-            return;
-        }
-        try (FileReader reader = new FileReader(file)) {
-            Map<String, ClanCapeRecord> loaded = GSON.fromJson(reader, MAP_TYPE);
-            if (loaded != null) {
-                cache.clear();
-                cache.putAll(loaded);
-            }
-        } catch (Exception e) {
-            plugin.getLogger().warning("Failed to load JSON storage: " + e.getMessage());
-        }
+        capesFile.getParentFile().mkdirs();
+        loadCapes();
+        loadBanners();
     }
 
     @Override
     public void close() {
-        persist();
+        persistCapes();
+        persistBanners();
     }
 
-    private synchronized void persist() {
-        try (FileWriter writer = new FileWriter(file)) {
-            GSON.toJson(cache, writer);
+    private void loadCapes() {
+        if (!capesFile.exists()) {
+            persistCapes();
+            return;
+        }
+        try (FileReader reader = new FileReader(capesFile)) {
+            Map<String, ClanCapeRecord> loaded = GSON.fromJson(reader, CAPE_MAP_TYPE);
+            if (loaded != null) {
+                capes.clear();
+                capes.putAll(loaded);
+            }
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to save JSON storage: " + e.getMessage());
+            plugin.getLogger().warning("Failed to load capes JSON: " + e.getMessage());
         }
     }
 
+    private void loadBanners() {
+        if (!bannersFile.exists()) {
+            persistBanners();
+            return;
+        }
+        try (FileReader reader = new FileReader(bannersFile)) {
+            Map<String, ClanBannerRecord> loaded = GSON.fromJson(reader, BANNER_MAP_TYPE);
+            if (loaded != null) {
+                banners.clear();
+                banners.putAll(loaded);
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to load banners JSON: " + e.getMessage());
+        }
+    }
+
+    private synchronized void persistCapes() {
+        try (FileWriter writer = new FileWriter(capesFile)) {
+            GSON.toJson(capes, writer);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to save capes JSON: " + e.getMessage());
+        }
+    }
+
+    private synchronized void persistBanners() {
+        try (FileWriter writer = new FileWriter(bannersFile)) {
+            GSON.toJson(banners, writer);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to save banners JSON: " + e.getMessage());
+        }
+    }
+
+    // ----- Capes --------------------------------------------------------------
+
     @Override
     public Optional<ClanCapeRecord> findByClan(String clanTag) {
-        return Optional.ofNullable(cache.get(clanTag.toUpperCase()));
+        return Optional.ofNullable(capes.get(clanTag.toUpperCase()));
     }
 
     @Override
     public List<ClanCapeRecord> findAll() {
-        return new ArrayList<>(cache.values());
+        return new ArrayList<>(capes.values());
     }
 
     @Override
     public void upsert(ClanCapeRecord record) {
-        cache.put(record.clanTag().toUpperCase(), record);
-        persist();
+        capes.put(record.clanTag().toUpperCase(), record);
+        persistCapes();
     }
 
     @Override
     public void delete(String clanTag) {
-        cache.remove(clanTag.toUpperCase());
-        persist();
+        capes.remove(clanTag.toUpperCase());
+        persistCapes();
     }
 
     @Override
     public void appendAudit(String clanTag, String action, String actor, String details) {
         plugin.getLogger().info("[AUDIT] " + clanTag + " " + action + " by " + actor + " — " + details);
+    }
+
+    // ----- Banners ------------------------------------------------------------
+
+    @Override
+    public Optional<ClanBannerRecord> findBannerByClan(String clanTag) {
+        return Optional.ofNullable(banners.get(clanTag.toUpperCase()));
+    }
+
+    @Override
+    public List<ClanBannerRecord> findAllBanners() {
+        return new ArrayList<>(banners.values());
+    }
+
+    @Override
+    public void upsertBanner(ClanBannerRecord record) {
+        banners.put(record.clanTag().toUpperCase(), record);
+        persistBanners();
+    }
+
+    @Override
+    public void deleteBanner(String clanTag) {
+        banners.remove(clanTag.toUpperCase());
+        persistBanners();
     }
 }

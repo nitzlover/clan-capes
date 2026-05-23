@@ -5,6 +5,8 @@ import dev.clancapes.command.ClanCapeCommand;
 import dev.clancapes.config.PluginConfig;
 import dev.clancapes.hook.PowerClansHook;
 import dev.clancapes.hook.PlaceholderHook;
+import dev.clancapes.listener.ShieldBannerListener;
+import dev.clancapes.service.BannerService;
 import dev.clancapes.service.CapeService;
 import dev.clancapes.sync.CapeSyncChannel;
 import dev.clancapes.storage.StorageFactory;
@@ -17,6 +19,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
     private PluginConfig pluginConfig;
     private CapeStorage storage;
     private CapeService capeService;
+    private BannerService bannerService;
     private RestApiServer apiServer;
     private CapeSyncChannel syncChannel;
     private PowerClansHook powerClansHook;
@@ -38,9 +41,13 @@ public final class ClanCapesPlugin extends JavaPlugin {
         syncChannel.register();
 
         capeService = new CapeService(this, storage, pluginConfig, syncChannel, powerClansHook);
+        bannerService = new BannerService(this, storage, powerClansHook);
 
         placeholderHook = new PlaceholderHook(this, capeService);
         placeholderHook.register();
+
+        getServer().getPluginManager().registerEvents(
+                new ShieldBannerListener(this, bannerService), this);
 
         var command = new ClanCapeCommand(this, capeService, powerClansHook);
         var pluginCommand = getCommand("clancape");
@@ -53,7 +60,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
         pluginCommand.setTabCompleter(command);
 
         if (pluginConfig.isApiEnabled()) {
-            apiServer = new RestApiServer(this, capeService, pluginConfig, powerClansHook);
+            apiServer = new RestApiServer(this, capeService, bannerService, pluginConfig, powerClansHook);
             apiServer.start();
         }
 
@@ -82,6 +89,10 @@ public final class ClanCapesPlugin extends JavaPlugin {
 
     public CapeService getCapeService() {
         return capeService;
+    }
+
+    public BannerService getBannerService() {
+        return bannerService;
     }
 
     public PowerClansHook getPowerClansHook() {
