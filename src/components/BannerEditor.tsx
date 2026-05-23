@@ -238,8 +238,9 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
         </div>
       </div>
 
-      <div className="flex flex-col items-center justify-start gap-2">
-        <BannerPreview spec={spec} width={120} label="Preview" />
+      <div className="flex flex-col items-center justify-start gap-4">
+        <BannerPreview spec={spec} width={120} label="Shield" shape="shield" />
+        <BannerPreview spec={spec} width={80} label="Banner" />
       </div>
 
       <div className="md:col-span-2 mt-2 border-t border-white/10 pt-4">

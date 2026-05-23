@@ -117,7 +117,7 @@ export function BannerSection() {
               className="rounded-xl border border-white/10 bg-black/30 p-3"
             >
               <div className="flex flex-wrap items-center gap-4">
-                <BannerPreview spec={spec} width={50} framed={false} />
+                <BannerPreview spec={spec} width={50} framed={false} shape="shield" />
                 <div className="min-w-0 flex-1">
                   <div className="font-mono text-base font-bold text-accent">{c.tag}</div>
                   <div className="text-xs text-muted">
