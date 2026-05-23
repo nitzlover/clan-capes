@@ -11,6 +11,10 @@ node_modules/
 # Runtime data (Railway Volume)
 data/
 
+# Stray plugin / CI files — this branch is web-only, the plugin lives on master
+paper-plugin/
+.github/
+
 # OS
 .DS_Store
 Thumbs.db
