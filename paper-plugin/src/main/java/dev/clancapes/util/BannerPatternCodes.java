@@ -73,6 +73,9 @@ public final class BannerPatternCodes {
         CODE_TO_KEY.put("flw", "flow");
         CODE_TO_KEY.put("gus", "guster");
         CODE_TO_KEY.put("pig", "piglin");
+        // Some hand-written NBT samples use "tt" — treat it as a synonym for
+        // the single top triangle (same shape "tr" produces).
+        CODE_TO_KEY.put("tt", "triangle_top");
     }
 
     /**
