@@ -68,8 +68,13 @@ public final class CapeService {
 
     public void setCapeUrl(String clanTag, String url, String actor) throws IOException {
         validateUrl(url);
+        // Trust the caller's URL — the web panel hosts the PNG on its own
+        // domain (e.g. Railway) and is the source of truth for where the
+        // Fabric mod should fetch from. The plugin's `cdn-base-url` config
+        // is only relevant for the legacy file-upload path
+        // ({@link #setCapeFile}) where the plugin itself owns the file.
+        String publicUrl = url.trim();
         String fileName = clanTag.toUpperCase() + ".png";
-        String publicUrl = config.getCdnBaseUrl().replaceAll("/$", "") + "/" + fileName;
 
         ClanCapeRecord record = new ClanCapeRecord(
                 clanTag.toUpperCase(),
@@ -79,7 +84,7 @@ public final class CapeService {
                 actor
         );
         storage.upsert(record);
-        storage.appendAudit(clanTag, "SET_URL", actor, url);
+        storage.appendAudit(clanTag, "SET_URL", actor, publicUrl);
         webhookNotifier.notifyCapeUpdated(clanTag, publicUrl);
         notifyClanMembers(clanTag);
         plugin.getLogger().info("Cape SET clan=" + clanTag.toUpperCase()
