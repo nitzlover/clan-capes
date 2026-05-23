@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { CapePreview } from '@/components/CapePreview';
+import { CapeBackPreview } from '@/components/CapeBackPreview';
 import { fetchClanOptions, type ClanOption } from '@/lib/api';
 
 const TEMPLATE_URL = '/templates/template_64x32.png';
@@ -132,14 +133,15 @@ export function UploadSection({
             Upload PNG
           </button>
         </form>
-        <div>
+        <div className="flex flex-col gap-4">
+          <CapeBackPreview url={pngPreview} zoom={9} label="As worn on player" />
           <CapePreview
             url={pngPreview}
-            scale={6}
+            scale={4}
             width={64}
             height={32}
             fit="fill"
-            label="Preview (64×32)"
+            label="Raw texture (64×32)"
           />
         </div>
       </div>

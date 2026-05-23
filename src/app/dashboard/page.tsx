@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CapePreview } from '@/components/CapePreview';
+import { CapeBackPreview } from '@/components/CapeBackPreview';
 import { UploadSection } from '@/components/UploadSection';
 import { api, type ClanRow, getToken } from '@/lib/api';
 
@@ -134,7 +134,9 @@ export default function DashboardPage() {
                   Delete
                 </button>
               </div>
-              <CapePreview url={c.capeUrl} scale={3} />
+              <div className="flex justify-center py-2">
+                <CapeBackPreview url={c.capeUrl} zoom={6} />
+              </div>
               <p className="mt-2 truncate text-xs text-muted">{c.capeUrl}</p>
             </article>
           ))}
