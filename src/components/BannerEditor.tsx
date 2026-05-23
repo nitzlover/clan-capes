@@ -115,51 +115,60 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
   }
 
   return (
-    <div className="grid gap-6 md:grid-cols-[1fr_auto]">
-      <div className="space-y-4">
-        <label className="block text-sm">
-          <span className="label-mono mb-1.5 block">Base colour</span>
+    <div className="grid gap-10 md:grid-cols-[1fr_auto]">
+      <div className="space-y-8">
+        <div>
+          <label htmlFor="banner-base" className="label-mono mb-2 block">
+            Base colour
+          </label>
           <select
+            id="banner-base"
             value={spec.baseColor}
             disabled={busy}
             onChange={(e) => updateBase(Number(e.target.value))}
-            className="w-full max-w-xs rounded-lg border border-white/10 bg-black/40 px-3 py-2 disabled:opacity-50"
+            className="input max-w-xs disabled:opacity-50"
           >
             {BANNER_COLORS.map((c) => (
               <option key={c.ordinal} value={c.ordinal}>
-                {c.name} ({c.hex})
+                {c.name} · {c.hex}
               </option>
             ))}
           </select>
-        </label>
+        </div>
 
         <div>
-          <div className="mb-2 flex items-center justify-between">
-            <span className="label-mono">Patterns ({spec.patterns.length}/{MAX_LAYERS})</span>
+          <div className="mb-3 flex items-center justify-between">
+            <span className="label-mono">
+              Patterns · {spec.patterns.length}/{MAX_LAYERS}
+            </span>
             <button
               type="button"
               onClick={addLayer}
               disabled={busy || spec.patterns.length >= MAX_LAYERS}
-              className="rounded-md border border-white/15 px-2.5 py-1 text-xs uppercase tracking-[0.18em] text-white/80 hover:text-white disabled:opacity-40"
+              className="font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--text-mute)] underline-offset-4 hover:text-white hover:underline disabled:opacity-30"
             >
               + add layer
             </button>
           </div>
           {spec.patterns.length === 0 && (
-            <p className="text-xs text-white/40">No patterns. Base colour only.</p>
+            <p className="py-3 text-xs text-[var(--text-faint)]">
+              No patterns. Base colour only.
+            </p>
           )}
-          <ul className="space-y-2">
+          <ul>
             {spec.patterns.map((p, idx) => (
               <li
                 key={idx}
-                className="flex flex-wrap items-center gap-2 rounded-md border border-white/10 bg-black/30 p-2"
+                className="grid grid-cols-[auto_1fr_1.4fr_auto] items-center gap-3 border-t border-[var(--rule)] py-3 first:border-t-0"
               >
-                <span className="font-mono text-xs text-white/40">#{idx + 1}</span>
+                <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)] tabular">
+                  {String(idx + 1).padStart(2, '0')}
+                </span>
                 <select
                   value={p.color}
                   disabled={busy}
                   onChange={(e) => setLayer(idx, { color: Number(e.target.value) })}
-                  className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-sm disabled:opacity-50"
+                  className="input py-1.5 text-sm disabled:opacity-50"
                 >
                   {BANNER_COLORS.map((c) => (
                     <option key={c.ordinal} value={c.ordinal}>{c.name}</option>
@@ -169,7 +178,7 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
                   value={p.pattern}
                   disabled={busy}
                   onChange={(e) => setLayer(idx, { pattern: e.target.value })}
-                  className="rounded-md border border-white/10 bg-black/40 px-2 py-1 text-sm disabled:opacity-50"
+                  className="input py-1.5 text-sm disabled:opacity-50"
                 >
                   {BANNER_PATTERNS.map((pat) => (
                     <option key={pat.code} value={pat.code}>
@@ -177,12 +186,12 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
                     </option>
                   ))}
                 </select>
-                <div className="ml-auto flex items-center gap-1">
+                <div className="flex items-center gap-2 text-[var(--text-mute)]">
                   <button
                     type="button"
                     onClick={() => moveLayer(idx, -1)}
                     disabled={busy || idx === 0}
-                    className="rounded-md border border-white/10 px-2 py-1 text-xs text-white/70 hover:text-white disabled:opacity-30"
+                    className="hover:text-white disabled:opacity-25"
                     aria-label="Move up"
                   >
                     ↑
@@ -191,7 +200,7 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
                     type="button"
                     onClick={() => moveLayer(idx, 1)}
                     disabled={busy || idx === spec.patterns.length - 1}
-                    className="rounded-md border border-white/10 px-2 py-1 text-xs text-white/70 hover:text-white disabled:opacity-30"
+                    className="hover:text-white disabled:opacity-25"
                     aria-label="Move down"
                   >
                     ↓
@@ -200,7 +209,7 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
                     type="button"
                     onClick={() => removeLayer(idx)}
                     disabled={busy}
-                    className="rounded-md border border-white/10 px-2 py-1 text-xs text-red-300 hover:text-red-200 disabled:opacity-30"
+                    className="hover:text-white disabled:opacity-25"
                     aria-label="Remove"
                   >
                     ✕
@@ -211,7 +220,7 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
           </ul>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-4">
           <button
             type="button"
             onClick={() => onSave(spec)}
@@ -225,32 +234,32 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
               type="button"
               onClick={() => onRemove()}
               disabled={busy}
-              className="rounded-lg border border-red-300/30 px-4 py-2 text-sm text-red-200 hover:bg-red-300/10 disabled:opacity-40"
+              className="btn-ghost"
             >
-              Remove banner
+              Remove
             </button>
           )}
           {error && (
-            <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-red-300">
-              {error}
+            <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-white">
+              ! {error}
             </span>
           )}
         </div>
       </div>
 
-      <div className="flex flex-col items-center justify-start gap-4">
-        <BannerPreview spec={spec} width={120} label="Shield" shape="shield" />
-        <BannerPreview spec={spec} width={80} label="Banner" />
+      <div className="flex flex-col items-start justify-start gap-6 md:items-center">
+        <BannerPreview spec={spec} width={140} label="Shield" shape="shield" />
+        <BannerPreview spec={spec} width={90} label="Banner" />
       </div>
 
-      <div className="md:col-span-2 mt-2 border-t border-white/10 pt-4">
-        <div className="label-mono mb-1.5">Import / Export NBT</div>
-        <p className="mb-2 font-mono text-[11px] text-white/40">
+      <div className="md:col-span-2 border-t border-[var(--rule)] pt-6">
+        <p className="eyebrow mb-3">Import / Export NBT</p>
+        <p className="mb-3 font-mono text-[11px] text-[var(--text-faint)]">
           Paste a vanilla banner NBT like
           {' '}
-          <code className="text-white/70">{'{BlockEntityTag:{Base:14,Patterns:[{Color:15,Pattern:"gra"},...]}}'}</code>
+          <code className="text-[var(--text-soft)]">{'{BlockEntityTag:{Base:14,Patterns:[{Color:15,Pattern:"gra"},...]}}'}</code>
           {' '}
-          and hit Import. Copy NBT writes the current spec back out in the same format.
+          and Import. Copy writes the current spec back in the same format.
         </p>
         <textarea
           value={nbtText}
@@ -258,38 +267,35 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
           disabled={busy}
           spellCheck={false}
           placeholder='{BlockEntityTag:{Base:14,Patterns:[{Color:15,Pattern:"gra"},{Color:15,Pattern:"cbo"}]}}'
-          className="h-24 w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 font-mono text-[11px] text-white/90 outline-none placeholder:text-white/25 focus:border-white/40 disabled:opacity-50"
+          className="input h-24 font-mono text-[11px] disabled:opacity-50"
         />
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-4">
           <button
             type="button"
             onClick={importNbt}
             disabled={busy || !nbtText.trim()}
-            className="rounded-md border border-white/15 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-white/80 hover:text-white disabled:opacity-40"
+            className="btn-ghost"
           >
-            Import NBT
+            Import
           </button>
           <button
             type="button"
             onClick={copyNbt}
             disabled={busy}
-            className="rounded-md border border-white/15 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-white/80 hover:text-white disabled:opacity-40"
+            className="btn-ghost"
           >
-            Copy NBT
+            Copy
           </button>
           {nbtMsg && (
-            <span
-              className={`font-mono text-[11px] uppercase tracking-[0.18em] ${
-                nbtMsg.kind === 'ok' ? 'text-emerald-300' : 'text-amber-300'
-              }`}
-            >
+            <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-white">
+              {nbtMsg.kind === 'ok' ? '✓ ' : '! '}
               {nbtMsg.text}
             </span>
           )}
         </div>
       </div>
 
-      <div className="md:col-span-2 mt-2 border-t border-white/10 pt-4">
+      <div className="md:col-span-2 border-t border-[var(--rule)] pt-6">
         <ImageToBannerCard
           busy={busy}
           onAccept={(converted) => {

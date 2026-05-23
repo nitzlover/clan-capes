@@ -27,12 +27,16 @@ export function CapePreview({
   if (!src) {
     return (
       <div>
-        {label && <p className="mb-1 text-xs text-muted">{label}</p>}
+        {label && (
+          <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+            {label}
+          </p>
+        )}
         <div
-          className="flex items-center justify-center rounded border border-dashed border-muted/40 bg-black/30 text-xs text-muted"
+          className="flex items-center justify-center border border-dashed border-[var(--rule)] bg-[var(--bg-sink)] font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]"
           style={{ width: displayW, height: displayH }}
         >
-          No preview
+          empty
         </div>
       </div>
     );
@@ -40,9 +44,13 @@ export function CapePreview({
 
   return (
     <div>
-      {label && <p className="mb-1 text-xs text-muted">{label}</p>}
+      {label && (
+        <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+          {label}
+        </p>
+      )}
       <div
-        className="overflow-hidden rounded border border-white/10 bg-[#1e1e1e] shadow-lg"
+        className="overflow-hidden border border-[var(--rule)] bg-[var(--bg-sink)]"
         style={{
           width: displayW,
           height: displayH,

@@ -5,10 +5,23 @@ import { useRouter } from 'next/navigation';
 import { BannerSection } from '@/components/BannerSection';
 import { CapeBackPreview } from '@/components/CapeBackPreview';
 import { UploadSection } from '@/components/UploadSection';
+import { PluginStatus } from '@/components/PluginStatus';
 import { api, type ClanRow, getToken } from '@/lib/api';
 
 type AuditEntry = { timestamp: string; raw: string };
 
+/**
+ * Dashboard — monochrome modern.
+ *
+ * No card grid, no nested panels. Each operational area is a "chapter":
+ * a thin 1px top rule, a small mono eyebrow, a display headline, and the
+ * controls below. Sections breathe vertically — spacing carries the
+ * hierarchy that color and surface chrome would carry in a coloured
+ * brand interface.
+ *
+ * The clan list is a typographic table-style rail (rows separated by
+ * rules), not a wall of cards. Audit log is the same rail in monospace.
+ */
 export default function DashboardPage() {
   const router = useRouter();
   const [clans, setClans] = useState<ClanRow[]>([]);
@@ -29,7 +42,6 @@ export default function DashboardPage() {
       const clanRes = await api<{ clans: ClanRow[] }>('/panel/clans');
       setClans(clanRes.clans);
     } catch (e) {
-      // Auth failure → kick to login. Network/server errors → keep dashboard but show empty list.
       if (e instanceof Error && /unauthor|invalid token/i.test(e.message)) {
         router.replace('/');
         return;
@@ -95,69 +107,174 @@ export default function DashboardPage() {
   }
 
   if (loading) {
-    return <main className="p-8 text-muted">Loading…</main>;
+    return (
+      <main className="min-h-[100dvh] bg-[var(--bg)] px-6 py-12 text-[var(--text-mute)]">
+        <p className="eyebrow">Loading…</p>
+      </main>
+    );
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl p-6">
-      <header className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Clan Capes Dashboard</h1>
-          <p className="text-sm text-muted">Upload ready-made 64×32 PNG cape textures per clan</p>
+    <main className="min-h-[100dvh] bg-[var(--bg)] text-[var(--text)]">
+      {/* Top rail. */}
+      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-[var(--rule)] bg-[var(--bg)]/95 px-6 py-4 backdrop-blur-sm sm:px-10">
+        <div className="flex items-baseline gap-6">
+          <span className="font-mono text-[11px] uppercase tracking-[0.32em] text-white">
+            Clan / Capes
+          </span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+            Dashboard
+          </span>
         </div>
-        <button onClick={logout} className="rounded-lg border border-white/10 px-4 py-2 text-sm hover:bg-white/5">
-          Logout
-        </button>
+        <div className="flex items-center gap-4">
+          <PluginStatus />
+          <button onClick={logout} className="btn-danger-link">
+            Sign out
+          </button>
+        </div>
       </header>
 
-      <UploadSection
-        tag={tag}
-        onTagChange={setTag}
-        file={file}
-        onFileChange={setFile}
-        pngPreview={preview}
-        onPngUpload={uploadPng}
-        message={message}
-        optionsRefresh={optionsRefresh}
-      />
+      <div className="mx-auto max-w-6xl px-6 pb-24 sm:px-10">
+        {/* Hero / overview chapter. */}
+        <section className="py-16">
+          <p className="eyebrow">Overview</p>
+          <h1 className="display mt-5">
+            Capes, banners, audit —
+            <br />
+            <span className="text-[var(--text-faint)]">one operator surface.</span>
+          </h1>
+          <div className="mt-10 grid grid-cols-2 gap-x-12 gap-y-6 sm:grid-cols-4 sm:max-w-3xl">
+            <Metric label="Clans" value={clans.length} />
+            <Metric label="With cape" value={clans.filter((c) => c.capeUrl).length} />
+            <Metric label="Audit lines" value={audit.length} />
+            <Metric
+              label="Plugin"
+              value={<span className="text-white">live</span>}
+              suffix="status above"
+            />
+          </div>
+        </section>
 
-      <section className="mb-10">
-        <h2 className="mb-4 font-semibold">Clans ({clans.length})</h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {clans.map((c) => (
-            <article key={c.tag} className="rounded-xl border border-white/10 bg-panel p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="font-mono text-lg font-bold text-accent">{c.tag}</span>
-                <button
-                  onClick={() => removeCape(c.tag)}
-                  className="text-xs text-red-400 hover:underline"
+        {/* Cape upload chapter. */}
+        <section className="chapter">
+          <div className="chapter-head">
+            <p className="eyebrow">01 — Cape</p>
+            <h2 className="display">Upload PNG per clan.</h2>
+          </div>
+          <UploadSection
+            tag={tag}
+            onTagChange={setTag}
+            file={file}
+            onFileChange={setFile}
+            pngPreview={preview}
+            onPngUpload={uploadPng}
+            message={message}
+            optionsRefresh={optionsRefresh}
+          />
+        </section>
+
+        {/* Clan roster chapter. */}
+        <section className="chapter mt-16">
+          <div className="chapter-head">
+            <p className="eyebrow">02 — Roster</p>
+            <h2 className="display">
+              Clans <span className="text-[var(--text-faint)] tabular">·{' '}
+              {String(clans.length).padStart(2, '0')}
+              </span>
+            </h2>
+          </div>
+
+          {clans.length === 0 ? (
+            <p className="py-8 text-sm text-[var(--text-mute)]">
+              No clans with capes yet.
+            </p>
+          ) : (
+            <ul className="mt-2">
+              {clans.map((c) => (
+                <li
+                  key={c.tag}
+                  className="grid grid-cols-[64px_1fr_auto] items-center gap-6 border-t border-[var(--rule)] py-5 first:border-t-0"
                 >
-                  Delete
-                </button>
-              </div>
-              <div className="flex justify-center py-2">
-                <CapeBackPreview url={c.capeUrl} zoom={6} />
-              </div>
-              <p className="mt-2 truncate text-xs text-muted">{c.capeUrl}</p>
-            </article>
-          ))}
-          {clans.length === 0 && <p className="text-muted">No capes yet.</p>}
-        </div>
-      </section>
+                  <CapeBackPreview url={c.capeUrl} zoom={5} />
+                  <div className="min-w-0">
+                    <div className="font-mono text-base font-semibold tracking-wider text-white">
+                      {c.tag}
+                    </div>
+                    <div className="mt-1 truncate font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+                      {c.capeUrl || 'no cape'}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => removeCape(c.tag)}
+                    className="btn-danger-link"
+                  >
+                    Delete
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
-      <BannerSection />
+        {/* Banners chapter. */}
+        <section className="chapter mt-16">
+          <div className="chapter-head">
+            <p className="eyebrow">03 — Shield banners</p>
+            <h2 className="display">Per-clan crest.</h2>
+          </div>
+          <BannerSection />
+        </section>
 
-      <section>
-        <h2 className="mb-4 font-semibold">Audit log</h2>
-        <ul className="max-h-64 space-y-1 overflow-y-auto rounded-xl border border-white/10 bg-panel p-4 font-mono text-xs text-muted">
-          {audit.map((a, i) => (
-            <li key={i}>
-              <span className="text-white/50">{a.timestamp}</span> {a.raw}
-            </li>
-          ))}
-          {audit.length === 0 && <li>No entries</li>}
-        </ul>
-      </section>
+        {/* Audit chapter. */}
+        <section className="chapter mt-16">
+          <div className="chapter-head">
+            <p className="eyebrow">04 — Audit</p>
+            <h2 className="display">Operator trail.</h2>
+          </div>
+          <ul className="max-h-72 overflow-y-auto font-mono text-[11px] text-[var(--text-mute)]">
+            {audit.map((a, i) => (
+              <li
+                key={i}
+                className="grid grid-cols-[auto_1fr] gap-4 border-t border-[var(--rule)] py-2 first:border-t-0"
+              >
+                <span className="text-[var(--text-faint)] tabular">
+                  {a.timestamp}
+                </span>
+                <span className="truncate text-[var(--text-soft)]">{a.raw}</span>
+              </li>
+            ))}
+            {audit.length === 0 && (
+              <li className="py-6 text-[var(--text-faint)]">No entries.</li>
+            )}
+          </ul>
+        </section>
+      </div>
     </main>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  suffix,
+}: {
+  label: string;
+  value: React.ReactNode;
+  suffix?: string;
+}) {
+  return (
+    <div>
+      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+        {label}
+      </p>
+      <p className="mt-2 font-sans text-3xl font-bold tabular text-white">
+        {value}
+      </p>
+      {suffix && (
+        <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+          {suffix}
+        </p>
+      )}
+    </div>
   );
 }

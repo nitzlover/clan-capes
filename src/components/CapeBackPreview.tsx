@@ -71,12 +71,16 @@ export function CapeBackPreview({
   if (!src) {
     return (
       <div className="inline-flex flex-col gap-2">
-        {label && <p className="text-xs uppercase tracking-[0.18em] text-white/40">{label}</p>}
+        {label && (
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+            {label}
+          </p>
+        )}
         <div
-          className="flex items-center justify-center rounded border border-dashed border-white/15 bg-black/30 text-xs text-white/40"
+          className="flex items-center justify-center border border-dashed border-[var(--rule)] bg-[var(--bg-sink)] font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]"
           style={{ width: figureW + capePxW, height: figureH }}
         >
-          No preview
+          empty
         </div>
       </div>
     );
@@ -85,10 +89,12 @@ export function CapeBackPreview({
   return (
     <div className="inline-flex flex-col gap-2">
       {label && (
-        <p className="text-xs uppercase tracking-[0.18em] text-white/40">{label}</p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+          {label}
+        </p>
       )}
       <div
-        className="relative overflow-hidden rounded border border-white/10 bg-[#1e1e1e]"
+        className="relative overflow-hidden border border-[var(--rule)] bg-[var(--bg-sink)]"
         style={{ width: figureW + 4 * PIX, height: figureH + 2 * PIX, padding: PIX }}
       >
         {/* Stylised Steve back silhouette — flat blocks of cloth/skin colour.

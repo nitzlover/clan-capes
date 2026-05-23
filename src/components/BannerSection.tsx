@@ -84,27 +84,24 @@ export function BannerSection() {
   }
 
   return (
-    <section className="mb-10 rounded-2xl border border-white/10 bg-panel p-6">
-      <header className="mb-4 flex items-center justify-between">
-        <div>
-          <h2 className="font-semibold">Clan shield banners</h2>
-          <p className="text-xs text-muted">
-            Apply a banner to every clan member&apos;s held shield. Updates live.
-          </p>
-        </div>
-        {loadState === 'loading' && (
-          <span className="text-xs text-muted">Loading…</span>
-        )}
-        {loadState === 'error' && (
-          <span className="text-xs text-red-300">{loadError}</span>
-        )}
-      </header>
-
+    <div>
+      {loadState === 'loading' && (
+        <p className="py-6 font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--text-mute)]">
+          Loading clans…
+        </p>
+      )}
+      {loadState === 'error' && (
+        <p className="py-6 font-mono text-[11px] uppercase tracking-[0.2em] text-white">
+          ! {loadError}
+        </p>
+      )}
       {clans.length === 0 && loadState === 'ok' && (
-        <p className="text-sm text-muted">No clans in PowerClans data.yml.</p>
+        <p className="py-6 text-sm text-[var(--text-mute)]">
+          No clans in PowerClans data.yml.
+        </p>
       )}
 
-      <ul className="space-y-3">
+      <ul>
         {clans.map((c) => {
           const banner = banners[c.tag] ?? null;
           const spec: BannerSpec = banner
@@ -114,16 +111,18 @@ export function BannerSection() {
           return (
             <li
               key={c.tag}
-              className="rounded-xl border border-white/10 bg-black/30 p-3"
+              className="border-t border-[var(--rule)] first:border-t-0"
             >
-              <div className="flex flex-wrap items-center gap-4">
+              <div className="grid grid-cols-[64px_1fr_auto] items-center gap-6 py-5">
                 <BannerPreview spec={spec} width={50} framed={false} shape="shield" />
-                <div className="min-w-0 flex-1">
-                  <div className="font-mono text-base font-bold text-accent">{c.tag}</div>
-                  <div className="text-xs text-muted">
+                <div className="min-w-0">
+                  <div className="font-mono text-base font-semibold tracking-wider text-white">
+                    {c.tag}
+                  </div>
+                  <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-faint)]">
                     {banner
-                      ? `${banner.patterns.length} layer${banner.patterns.length === 1 ? '' : 's'} · saved ${new Date(banner.updatedAt).toLocaleString()}`
-                      : 'No banner yet — defaults to vanilla shield.'}
+                      ? `${banner.patterns.length} layer${banner.patterns.length === 1 ? '' : 's'} · ${new Date(banner.updatedAt).toLocaleString()}`
+                      : 'no banner — vanilla shield'}
                   </div>
                 </div>
                 <button
@@ -132,13 +131,13 @@ export function BannerSection() {
                     setEditorError(null);
                     setOpenTag(isOpen ? null : c.tag);
                   }}
-                  className="rounded-lg border border-white/15 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-white/80 hover:text-white"
+                  className="font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--text-mute)] underline-offset-4 hover:text-white hover:underline"
                 >
                   {isOpen ? 'close' : banner ? 'edit' : 'set'}
                 </button>
               </div>
               {isOpen && (
-                <div className="mt-4 border-t border-white/10 pt-4">
+                <div className="border-t border-[var(--rule)] py-6">
                   <BannerEditor
                     initial={spec}
                     onSave={(s) => save(c.tag, s)}
@@ -152,6 +151,6 @@ export function BannerSection() {
           );
         })}
       </ul>
-    </section>
+    </div>
   );
 }
