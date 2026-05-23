@@ -14,6 +14,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.BlockStateMeta;
+import org.bukkit.inventory.meta.ShieldMeta;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -121,7 +122,8 @@ public final class BannerService {
         if (baseIdx < 0 || baseIdx >= colours.length) {
             baseIdx = 0;
         }
-        banner.setBaseColor(colours[baseIdx]);
+        DyeColor base = colours[baseIdx];
+        banner.setBaseColor(base);
 
         List<Pattern> resolved = new ArrayList<>(spec.patterns().size());
         for (BannerPatternSpec p : spec.patterns()) {
@@ -130,7 +132,26 @@ public final class BannerService {
         banner.setPatterns(resolved);
         banner.update();
         meta.setBlockState(banner);
-        item.setItemMeta(meta);
+
+        // ShieldMeta is the modern (1.20.5+) component-backed accessor for
+        // the shield's "base_color" item component. The legacy banner-block
+        // BlockState we mutated above is enough for the cosmetic banner
+        // pattern overlay, but on 1.21+ clients the *base* colour comes
+        // from the `minecraft:base_color` component which is exposed via
+        // ShieldMeta.setBaseColor — not Banner.setBaseColor. Without this
+        // line the shield kept rendering with the legacy WHITE base no
+        // matter what the panel sent.
+        //
+        // ShieldMeta extends BlockStateMeta, so on 1.21.4 our existing
+        // instanceof BlockStateMeta cast still matches and we just have to
+        // narrow further. Guard the cast so older Paper builds without
+        // ShieldMeta still get the banner-pattern path.
+        if (meta instanceof ShieldMeta shieldMeta) {
+            shieldMeta.setBaseColor(base);
+            item.setItemMeta(shieldMeta);
+        } else {
+            item.setItemMeta(meta);
+        }
         return true;
     }
 }

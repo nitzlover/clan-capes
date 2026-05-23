@@ -85,14 +85,25 @@ public final class ShieldBannerListener implements Listener {
     }
 
     private void scheduleApply(Player player) {
-        // Cheap pre-check before the scheduler hop and the BannerService
-        // PowerClans lookup. Saves an enormous amount of useless work
-        // (and PowerClansHook log spam) on every inventory click for
-        // players who don't currently have a shield equipped.
-        if (!hasShieldInHand(player)) {
-            return;
-        }
-        Bukkit.getScheduler().runTask(plugin, () -> bannerService.applyToHeldShields(player));
+        // The hasShieldInHand pre-check used to run synchronously here, but
+        // that races InventoryClickEvent: when the player drags a shield
+        // from the inventory into a hand slot the cursor holds the shield
+        // and the hand is still empty AT EVENT TIME, so the pre-check
+        // returned false and no banner application was scheduled. The
+        // shield only gained the banner on the next *other* event (swap-
+        // hand, hotbar change), which felt like a ~10s delay to the user.
+        //
+        // Defer the check into the runTask body — by next tick the
+        // inventory mutation has committed and the hands reflect reality.
+        // BannerService.applyToHeldShields itself early-returns when the
+        // player isn't in a clan or has no banner, so the worst case is a
+        // single wasted PowerClans lookup per click (cheap, cached).
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!hasShieldInHand(player)) {
+                return;
+            }
+            bannerService.applyToHeldShields(player);
+        });
     }
 
     private static boolean hasShieldInHand(Player player) {
