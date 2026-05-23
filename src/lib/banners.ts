@@ -55,7 +55,7 @@ export const BANNER_COLORS: BannerColor[] = [
 export const BANNER_PATTERNS: BannerPattern[] = [
   { code: 'bo', label: 'Border' },
   { code: 'bri', label: 'Bricks' },
-  { code: 'bt', label: 'Per-Bend (triangle bottom)' },
+  { code: 'bt', label: 'Triangle bottom' },
   { code: 'bts', label: 'Triangles bottom' },
   { code: 'cbo', label: 'Curly border' },
   { code: 'cr', label: 'Cross' },
@@ -65,9 +65,11 @@ export const BANNER_PATTERNS: BannerPattern[] = [
   { code: 'dls', label: 'Diagonal left' },
   { code: 'drs', label: 'Diagonal right' },
   { code: 'flo', label: 'Flower charge' },
+  { code: 'flw', label: 'Flow' },
   { code: 'glb', label: 'Globe' },
   { code: 'gra', label: 'Gradient' },
   { code: 'gru', label: 'Gradient up' },
+  { code: 'gus', label: 'Guster' },
   { code: 'hh', label: 'Half horizontal' },
   { code: 'hhb', label: 'Half horizontal bottom' },
   { code: 'ld', label: 'Diagonal left down' },
@@ -77,6 +79,7 @@ export const BANNER_PATTERNS: BannerPattern[] = [
   { code: 'ms', label: 'Stripe down right' },
   { code: 'msb', label: 'Stripe middle' },
   { code: 'mss', label: 'Small stripes' },
+  { code: 'pig', label: 'Piglin' },
   { code: 'rd', label: 'Diagonal right down' },
   { code: 'rs', label: 'Stripe right' },
   { code: 'rud', label: 'Diagonal up right' },
@@ -84,10 +87,30 @@ export const BANNER_PATTERNS: BannerPattern[] = [
   { code: 'sku', label: 'Skull charge' },
   { code: 'ss', label: 'Straight cross' },
   { code: 'tl', label: 'Stripe top' },
-  { code: 'tr', label: 'Triangle top' },
+  { code: 'tr', label: 'Triangle top (single)' },
   { code: 'ts', label: 'Stripe left' },
+  { code: 'tt', label: 'Triangle top (alias)' },
   { code: 'tts', label: 'Triangles top' },
+  { code: 'vh', label: 'Half vertical' },
+  { code: 'vhr', label: 'Half vertical right' },
 ];
+
+/**
+ * Some short codes don't ship a dedicated 20×40 alpha mask under
+ * /banner/patterns — the preview falls back to a visually-similar mask
+ * so the layer is at least *visible* in the editor (it will still render
+ * correctly in-game because the plugin resolves the code via its own
+ * BannerPatternCodes table). Keys are the missing codes, values are an
+ * existing PNG name to use as a stand-in.
+ */
+export const PATTERN_PREVIEW_FALLBACK: Record<string, string> = {
+  tt: 'tr', // both render a single top triangle
+  flw: 'flo',
+  gus: 'cra',
+  pig: 'mc',
+  vh: 'hh',
+  vhr: 'hhb',
+};
 
 export function colorForOrdinal(o: number): BannerColor {
   return BANNER_COLORS[Math.max(0, Math.min(15, o | 0))];

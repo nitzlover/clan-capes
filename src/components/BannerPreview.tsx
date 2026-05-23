@@ -1,6 +1,21 @@
 'use client';
 
-import { BANNER_COLORS, type BannerSpec, colorForOrdinal } from '@/lib/banners';
+import {
+  BANNER_COLORS,
+  PATTERN_PREVIEW_FALLBACK,
+  type BannerSpec,
+  colorForOrdinal,
+} from '@/lib/banners';
+
+function maskUrlFor(code: string): string {
+  // Some plugin-known codes (e.g. "tt", "flw") don't ship a dedicated 20×40
+  // alpha mask under public/banner/patterns. Fall back to a visually
+  // similar code so the layer is at least visible in the editor preview —
+  // the spec still saves the original code so the plugin resolves it
+  // correctly server-side.
+  const target = PATTERN_PREVIEW_FALLBACK[code] ?? code;
+  return `/banner/patterns/${target}.png`;
+}
 
 type Props = {
   spec: BannerSpec | null | undefined;
@@ -37,8 +52,8 @@ export function BannerPreview({ spec, width = 100, label, framed = true }: Props
           position: 'absolute',
           inset: 0,
           backgroundColor: c.hex,
-          WebkitMaskImage: `url(/banner/patterns/${p.pattern}.png)`,
-          maskImage: `url(/banner/patterns/${p.pattern}.png)`,
+          WebkitMaskImage: `url(${maskUrlFor(p.pattern)})`,
+          maskImage: `url(${maskUrlFor(p.pattern)})`,
           WebkitMaskSize: '100% 100%',
           maskSize: '100% 100%',
           WebkitMaskRepeat: 'no-repeat',

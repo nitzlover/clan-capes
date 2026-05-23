@@ -10,6 +10,7 @@ import {
   type BannerSpec,
 } from '@/lib/banners';
 import { BannerPreview } from '@/components/BannerPreview';
+import { ImageToBannerCard } from '@/components/ImageToBannerCard';
 
 type Props = {
   /** Initial spec — either the clan's saved banner or an empty one. */
@@ -285,6 +286,21 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
             </span>
           )}
         </div>
+      </div>
+
+      <div className="md:col-span-2 mt-2 border-t border-white/10 pt-4">
+        <ImageToBannerCard
+          busy={busy}
+          onAccept={(converted) => {
+            // Take the converter output verbatim — the algorithm already
+            // caps to MAX_LAYERS, so no extra slicing needed here.
+            setSpec(converted);
+            setNbtMsg({
+              kind: 'ok',
+              text: `Loaded ${converted.patterns.length} layer(s) from image.`,
+            });
+          }}
+        />
       </div>
     </div>
   );
