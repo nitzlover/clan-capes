@@ -97,8 +97,12 @@ public final class PowerClansHook {
             }
         }
         Optional<String> viaData = resolveViaDataFile(uuid);
+        // Demoted to FINE — this fires on every PlaceholderAPI eval (TAB,
+        // scoreboard, etc.) which flooded the server log when debug-logging
+        // was on. Enable Paper's java.util.logging FINE level explicitly if
+        // you actually want per-call traces.
         if (config.isDebugLogging()) {
-            plugin.getLogger().info("PowerClans data.yml lookup " + uuid
+            plugin.getLogger().fine("PowerClans data.yml lookup " + uuid
                     + " -> " + viaData.orElse("<none>"));
         }
         return viaData;
@@ -114,7 +118,7 @@ public final class PowerClansHook {
         }
         Optional<String> viaData = resolveViaDataFile(player.getUniqueId());
         if (config.isDebugLogging()) {
-            plugin.getLogger().info("PowerClans data.yml lookup " + player.getName()
+            plugin.getLogger().fine("PowerClans data.yml lookup " + player.getName()
                     + "/" + player.getUniqueId() + " -> " + viaData.orElse("<none>"));
         }
         return viaData;
@@ -132,7 +136,7 @@ public final class PowerClansHook {
             String tag = (String) getTag.invoke(clan);
             Optional<String> result = Optional.ofNullable(tag).map(t -> t.toUpperCase(Locale.ROOT));
             if (config.isDebugLogging() && result.isPresent()) {
-                plugin.getLogger().info("PowerClans API " + player.getName() + " -> " + result.get());
+                plugin.getLogger().fine("PowerClans API " + player.getName() + " -> " + result.get());
             }
             return result;
         } catch (Exception e) {

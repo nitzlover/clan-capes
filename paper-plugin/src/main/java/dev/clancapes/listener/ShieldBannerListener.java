@@ -85,6 +85,18 @@ public final class ShieldBannerListener implements Listener {
     }
 
     private void scheduleApply(Player player) {
+        // Cheap pre-check before the scheduler hop and the BannerService
+        // PowerClans lookup. Saves an enormous amount of useless work
+        // (and PowerClansHook log spam) on every inventory click for
+        // players who don't currently have a shield equipped.
+        if (!hasShieldInHand(player)) {
+            return;
+        }
         Bukkit.getScheduler().runTask(plugin, () -> bannerService.applyToHeldShields(player));
+    }
+
+    private static boolean hasShieldInHand(Player player) {
+        return player.getInventory().getItemInMainHand().getType() == Material.SHIELD
+                || player.getInventory().getItemInOffHand().getType() == Material.SHIELD;
     }
 }
