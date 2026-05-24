@@ -111,9 +111,13 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("§7Usage: §f/clan create <tag> <name> [#hex]");
             return true;
         }
+        // Auto-uppercase: lowercase input is accepted and normalised
+        // before the regex check. Reject only if the result still
+        // doesn't fit 2-6 Latin alphanumeric (non-ASCII letters fail
+        // here because toUpperCase keeps them as non-ASCII).
         String tag = args[1].toUpperCase(Locale.ROOT);
         if (!TAG_RE.matcher(tag).matches()) {
-            sender.sendMessage("§cTag must be 2-6 uppercase alphanumeric.");
+            sender.sendMessage("§cTag must be 2-6 Latin letters or digits (e.g. VI, KING, K9).");
             return true;
         }
         String name = joinFrom(args, 2);
@@ -233,7 +237,7 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
             p.sendMessage("§cThat player is already in a clan.");
             return true;
         }
-        pending.put(target.getUniqueId(), c.tag());
+        pending.put(target.getUniqueId(), c.tag(), p.getUniqueId());
         p.sendMessage("§aInvited §f" + target.getName() + " §ato " + c.tag() + ".");
         target.sendMessage("§e" + p.getName() + " §finvited you to clan §f" + c.tag()
                 + " §8(" + c.name() + "). §7Run §f/clan accept " + c.tag() + " §7or §f/clan decline " + c.tag() + " §7within 5 min.");
@@ -254,11 +258,34 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
             pending.remove(p.getUniqueId(), tag);
             return true;
         }
+        // Snapshot the inviter UUID before we consume the entry —
+        // it's used to ping them on success.
+        var inviteEntry = pending.get(p.getUniqueId(), tag);
+        UUID inviterUuid = inviteEntry == null ? null : inviteEntry.inviter();
+
         runAsync(() -> {
             try {
                 repo.addMember(c.tag(), p.getUniqueId(), p.getName(), ClanMember.Role.MEMBER, p.getUniqueId());
                 pending.remove(p.getUniqueId(), c.tag());
-                onMain(() -> p.sendMessage("§aJoined clan §f" + c.tag() + "."));
+                onMain(() -> {
+                    p.sendMessage("§aJoined clan §f" + c.tag() + "§a.");
+                    // Notify the inviter (if still online).
+                    Player inviter = inviterUuid != null
+                            ? Bukkit.getPlayer(inviterUuid) : null;
+                    if (inviter != null && inviter.isOnline() && !inviter.equals(p)) {
+                        inviter.sendMessage("§a" + p.getName() + " §faccepted your invite to §f" + c.tag() + "§a.");
+                    }
+                    // Broadcast to every other online member so the clan
+                    // knows their roster grew.
+                    for (ClanMember m : c.members()) {
+                        if (m.playerUuid().equals(p.getUniqueId())) continue;
+                        if (inviterUuid != null && m.playerUuid().equals(inviterUuid)) continue;
+                        Player member = Bukkit.getPlayer(m.playerUuid());
+                        if (member != null && member.isOnline()) {
+                            member.sendMessage("§7" + p.getName() + " §7joined clan §f" + c.tag() + "§7.");
+                        }
+                    }
+                });
             } catch (PanelClient.PanelException e) {
                 onMain(() -> p.sendMessage("§cJoin failed: " + e.getMessage()));
             }
@@ -270,8 +297,16 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
         if (!(sender instanceof Player p)) return playersOnly(sender);
         String tag = resolveInvitedTag(p, args);
         if (tag == null) return true;
+        var entry = pending.get(p.getUniqueId(), tag);
         pending.remove(p.getUniqueId(), tag);
-        p.sendMessage("§7Declined invite from §f" + tag + ".");
+        p.sendMessage("§7Declined invite from §f" + tag + "§7.");
+        // Ping the inviter so they don't sit waiting.
+        if (entry != null) {
+            Player inviter = Bukkit.getPlayer(entry.inviter());
+            if (inviter != null && inviter.isOnline()) {
+                inviter.sendMessage("§e" + p.getName() + " §7declined your invite to §f" + tag + "§7.");
+            }
+        }
         return true;
     }
 
@@ -518,6 +553,10 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
             "create", "disband", "info", "list", "invite", "accept", "decline",
             "leave", "kick", "promote", "demote", "transfer", "color"
     );
+    /** Subcommands that take a player name as their second argument. */
+    private static final java.util.Set<String> PLAYER_SUBS = java.util.Set.of(
+            "invite", "kick", "promote", "demote", "transfer"
+    );
 
     @Override
     public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
@@ -527,6 +566,54 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
             String prefix = args[0].toLowerCase(Locale.ROOT);
             for (String s : SUBS) if (s.startsWith(prefix)) out.add(s);
             return out;
+        }
+        if (args.length == 2) {
+            String sub = args[0].toLowerCase(Locale.ROOT);
+            String prefix = args[1].toLowerCase(Locale.ROOT);
+            if (PLAYER_SUBS.contains(sub)) {
+                // /clan invite → every other online player (we filter the
+                // sender). /clan kick / promote / demote / transfer →
+                // every member of the caller's own clan, excluding the
+                // caller themselves.
+                java.util.Collection<? extends Player> pool;
+                if ("invite".equals(sub)) {
+                    pool = Bukkit.getOnlinePlayers();
+                } else if (sender instanceof Player p) {
+                    Optional<Clan> mine = repo.byPlayer(p.getUniqueId());
+                    if (mine.isEmpty()) return out;
+                    java.util.Set<UUID> memberUuids = mine.get().members().stream()
+                            .map(ClanMember::playerUuid)
+                            .collect(java.util.stream.Collectors.toSet());
+                    pool = Bukkit.getOnlinePlayers().stream()
+                            .filter(pl -> memberUuids.contains(pl.getUniqueId()))
+                            .toList();
+                } else {
+                    return out;
+                }
+                for (Player pl : pool) {
+                    if (sender instanceof Player self && pl.getUniqueId().equals(self.getUniqueId())) {
+                        continue;
+                    }
+                    if (pl.getName().toLowerCase(Locale.ROOT).startsWith(prefix)) {
+                        out.add(pl.getName());
+                    }
+                }
+                return out;
+            }
+            if ("info".equals(sub)) {
+                for (Clan c : repo.all()) {
+                    if (c.tag().toLowerCase(Locale.ROOT).startsWith(prefix)) out.add(c.tag());
+                }
+                return out;
+            }
+            if ("accept".equals(sub) || "decline".equals(sub)) {
+                if (sender instanceof Player p) {
+                    for (String tag : pending.pendingFor(p.getUniqueId())) {
+                        if (tag.toLowerCase(Locale.ROOT).startsWith(prefix)) out.add(tag);
+                    }
+                }
+                return out;
+            }
         }
         return out;
     }

@@ -13,10 +13,11 @@ commands:
     aliases: [clancapes, ccape]
   clans:
     description: Panel-backed clan management
-    usage: /clans <create|disband|info|list|invite|accept|decline|leave|kick|promote|demote|transfer|color>
+    usage: /clan <create|disband|info|list|invite|accept|decline|leave|kick|promote|demote|transfer|color>
     # `/clan` collides with PowerClans during the Phase 2 transition;
     # we register `clans` as primary so both plugins can coexist. The
-    # alias resolves only when PowerClans is unloaded.
+    # `clan` alias is the friendly form shown in usage hints — Bukkit
+    # routes it to us automatically once PowerClans is unloaded.
     aliases: [clan, cl, myclan]
 permissions:
   clan.cape:
