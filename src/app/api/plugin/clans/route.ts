@@ -1,21 +1,34 @@
 /**
- * Plugin-facing: list all active clans for the calling server.
+ * Plugin-facing clan list + create.
  *
- * Auth: Bearer plugin API key — `requirePluginAuth` scopes the response
- * automatically to the server the key was issued for, so a plugin
- * on server A can't enumerate clans on server B.
+ * GET — every active clan on this server. Plugin caches the result in
+ * memory and refreshes every five minutes (ClanRepository).
  *
- * Response shape matches {@link ClanDto} per /lib/server/clan-repo —
- * the plugin caches these in memory and refreshes periodically.
+ * POST — create a new clan. Payload:
+ *   { tag, name, leaderUuid, leaderName, colorHex? }
+ * If colorHex is omitted we allocate from the curated 32-slot palette;
+ * if present we verify uniqueness on the server (collisions cause 409).
+ * The creator is added as the first member with role=leader in the
+ * same transaction so the clan row never exists without its leader.
  */
 
 import { NextResponse } from 'next/server';
-import { listClansForServer } from '@/lib/server/clan-repo';
-import { dbEnabled } from '@/lib/server/db';
+import { and, eq, isNull } from 'drizzle-orm';
+import { getClanByTag, listClansForServer } from '@/lib/server/clan-repo';
+import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import { requirePluginAuth } from '@/lib/server/plugin-auth';
+import {
+  allocateUnusedColor,
+  isColorTaken,
+  isValidColor,
+  normaliseTag,
+} from '@/lib/server/clan-validators';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+const UUID_RE =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 export async function GET(req: Request) {
   if (!dbEnabled()) {
@@ -31,4 +44,139 @@ export async function GET(req: Request) {
 
   const clans = await listClansForServer(ctx.id);
   return NextResponse.json({ clans });
+}
+
+export async function POST(req: Request) {
+  if (!dbEnabled()) {
+    return NextResponse.json({ error: 'db disabled' }, { status: 503 });
+  }
+  const ctx = await requirePluginAuth(req);
+  if (!ctx) {
+    return NextResponse.json(
+      { error: 'invalid or missing plugin API key' },
+      { status: 401 },
+    );
+  }
+
+  let body: {
+    tag?: string;
+    name?: string;
+    leaderUuid?: string;
+    leaderName?: string;
+    colorHex?: string;
+  };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 });
+  }
+
+  let tag: string;
+  try {
+    tag = normaliseTag(body.tag ?? '');
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'invalid tag' },
+      { status: 400 },
+    );
+  }
+  const name = (body.name ?? '').trim();
+  if (name.length < 1 || name.length > 32) {
+    return NextResponse.json(
+      { error: 'name must be 1-32 chars' },
+      { status: 400 },
+    );
+  }
+  if (!body.leaderUuid || !UUID_RE.test(body.leaderUuid)) {
+    return NextResponse.json({ error: 'invalid leaderUuid' }, { status: 400 });
+  }
+  if (!body.leaderName || body.leaderName.length < 1) {
+    return NextResponse.json({ error: 'leaderName required' }, { status: 400 });
+  }
+  if (body.colorHex && !isValidColor(body.colorHex)) {
+    return NextResponse.json(
+      { error: 'colorHex must look like #RRGGBB' },
+      { status: 400 },
+    );
+  }
+
+  const db = getDb();
+
+  // Uniqueness checks — early reject so we don't burn a palette slot
+  // on a doomed create.
+  const existing = await getClanByTag(ctx.id, tag);
+  if (existing) {
+    return NextResponse.json(
+      { error: `clan tag "${tag}" already exists on this server` },
+      { status: 409 },
+    );
+  }
+  const existingMembership = await db
+    .select({ id: schema.clanMembers.id })
+    .from(schema.clanMembers)
+    .innerJoin(schema.clans, eq(schema.clanMembers.clanId, schema.clans.id))
+    .where(
+      and(
+        eq(schema.clanMembers.playerUuid, body.leaderUuid),
+        isNull(schema.clanMembers.leftAt),
+        eq(schema.clans.serverId, ctx.id),
+        isNull(schema.clans.disbandedAt),
+      ),
+    )
+    .limit(1);
+  if (existingMembership.length > 0) {
+    return NextResponse.json(
+      { error: 'leader is already in a clan on this server' },
+      { status: 409 },
+    );
+  }
+
+  let colorHex: string;
+  if (body.colorHex) {
+    if (await isColorTaken(ctx.id, body.colorHex)) {
+      return NextResponse.json(
+        { error: `color ${body.colorHex} already used by another clan` },
+        { status: 409 },
+      );
+    }
+    colorHex = body.colorHex.toUpperCase();
+  } else {
+    const allocated = await allocateUnusedColor(ctx.id);
+    if (!allocated) {
+      return NextResponse.json(
+        { error: 'palette exhausted; pass colorHex explicitly' },
+        { status: 503 },
+      );
+    }
+    colorHex = allocated;
+  }
+
+  const [clan] = await db
+    .insert(schema.clans)
+    .values({
+      serverId: ctx.id,
+      tag,
+      name,
+      colorHex,
+      leaderUuid: body.leaderUuid,
+    })
+    .returning();
+
+  await db.insert(schema.clanMembers).values({
+    clanId: clan.id,
+    playerUuid: body.leaderUuid,
+    playerName: body.leaderName,
+    role: 'leader',
+  });
+
+  await db.insert(schema.audit).values({
+    serverId: ctx.id,
+    actor: `plugin:${ctx.name}`,
+    action: 'CLAN_CREATE',
+    target: tag,
+    payload: { name, colorHex, leaderUuid: body.leaderUuid },
+  });
+
+  const dto = await getClanByTag(ctx.id, tag);
+  return NextResponse.json({ ok: true, clan: dto }, { status: 201 });
 }

@@ -1,18 +1,28 @@
 /**
- * Plugin-facing: single clan lookup by tag.
+ * Plugin-facing single clan: GET / PATCH / DELETE.
  *
- * Tag is case-insensitive — the helper normalises to upper case
- * before querying so `/clan info king` and `/clan info KING` resolve
- * to the same row.
+ * GET — lookup by tag (case-insensitive). 404 on miss so the plugin
+ * branches on status without parsing the body.
  *
- * Returns 404 for missing or disbanded clans so the plugin can
- * branch on response status without parsing the body.
+ * PATCH — edit name and/or color. Payload:
+ *   { name?, colorHex?, actorUuid? }
+ * Both fields independently optional. Colour collisions return 409.
+ *
+ * DELETE — disband the clan. Sets disbandedAt on the clan row and
+ * leftAt on every active member. Does NOT physically delete rows so
+ * stats history stays intact.
  */
 
 import { NextResponse } from 'next/server';
+import { and, eq, isNull } from 'drizzle-orm';
 import { getClanByTag } from '@/lib/server/clan-repo';
-import { dbEnabled } from '@/lib/server/db';
+import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import { requirePluginAuth } from '@/lib/server/plugin-auth';
+import {
+  isColorTaken,
+  isValidColor,
+  normaliseTag,
+} from '@/lib/server/clan-validators';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -42,4 +52,163 @@ export async function GET(
     return NextResponse.json({ error: 'clan not found' }, { status: 404 });
   }
   return NextResponse.json({ clan });
+}
+
+export async function PATCH(
+  req: Request,
+  ctx: { params: Promise<{ tag: string }> },
+) {
+  if (!dbEnabled()) {
+    return NextResponse.json({ error: 'db disabled' }, { status: 503 });
+  }
+  const auth = await requirePluginAuth(req);
+  if (!auth) {
+    return NextResponse.json(
+      { error: 'invalid or missing plugin API key' },
+      { status: 401 },
+    );
+  }
+
+  const { tag: rawTag } = await ctx.params;
+  let tag: string;
+  try {
+    tag = normaliseTag(rawTag);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'invalid tag' },
+      { status: 400 },
+    );
+  }
+
+  let body: { name?: string; colorHex?: string; actorUuid?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 });
+  }
+
+  const db = getDb();
+  const existing = await getClanByTag(auth.id, tag);
+  if (!existing) {
+    return NextResponse.json({ error: 'clan not found' }, { status: 404 });
+  }
+
+  const updates: { name?: string; colorHex?: string } = {};
+  if (body.name !== undefined) {
+    const n = body.name.trim();
+    if (n.length < 1 || n.length > 32) {
+      return NextResponse.json(
+        { error: 'name must be 1-32 chars' },
+        { status: 400 },
+      );
+    }
+    updates.name = n;
+  }
+  if (body.colorHex !== undefined) {
+    if (!isValidColor(body.colorHex)) {
+      return NextResponse.json(
+        { error: 'colorHex must look like #RRGGBB' },
+        { status: 400 },
+      );
+    }
+    if (await isColorTaken(auth.id, body.colorHex, existing.id)) {
+      return NextResponse.json(
+        { error: `color ${body.colorHex} already used by another clan` },
+        { status: 409 },
+      );
+    }
+    updates.colorHex = body.colorHex.toUpperCase();
+  }
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json(
+      { error: 'no editable fields in body' },
+      { status: 400 },
+    );
+  }
+
+  await db.update(schema.clans).set(updates).where(eq(schema.clans.id, existing.id));
+
+  await db.insert(schema.audit).values({
+    serverId: auth.id,
+    actor: body.actorUuid
+      ? `plugin:${auth.name}:${body.actorUuid}`
+      : `plugin:${auth.name}`,
+    action: 'CLAN_EDIT',
+    target: tag,
+    payload: updates,
+  });
+
+  const dto = await getClanByTag(auth.id, tag);
+  return NextResponse.json({ ok: true, clan: dto });
+}
+
+export async function DELETE(
+  req: Request,
+  ctx: { params: Promise<{ tag: string }> },
+) {
+  if (!dbEnabled()) {
+    return NextResponse.json({ error: 'db disabled' }, { status: 503 });
+  }
+  const auth = await requirePluginAuth(req);
+  if (!auth) {
+    return NextResponse.json(
+      { error: 'invalid or missing plugin API key' },
+      { status: 401 },
+    );
+  }
+
+  const { tag: rawTag } = await ctx.params;
+  let tag: string;
+  try {
+    tag = normaliseTag(rawTag);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'invalid tag' },
+      { status: 400 },
+    );
+  }
+
+  const db = getDb();
+  const existing = await getClanByTag(auth.id, tag);
+  if (!existing) {
+    return NextResponse.json({ error: 'clan not found' }, { status: 404 });
+  }
+
+  // Optional actorUuid in body for audit only — disband is leader-only
+  // but the plugin enforces that locally before calling us.
+  let actorUuid: string | undefined;
+  try {
+    const body = (await req.json()) as { actorUuid?: string };
+    actorUuid = body.actorUuid;
+  } catch {
+    // Body is optional.
+  }
+
+  const now = new Date();
+  // Stamp the clan disbanded first so any racing read sees the
+  // change and treats the clan as gone; then mark every active
+  // membership as left.
+  await db
+    .update(schema.clans)
+    .set({ disbandedAt: now })
+    .where(eq(schema.clans.id, existing.id));
+  await db
+    .update(schema.clanMembers)
+    .set({ leftAt: now })
+    .where(
+      and(
+        eq(schema.clanMembers.clanId, existing.id),
+        isNull(schema.clanMembers.leftAt),
+      ),
+    );
+
+  await db.insert(schema.audit).values({
+    serverId: auth.id,
+    actor: actorUuid ? `plugin:${auth.name}:${actorUuid}` : `plugin:${auth.name}`,
+    action: 'CLAN_DISBAND',
+    target: tag,
+    payload: { members: existing.members.length },
+  });
+
+  return NextResponse.json({ ok: true });
 }

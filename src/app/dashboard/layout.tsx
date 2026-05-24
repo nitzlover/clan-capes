@@ -45,6 +45,12 @@ const NAV: Array<{
     hint: 'One-time-pass setup',
   },
   {
+    href: '/dashboard/clans',
+    label: 'Clans',
+    icon: 'groups',
+    hint: 'DB roster + members',
+  },
+  {
     href: '/dashboard/capes',
     label: 'Capes',
     icon: 'image',
