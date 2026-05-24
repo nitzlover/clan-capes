@@ -37,6 +37,14 @@ type Props = {
    * FlyingAnimation. Same lifted-state rationale as backEquipment.
    */
   stance?: StanceMode;
+  /**
+   * Camera zoom — lower values pull the camera back so a smaller
+   * player fits the canvas. Defaults to skinview3d's own 0.9 in
+   * stand stance; fly stance always overrides to a wider frame
+   * because a horizontal player won't fit the standing crop no
+   * matter what zoom the caller asked for.
+   */
+  zoom?: number;
 };
 
 const DEFAULT_SKIN = '/skins/steve.png';
@@ -74,6 +82,7 @@ export function PlayerCapeView3D({
   view = 'back',
   backEquipment = 'cape',
   stance = 'stand',
+  zoom,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rotationRef = useRef<number | null>(null);
@@ -165,6 +174,16 @@ export function PlayerCapeView3D({
         ? new skinviewMod.FlyingAnimation()
         : new skinviewMod.IdleAnimation();
   }, [viewer, skinviewMod, stance]);
+
+  // Zoom — pull the camera back in fly stance so the rotated-horizontal
+  // player isn't clipped at the left and right edges of the canvas.
+  // In stand stance honour the caller's `zoom` prop (or skinview3d's
+  // 0.9 default) so compact previews like the roster cards can ask for
+  // a smaller player without affecting the big Cape Studio pane.
+  useEffect(() => {
+    if (!viewer) return;
+    viewer.zoom = stance === 'fly' ? 0.55 : (zoom ?? 0.9);
+  }, [viewer, stance, zoom]);
 
   return (
     <div className="inline-flex flex-col gap-2">

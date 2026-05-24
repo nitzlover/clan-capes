@@ -131,9 +131,10 @@ export default function CapesPage() {
               >
                 <PlayerCapeView3D
                   capeUrl={c.capeUrl}
-                  width={84}
-                  height={126}
+                  width={110}
+                  height={160}
                   view="back"
+                  zoom={0.7}
                 />
                 <div className="min-w-0 flex-1">
                   <div className="font-sans text-lg font-extrabold uppercase tracking-wider text-white">
