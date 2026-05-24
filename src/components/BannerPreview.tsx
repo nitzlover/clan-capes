@@ -71,11 +71,11 @@ export function BannerPreview({
   const safe = spec ?? { baseColor: 0, patterns: [] };
   const base = colorForOrdinal(safe.baseColor);
 
-  // Native banner aspect = 1:2. Shield items render slightly wider —
-  // closer to the in-game inventory sprite (1:1.15 give or take). Block
-  // mode adds a pole below the cloth, so its overall height is taller.
+  // Native banner aspect = 1:2. Shield = 14:24 (wood front + iron rim
+  // on all four sides) ≈ 1:1.714. Block mode adds a pole below the
+  // cloth, so its overall height is taller.
   const h =
-    shape === 'shield' ? Math.round(width * 1.18) :
+    shape === 'shield' ? Math.round(width * (24 / 14)) :
     shape === 'block' ? Math.round(width * 2.4) :
     width * 2;
 
@@ -146,23 +146,26 @@ export function BannerPreview({
 }
 
 /**
- * Vanilla shield rendered from the real Minecraft entity texture, not
- * a CSS imitation.
+ * Vanilla shield with iron rim, wood backing, banner cloth and grip
+ * stub — rendered to match the in-game item icon, not the raw entity
+ * texture atlas.
  *
- * The shield entity atlas (`assets/minecraft/textures/entity/shield_
- * base_nopattern.png`, 64×32) packs every face of the in-game shield
- * model. The front face — the one a player sees when the shield is
- * raised — lives in the top-left 12×22 pixel block. We crop to that
- * block via `background-size` + `background-position` and paint the
- * banner pattern stack inside a 10×20 cloth window (1px in from each
- * side of the front face, 2px from the top, 0px from the bottom — same
- * UVs the MC client uses to project the banner onto the shield front).
+ * `shield_base_nopattern.png` (64×32) only contains the WOOD front
+ * face in its top-left 12×22 block — the iron rim around the in-game
+ * shield is geometry on the side faces of the 3D model, never painted
+ * onto the front-face crop. Our previous version naively cropped that
+ * block and shipped it as the whole shield, which is why the result
+ * looked like a wooden plank with a banner stuck on it.
  *
- * Pixelated rendering keeps the wood + iron rim crisp at any scale.
+ * This version frames a 14×24 outer container, insets the wood front
+ * by 1px on each side, lays the banner cloth across the
+ * 10×20 cloth UV window inside the wood (x=1..10, y=2..21), and adds
+ * a small grip stub poking out on the right. Iron is drawn as a CSS
+ * gradient with a slight diagonal highlight so the rim reads as
+ * polished metal at any scale.
  */
 function ShieldSprite({
   width,
-  height,
   baseHex,
   children,
 }: {
@@ -171,64 +174,101 @@ function ShieldSprite({
   baseHex: string;
   children: React.ReactNode;
 }) {
-  // 12 px wide × 22 px tall in the source atlas. The caller picks the
-  // container size; we just respect the aspect by sizing the bg
-  // proportionally to a virtual 64×32 atlas blown up.
-  const scaleX = width / 12;
-  const scaleY = height / 22;
-  // Use the smaller scale so both axes fit; this preserves square
-  // pixels and keeps the atlas crop perfectly aligned.
-  const scale = Math.min(scaleX, scaleY);
-  const bgWidth = 64 * scale;
-  const bgHeight = 32 * scale;
+  // Outer shield silhouette = 14 native px wide × 24 native px tall:
+  // a 12×22 wood front face + 1 px of iron rim on every side. We use
+  // the user-supplied width as the outer width and derive everything
+  // else from it so the proportions stay locked.
+  const scale = width / 14;
+  const outerW = width;
+  const outerH = 24 * scale;
 
-  // Cloth window inside the front face — pixel coords on the 12×22
-  // front face: x=1..10 (10 wide), y=2..21 (20 tall). Converted to %.
+  // Atlas crop: 64×32 atlas, front face is the top-left 12×22 block.
+  // To show that block in our wood-area we scale the atlas so 12 native
+  // px lines up with the wood width.
+  const woodW = 12 * scale;
+  const woodH = 22 * scale;
+  const woodLeft = 1 * scale;
+  const woodTop = 1 * scale;
+  const atlasW = (64 / 12) * woodW;
+  const atlasH = (32 / 22) * woodH;
+
+  // Cloth UV inside the 12×22 front face: x=1..10, y=2..21.
   const clothLeft = (1 / 12) * 100;
   const clothTop = (2 / 22) * 100;
   const clothW = (10 / 12) * 100;
   const clothH = (20 / 22) * 100;
 
+  const ironLight = '#c8c8c8';
+  const ironMid = '#8e8e8e';
+  const ironDark = '#5b5b5b';
+  const ironShadow = '#2a2a2a';
+
   return (
     <div
       style={{
         position: 'relative',
-        width: 12 * scale,
-        height: 22 * scale,
+        width: outerW,
+        height: outerH,
         imageRendering: 'pixelated',
         filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.45))',
       }}
     >
-      {/* Vanilla shield wood + iron-rim atlas, cropped to the front face. */}
+      {/* Grip stub — drawn first, peeks out behind the right edge. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          right: `${-2 * scale}px`,
+          top: `${8 * scale}px`,
+          width: `${3 * scale}px`,
+          height: `${8 * scale}px`,
+          background: `linear-gradient(90deg, ${ironMid} 0%, ${ironDark} 60%, ${ironShadow} 100%)`,
+          boxShadow: `inset 1px 0 0 ${ironLight}, inset -1px 0 0 ${ironShadow}`,
+        }}
+      />
+
+      {/* Iron rim — outer rectangle filled with a polished-metal gradient. */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
           inset: 0,
-          backgroundImage: 'url(/mc/shield_base_nopattern.png)',
-          backgroundRepeat: 'no-repeat',
-          backgroundSize: `${bgWidth}px ${bgHeight}px`,
-          backgroundPosition: '0 0',
-          imageRendering: 'pixelated',
+          background: `linear-gradient(180deg, ${ironLight} 0%, ${ironMid} 30%, ${ironMid} 70%, ${ironDark} 100%)`,
+          boxShadow: `inset 0 0 0 ${Math.max(1, scale * 0.4)}px ${ironShadow}`,
         }}
       />
 
-      {/* Cloth — base colour fills the front-face banner zone, pattern
-          layers stack on top using the same mask-image trick as the
-          flat banner preview. */}
+      {/* Wood front face — pulled from the vanilla atlas crop. */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
-          left: `${clothLeft}%`,
-          top: `${clothTop}%`,
-          width: `${clothW}%`,
-          height: `${clothH}%`,
-          background: baseHex,
+          left: woodLeft,
+          top: woodTop,
+          width: woodW,
+          height: woodH,
+          backgroundImage: 'url(/mc/shield_base_nopattern.png)',
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: `${atlasW}px ${atlasH}px`,
+          backgroundPosition: '0 0',
           imageRendering: 'pixelated',
         }}
       >
-        <div style={{ position: 'absolute', inset: 0 }}>{children}</div>
+        {/* Banner cloth across the cloth UV window. */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            left: `${clothLeft}%`,
+            top: `${clothTop}%`,
+            width: `${clothW}%`,
+            height: `${clothH}%`,
+            background: baseHex,
+            imageRendering: 'pixelated',
+          }}
+        >
+          <div style={{ position: 'absolute', inset: 0 }}>{children}</div>
+        </div>
       </div>
     </div>
   );
