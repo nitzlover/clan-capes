@@ -41,4 +41,10 @@ RUN npm install --omit=dev --no-audit --no-fund
 RUN mkdir -p /app/data/capes
 
 EXPOSE 3000
-CMD ["npm", "start"]
+# `exec` replaces the shell process with next.js so PID 1 inside the
+# container is the Node server itself. Railway sends SIGTERM directly
+# to PID 1 on stop/redeploy — without `exec` the signal lands on the
+# npm wrapper, which logs "command failed signal SIGTERM" as an error
+# even when Next shut down cleanly. The migration step runs first
+# (idempotent, soft-skips when DATABASE_URL is unset).
+CMD ["sh", "-c", "node_modules/.bin/tsx scripts/migrate.ts && exec node_modules/.bin/next start -p ${PORT:-3000} -H 0.0.0.0"]
