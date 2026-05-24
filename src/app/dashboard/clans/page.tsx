@@ -24,11 +24,11 @@ type ServerOpt = { id: number; name: string };
 
 /**
  * Clans admin surface — DB-backed view of every clan registered
- * across the panel's servers. Phase 2 ships this read-only-ish: the
- * admin can browse, switch servers, and inspect rosters, but
- * mutating actions (force-disband, rename, recolor) live on the
- * plugin REST surface and are reached by sending the same payload
- * through the panel's same-origin proxy in a later patch.
+ * across the panel's servers, plus an inline editor for every row.
+ * Admins can rename, recolor, fix display names left over from a
+ * PowerClans import, promote / demote members, transfer leadership,
+ * remove members, and disband the whole clan. Every mutation writes
+ * an `admin:<username>` audit row.
  */
 export default function ClansPage() {
   const [servers, setServers] = useState<ServerOpt[]>([]);
@@ -100,12 +100,16 @@ export default function ClansPage() {
         <div>
           <h1 className="page-title">Clans</h1>
           <p className="page-subtitle">
-            DB-backed roster — every clan registered across this panel's servers.
+            DB-backed roster — inspect and edit every clan registered with the panel.
           </p>
         </div>
         <div className="flex items-center gap-3">
           {serverId && (
-            <button onClick={importFromPowerClans} className="btn-ghost" title="Pull PowerClans data via the plugin REST">
+            <button
+              onClick={importFromPowerClans}
+              className="btn-ghost"
+              title="Pull PowerClans data via the plugin REST"
+            >
               + Import PowerClans
             </button>
           )}
@@ -160,13 +164,19 @@ export default function ClansPage() {
             </p>
             <p className="mt-2 text-xs text-[var(--text-faint)]">
               Leaders create clans in-game via{' '}
-              <code className="text-[var(--text-soft)]">/clan create</code>.
+              <code className="text-[var(--text-soft)]">/clan create</code> or hit{' '}
+              <strong className="text-white">+ Import PowerClans</strong> above.
             </p>
           </div>
         ) : (
           <ul>
             {clans.map((c) => (
-              <ClanRow key={c.id} clan={c} />
+              <ClanRow
+                key={c.id}
+                clan={c}
+                serverId={serverId}
+                onChange={() => load(serverId)}
+              />
             ))}
           </ul>
         )}
@@ -175,7 +185,15 @@ export default function ClansPage() {
   );
 }
 
-function ClanRow({ clan }: { clan: Clan }) {
+function ClanRow({
+  clan,
+  serverId,
+  onChange,
+}: {
+  clan: Clan;
+  serverId: number | null;
+  onChange: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const leader = clan.members.find((m) => m.role === 'leader');
 
@@ -210,55 +228,249 @@ function ClanRow({ clan }: { clan: Clan }) {
         </span>
       </button>
       {open && (
-        <div className="border-t border-[var(--rule)] bg-[var(--bg-sink)] px-6 py-4">
-          <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
-            <Meta label="ID" value={`#${clan.id}`} />
-            <Meta label="Created" value={new Date(clan.createdAt).toLocaleString()} />
-            <Meta label="Color" value={clan.colorHex} />
-            <Meta label="Leader UUID" value={clan.leaderUuid} mono />
-          </div>
-          <p className="label-mono mt-5">Members</p>
-          <ul className="mt-2">
-            {clan.members.map((m) => (
-              <li
-                key={m.playerUuid}
-                className="grid grid-cols-[1fr_auto_auto] items-center gap-4 border-t border-[var(--rule)] py-2 first:border-t-0"
-              >
-                <span className="font-sans text-sm text-white">{m.playerName}</span>
-                <span
-                  className={`font-mono text-[10px] uppercase tracking-[0.22em] ${
-                    m.role === 'leader'
-                      ? 'text-white'
-                      : m.role === 'deputy'
-                        ? 'text-[var(--text-soft)]'
-                        : 'text-[var(--text-mute)]'
-                  }`}
-                >
-                  {m.role}
-                </span>
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-                  {new Date(m.joinedAt).toLocaleDateString()}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <ClanEditor clan={clan} serverId={serverId} onChange={onChange} />
       )}
     </li>
   );
 }
 
-function Meta({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function ClanEditor({
+  clan,
+  serverId,
+  onChange,
+}: {
+  clan: Clan;
+  serverId: number | null;
+  onChange: () => void;
+}) {
+  const qs = serverId ? `?serverId=${serverId}` : '';
+  const [name, setName] = useState(clan.name);
+  const [color, setColor] = useState(clan.colorHex);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  async function saveMeta() {
+    if (busy) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api(`/panel/clans/${clan.tag}${qs}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, colorHex: color }),
+      });
+      setMsg({ kind: 'ok', text: 'Saved.' });
+      onChange();
+    } catch (e) {
+      if (e instanceof UnauthorizedError) return;
+      setMsg({ kind: 'err', text: e instanceof Error ? e.message : 'Failed' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disband() {
+    if (!confirm(`Disband ${clan.tag}? Members are marked as left; rows stay for audit.`)) return;
+    setBusy(true);
+    try {
+      await api(`/panel/clans/${clan.tag}${qs}`, { method: 'DELETE' });
+      onChange();
+    } catch (e) {
+      if (e instanceof UnauthorizedError) return;
+      setMsg({ kind: 'err', text: e instanceof Error ? e.message : 'Disband failed' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function memberEdit(uuid: string, body: Record<string, unknown>) {
+    try {
+      await api(`/panel/clans/${clan.tag}/members/${uuid}${qs}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      onChange();
+    } catch (e) {
+      if (e instanceof UnauthorizedError) return;
+      alert(e instanceof Error ? e.message : 'Member edit failed');
+    }
+  }
+
+  async function memberKick(uuid: string, name: string) {
+    if (!confirm(`Remove ${name} from ${clan.tag}?`)) return;
+    try {
+      await api(`/panel/clans/${clan.tag}/members/${uuid}${qs}`, { method: 'DELETE' });
+      onChange();
+    } catch (e) {
+      if (e instanceof UnauthorizedError) return;
+      alert(e instanceof Error ? e.message : 'Kick failed');
+    }
+  }
+
+  async function transfer(uuid: string, name: string) {
+    if (!confirm(`Make ${name} the new leader of ${clan.tag}? The current leader becomes deputy.`)) return;
+    try {
+      await api(`/panel/clans/${clan.tag}/transfer${qs}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newLeaderUuid: uuid }),
+      });
+      onChange();
+    } catch (e) {
+      if (e instanceof UnauthorizedError) return;
+      alert(e instanceof Error ? e.message : 'Transfer failed');
+    }
+  }
+
   return (
-    <div>
-      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
-        {label}
-      </p>
-      <p
-        className={`mt-1 ${mono ? 'font-mono text-[11px]' : 'font-sans text-sm'} text-[var(--text-soft)]`}
+    <div className="border-t border-[var(--rule)] bg-[var(--bg-sink)] px-6 py-5">
+      <div className="grid gap-6 md:grid-cols-[1.4fr_1fr]">
+        <div>
+          <p className="label-mono mb-3">Edit clan</p>
+          <div className="space-y-3">
+            <label className="block">
+              <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+                Name
+              </span>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="input mt-1"
+                maxLength={32}
+              />
+            </label>
+            <label className="block">
+              <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+                Color
+              </span>
+              <span className="mt-1 flex items-center gap-3">
+                <input
+                  type="color"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value.toUpperCase())}
+                  className="h-10 w-12 cursor-pointer border-2 border-[var(--rule-strong)] bg-transparent"
+                />
+                <input
+                  value={color}
+                  onChange={(e) => setColor(e.target.value.toUpperCase())}
+                  className="input font-mono"
+                  maxLength={7}
+                />
+              </span>
+            </label>
+            <div className="flex flex-wrap items-center gap-3">
+              <button onClick={saveMeta} disabled={busy} className="btn-primary disabled:opacity-40">
+                {busy ? 'Saving…' : 'Save'}
+              </button>
+              <button onClick={disband} disabled={busy} className="btn-danger-link">
+                Disband clan
+              </button>
+              {msg && (
+                <span
+                  className={`font-mono text-[11px] uppercase tracking-[0.22em] ${
+                    msg.kind === 'ok' ? 'text-[var(--text-soft)]' : 'text-white'
+                  }`}
+                >
+                  {msg.kind === 'ok' ? '✓' : '!'} {msg.text}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div>
+          <p className="label-mono mb-3">Meta</p>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 font-mono text-[11px]">
+            <Field label="ID" value={`#${clan.id}`} />
+            <Field label="Created" value={new Date(clan.createdAt).toLocaleString()} />
+            <Field label="Leader UUID" value={clan.leaderUuid} wide />
+          </div>
+        </div>
+      </div>
+
+      <p className="label-mono mt-6 mb-2">Members</p>
+      <ul className="border-t border-[var(--rule)]">
+        {clan.members.map((m) => (
+          <MemberRow
+            key={m.playerUuid}
+            m={m}
+            onRoleChange={(role) => memberEdit(m.playerUuid, { role })}
+            onRename={(playerName) => memberEdit(m.playerUuid, { playerName })}
+            onKick={() => memberKick(m.playerUuid, m.playerName)}
+            onTransfer={() => transfer(m.playerUuid, m.playerName)}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function MemberRow({
+  m,
+  onRoleChange,
+  onRename,
+  onKick,
+  onTransfer,
+}: {
+  m: Member;
+  onRoleChange: (role: 'member' | 'deputy') => void;
+  onRename: (name: string) => void;
+  onKick: () => void;
+  onTransfer: () => void;
+}) {
+  const [name, setName] = useState(m.playerName);
+  const dirty = name !== m.playerName;
+  return (
+    <li className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 border-b border-[var(--rule)] py-3 last:border-b-0">
+      <span className="flex items-center gap-3">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => dirty && onRename(name.trim())}
+          className="input max-w-[200px] py-1.5 text-sm"
+          maxLength={32}
+        />
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+          {m.playerUuid.slice(0, 8)}…
+        </span>
+      </span>
+      {m.role === 'leader' ? (
+        <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-white">
+          leader
+        </span>
+      ) : (
+        <select
+          value={m.role}
+          onChange={(e) => onRoleChange(e.target.value as 'member' | 'deputy')}
+          className="input max-w-[120px] py-1 font-mono text-[10px] uppercase tracking-[0.22em]"
+        >
+          <option value="member">member</option>
+          <option value="deputy">deputy</option>
+        </select>
+      )}
+      <button
+        onClick={onTransfer}
+        disabled={m.role === 'leader'}
+        className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-mute)] underline-offset-4 hover:text-white hover:underline disabled:opacity-30"
       >
-        {value}
-      </p>
+        promote → leader
+      </button>
+      <button
+        onClick={onKick}
+        disabled={m.role === 'leader'}
+        className="btn-danger-link disabled:opacity-30"
+      >
+        Remove
+      </button>
+    </li>
+  );
+}
+
+function Field({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
+  return (
+    <div className={wide ? 'col-span-2' : ''}>
+      <p className="text-[var(--text-faint)]">{label}</p>
+      <p className="mt-1 break-all text-[var(--text-soft)]">{value}</p>
     </div>
   );
 }
