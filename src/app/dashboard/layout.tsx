@@ -39,6 +39,12 @@ const NAV: Array<{
     hint: 'Status + counters',
   },
   {
+    href: '/dashboard/servers',
+    label: 'Servers',
+    icon: 'dns',
+    hint: 'One-time-pass setup',
+  },
+  {
     href: '/dashboard/capes',
     label: 'Capes',
     icon: 'image',
