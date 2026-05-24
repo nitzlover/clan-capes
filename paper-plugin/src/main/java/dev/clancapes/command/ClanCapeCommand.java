@@ -126,7 +126,32 @@ public final class ClanCapeCommand implements CommandExecutor, TabCompleter {
         plugin.getConfig().set("panel.api-key", apiKey);
         plugin.saveConfig();
         plugin.reloadConfig();
-        sender.sendMessage(config.prefix() + "§aPanel API key saved. Panel sync ready.");
+        sender.sendMessage(config.prefix() + "§aPanel API key saved. Verifying…");
+
+        // Use a *fresh* PluginConfig view of the just-reloaded config
+        // so the verification heartbeat can't accidentally read a
+        // stale in-memory copy that doesn't yet contain the new key.
+        var fresh = new PluginConfig(plugin.getConfig());
+        String panelUrl = fresh.getPanelUrl();
+        if (panelUrl == null || panelUrl.isBlank()) {
+            sender.sendMessage(config.prefix()
+                    + "§eKey saved but `panel.url` is empty — set it in config.yml and run /clancape reload to start heartbeats.");
+            return true;
+        }
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                var client = new PanelClient(plugin);
+                var res = client.heartbeat(panelUrl, apiKey, null);
+                plugin.getServer().getScheduler().runTask(plugin, () ->
+                        sender.sendMessage(config.prefix() + "§a✓ Connected to panel "
+                                + (res.server != null ? "as " + res.server.name : "")
+                                + ". Heartbeats every 5 min."));
+            } catch (PanelClient.PanelException e) {
+                plugin.getServer().getScheduler().runTask(plugin, () ->
+                        sender.sendMessage(config.prefix() + "§cVerify failed: " + e.getMessage()));
+                plugin.getLogger().log(Level.WARNING, "panel verify after link failed", e);
+            }
+        });
         return true;
     }
 
