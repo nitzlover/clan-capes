@@ -6,6 +6,7 @@ import dev.clancapes.config.PluginConfig;
 import dev.clancapes.hook.PowerClansHook;
 import dev.clancapes.hook.PlaceholderHook;
 import dev.clancapes.listener.ShieldBannerListener;
+import dev.clancapes.panel.HeartbeatTask;
 import dev.clancapes.service.BannerService;
 import dev.clancapes.service.CapeService;
 import dev.clancapes.sync.CapeSyncChannel;
@@ -24,6 +25,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
     private CapeSyncChannel syncChannel;
     private PowerClansHook powerClansHook;
     private PlaceholderHook placeholderHook;
+    private HeartbeatTask heartbeatTask;
 
     @Override
     public void onEnable() {
@@ -64,12 +66,21 @@ public final class ClanCapesPlugin extends JavaPlugin {
             apiServer.start();
         }
 
+        // Start the panel heartbeat task. The task itself no-ops while
+        // panel.url or panel.api-key is empty, so servers that haven't
+        // run /clancape setup yet stay silent.
+        heartbeatTask = new HeartbeatTask(this);
+        heartbeatTask.start();
+
         getLogger().info("ClanCapes enabled (storage=" + pluginConfig.getStorageType()
                 + ", api=" + pluginConfig.isApiEnabled() + ")");
     }
 
     @Override
     public void onDisable() {
+        if (heartbeatTask != null) {
+            heartbeatTask.stop();
+        }
         if (apiServer != null) {
             apiServer.stop();
         }

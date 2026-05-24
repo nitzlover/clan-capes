@@ -118,6 +118,56 @@ public final class PanelClient {
         public long ttlSeconds;
     }
 
+    /**
+     * Authenticated heartbeat ping. POSTs an optional telemetry body to
+     * {@code /api/plugin/heartbeat} with the configured API key as
+     * Bearer. The panel uses this to refresh {@code servers.last_seen_at}
+     * and surface the online/stale/offline pill in the admin UI.
+     * Surfaces a 401 as {@link PanelException} so the scheduled task
+     * can log and back off — most other errors are treated as transient.
+     */
+    public HeartbeatResponse heartbeat(String panelUrl, String apiKey, JsonObject body)
+            throws PanelException {
+        String url = panelUrl.replaceAll("/+$", "") + "/api/plugin/heartbeat";
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(15))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + apiKey)
+                .header("User-Agent", "ClanCapes-Paper/" + plugin.getDescription().getVersion())
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        gson.toJson(body == null ? new JsonObject() : body)))
+                .build();
+        HttpResponse<String> res;
+        try {
+            res = http.send(req, HttpResponse.BodyHandlers.ofString());
+        } catch (Exception e) {
+            throw new PanelException("heartbeat transport: " + e.getMessage(), e);
+        }
+        if (res.statusCode() == 401) {
+            throw new PanelException("API key rejected by panel (HTTP 401)");
+        }
+        if (res.statusCode() / 100 != 2) {
+            throw new PanelException(errorMessage(res.body(), "HTTP " + res.statusCode()));
+        }
+        try {
+            return gson.fromJson(res.body(), HeartbeatResponse.class);
+        } catch (Exception e) {
+            throw new PanelException("malformed heartbeat response: " + res.body(), e);
+        }
+    }
+
+    public static final class HeartbeatResponse {
+        public boolean ok;
+        public ServerStub server;
+        public String serverTime;
+    }
+
+    public static final class ServerStub {
+        public int id;
+        public String name;
+    }
+
     /** Raised on any non-2xx response or transport failure. */
     public static final class PanelException extends Exception {
         public PanelException(String message) {
