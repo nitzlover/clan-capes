@@ -25,27 +25,44 @@ type Props = {
   label?: string;
   /** Initial pan view — back shows the cape, side shows the player profile. */
   view?: 'back' | 'side' | 'front';
-  /** Show the Cape/Elytra + Stand/Fly overlay toggles. */
-  showControls?: boolean;
+  /**
+   * Controlled cape vs elytra back equipment. Defaults to 'cape'. Lifted
+   * out of this component on purpose so call sites can render their own
+   * pill toggles wherever the surrounding layout needs them (e.g. the
+   * Cape Studio pane corner, not on top of the canvas).
+   */
+  backEquipment?: BackEquipment;
+  /**
+   * Controlled stance — `stand` plays IdleAnimation, `fly` plays
+   * FlyingAnimation. Same lifted-state rationale as backEquipment.
+   */
+  stance?: StanceMode;
 };
 
 const DEFAULT_SKIN = '/skins/steve.png';
 
 /**
- * 3D Minecraft player viewer powered by skinview3d, modelled on the
- * skinmc.net cape-page viewer: same back-by-default framing, same
- * Cape/Elytra + Stand/Fly toggles overlaid in the top-right.
+ * 3D Minecraft player viewer powered by skinview3d.
  *
- * The two toggles drive skinview3d directly:
- *   - back equipment toggle calls `loadCape(url, { backEquipment })`
- *     so the same cape texture either drapes as a cape or fans out as
- *     elytra wings.
- *   - stance toggle swaps `viewer.animation` between `IdleAnimation`
- *     (stand) and `FlyingAnimation` (fly) — flying tilts the body
- *     horizontal and spreads the elytra, which is the natural pairing.
+ * The component is intentionally minimal:
+ *   - Canvas only. No internal border, no inner background colour, no
+ *     toggle overlays. The parent owns the surrounding chrome and
+ *     positions any pill controls wherever its layout calls for them.
+ *   - Back equipment (cape ↔ elytra) and stance (stand ↔ fly) are
+ *     controlled props. Call sites that want pill toggles render them
+ *     in their own JSX and pass the new value down — same idiom as
+ *     other controlled inputs.
  *
- * Both controls only appear when `showControls` is on; small thumbnails
- * keep the canvas clean.
+ * The viewer is stored in React state, not a ref, on purpose. The
+ * SkinViewer constructor is awaited (dynamic `import('skinview3d')`),
+ * so on the first render `viewerRef.current` would be null and the
+ * cape-loading effect that depends on `[capeUrl, backEquipment]` would
+ * fire with no viewer to talk to — and then never re-fire when the
+ * async constructor finally settled, because none of its deps had
+ * actually changed. Putting the viewer in state forces the cape effect
+ * to re-run the instant the constructor finishes. That bug is why
+ * capes uploaded with the page never made it onto the model on the
+ * roster cards.
  */
 export function PlayerCapeView3D({
   capeUrl,
@@ -55,49 +72,58 @@ export function PlayerCapeView3D({
   rotate = false,
   label,
   view = 'back',
-  showControls = false,
+  backEquipment = 'cape',
+  stance = 'stand',
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const viewerRef = useRef<SkinViewerType | null>(null);
   const rotationRef = useRef<number | null>(null);
-  const skinviewModRef = useRef<typeof import('skinview3d') | null>(null);
+  const [viewer, setViewer] = useState<SkinViewerType | null>(null);
+  const [skinviewMod, setSkinviewMod] = useState<
+    typeof import('skinview3d') | null
+  >(null);
 
-  const [backEquipment, setBackEquipment] = useState<BackEquipment>('cape');
-  const [stance, setStance] = useState<StanceMode>('stand');
-
-  // Construct the viewer once and tear it down on unmount.
+  // Construct the viewer once per (size, skin, view, rotate) combo. The
+  // async import means the viewer arrives after the first render, so we
+  // commit it to state — the cape effect below re-runs as soon as it
+  // does.
   useEffect(() => {
     if (!canvasRef.current) return;
     let cancelled = false;
-    let viewer: SkinViewerType | null = null;
+    let local: SkinViewerType | null = null;
 
     (async () => {
-      const skinview = await import('skinview3d');
+      const mod = await import('skinview3d');
       if (cancelled || !canvasRef.current) return;
-      skinviewModRef.current = skinview;
-      viewer = new skinview.SkinViewer({
+      local = new mod.SkinViewer({
         canvas: canvasRef.current,
         width,
         height,
         skin: skinUrl,
-        background: 0x050505,
+        // Pure black so the canvas blends seamlessly into the
+        // surrounding right-pane background instead of showing as a
+        // 1px-tone-different rectangle inside it.
+        background: 0x000000,
       });
-      viewerRef.current = viewer;
 
-      const yaw = view === 'back' ? Math.PI : view === 'side' ? Math.PI / 2 : 0;
-      viewer.playerObject.rotation.y = yaw;
+      const yaw =
+        view === 'back' ? Math.PI : view === 'side' ? Math.PI / 2 : 0;
+      local.playerObject.rotation.y = yaw;
 
-      viewer.controls.enableZoom = false;
-      viewer.controls.enableRotate = true;
-      viewer.controls.enablePan = false;
+      local.controls.enableZoom = false;
+      local.controls.enableRotate = true;
+      local.controls.enablePan = false;
 
-      // Initial stance.
-      viewer.animation = new skinview.IdleAnimation();
+      // Default stance — the stance effect below will override if a
+      // non-default prop value is passed.
+      local.animation = new mod.IdleAnimation();
+
+      setSkinviewMod(mod);
+      setViewer(local);
 
       if (rotate) {
         const step = () => {
-          if (!viewer) return;
-          viewer.playerObject.rotation.y += 0.004;
+          if (!local) return;
+          local.playerObject.rotation.y += 0.004;
           rotationRef.current = requestAnimationFrame(step);
         };
         rotationRef.current = requestAnimationFrame(step);
@@ -108,38 +134,37 @@ export function PlayerCapeView3D({
       cancelled = true;
       if (rotationRef.current !== null) cancelAnimationFrame(rotationRef.current);
       rotationRef.current = null;
-      if (viewer) {
-        viewer.dispose();
-      }
-      viewerRef.current = null;
-      skinviewModRef.current = null;
+      local?.dispose();
+      setViewer(null);
+      setSkinviewMod(null);
     };
   }, [skinUrl, width, height, rotate, view]);
 
-  // Cape changes — push to the existing viewer without recreating it.
-  // Re-applies when backEquipment changes so the same cape texture can
-  // be displayed as either cape or elytra on demand.
+  // Cape texture — re-runs when the viewer first becomes available
+  // (because viewer is a state value) and on every subsequent change to
+  // capeUrl or backEquipment. The `.catch` logs to the console so that
+  // CORS / format failures don't just silently leave the player bare —
+  // an admin debugging an empty cape can read the actual error from
+  // dev tools.
   useEffect(() => {
-    const viewer = viewerRef.current;
     if (!viewer) return;
     if (capeUrl) {
-      viewer.loadCape(capeUrl, { backEquipment }).catch(() => {
-        // Bad URL / non-PNG — leave cape unset so the body still renders.
+      viewer.loadCape(capeUrl, { backEquipment }).catch((err) => {
+        console.error('[skinview3d] loadCape failed:', err);
       });
     } else {
       viewer.resetCape();
     }
-  }, [capeUrl, backEquipment]);
+  }, [viewer, capeUrl, backEquipment]);
 
   // Stance — IdleAnimation for stand, FlyingAnimation for fly.
   useEffect(() => {
-    const viewer = viewerRef.current;
-    const skinview = skinviewModRef.current;
-    if (!viewer || !skinview) return;
-    viewer.animation = stance === 'fly'
-      ? new skinview.FlyingAnimation()
-      : new skinview.IdleAnimation();
-  }, [stance]);
+    if (!viewer || !skinviewMod) return;
+    viewer.animation =
+      stance === 'fly'
+        ? new skinviewMod.FlyingAnimation()
+        : new skinviewMod.IdleAnimation();
+  }, [viewer, skinviewMod, stance]);
 
   return (
     <div className="inline-flex flex-col gap-2">
@@ -148,71 +173,9 @@ export function PlayerCapeView3D({
           {label}
         </p>
       )}
-      <div
-        className="relative border border-[var(--rule)] bg-[var(--bg-sink)]"
-        style={{ width, height }}
-      >
+      <div className="relative" style={{ width, height }}>
         <canvas ref={canvasRef} />
-
-        {showControls && (
-          <div className="pointer-events-none absolute right-2 top-2 flex flex-col items-end gap-2">
-            <ToggleGroup
-              value={backEquipment}
-              onChange={(v) => setBackEquipment(v as BackEquipment)}
-              options={[
-                { value: 'cape', label: 'Cape' },
-                { value: 'elytra', label: 'Elytra' },
-              ]}
-            />
-            <ToggleGroup
-              value={stance}
-              onChange={(v) => setStance(v as StanceMode)}
-              options={[
-                { value: 'stand', label: 'Stand' },
-                { value: 'fly', label: 'Fly' },
-              ]}
-            />
-          </div>
-        )}
       </div>
-    </div>
-  );
-}
-
-/**
- * Two-segment pill toggle, monochrome, sized to sit on top of the WebGL
- * canvas without competing with the player. Pointer-events: auto is
- * re-enabled here even though the container disables them — the rest of
- * the overlay shouldn't catch mouse drags from OrbitControls.
- */
-function ToggleGroup({
-  value,
-  onChange,
-  options,
-}: {
-  value: string;
-  onChange: (next: string) => void;
-  options: Array<{ value: string; label: string }>;
-}) {
-  return (
-    <div className="pointer-events-auto inline-flex border border-[var(--rule-strong)] bg-black/65 backdrop-blur-sm">
-      {options.map((opt) => {
-        const active = value === opt.value;
-        return (
-          <button
-            key={opt.value}
-            type="button"
-            onClick={() => onChange(opt.value)}
-            className={`px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] transition-colors ${
-              active
-                ? 'bg-white text-black'
-                : 'text-white/70 hover:text-white'
-            }`}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
     </div>
   );
 }

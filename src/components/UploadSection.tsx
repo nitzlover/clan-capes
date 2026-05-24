@@ -65,6 +65,11 @@ export function UploadSection({
   const [log, setLog] = useState<LogEntry[]>(INITIAL_LOG);
   const [dimsValid, setDimsValid] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  // 3D preview controls live here (lifted out of PlayerCapeView3D) so
+  // we can render the toggle pills wherever the surrounding layout
+  // wants — in this case, top-right of the outer pane.
+  const [backEquipment, setBackEquipment] = useState<BackEquipment>('cape');
+  const [stance, setStance] = useState<StanceMode>('stand');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load clan list — reloads when optionsRefresh increments after a
@@ -345,8 +350,30 @@ export function UploadSection({
           width={340}
           height={460}
           view="back"
-          showControls
+          backEquipment={backEquipment}
+          stance={stance}
         />
+        {/* Cape/Elytra + Stand/Fly toggles — pinned to the outer right
+            corner of this pane, not floating on top of the canvas the
+            way they used to. */}
+        <div className="pointer-events-none absolute right-4 top-4 flex flex-col items-end gap-2">
+          <PaneToggle
+            value={backEquipment}
+            onChange={(v) => setBackEquipment(v as BackEquipment)}
+            options={[
+              { value: 'cape', label: 'Cape' },
+              { value: 'elytra', label: 'Elytra' },
+            ]}
+          />
+          <PaneToggle
+            value={stance}
+            onChange={(v) => setStance(v as StanceMode)}
+            options={[
+              { value: 'stand', label: 'Stand' },
+              { value: 'fly', label: 'Fly' },
+            ]}
+          />
+        </div>
         {/* Top-left status pill. */}
         <div className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 border border-[var(--rule-strong)] bg-[var(--bg-raise)]/85 px-2.5 py-1 backdrop-blur-sm">
           <span
@@ -371,5 +398,46 @@ export function UploadSection({
         </div>
       </div>
     </form>
+  );
+}
+
+type BackEquipment = 'cape' | 'elytra';
+type StanceMode = 'stand' | 'fly';
+
+/**
+ * Two-segment pill toggle, monochrome, sized to sit on top of the
+ * dark right pane without competing with the player. Same shape as
+ * the toggles that used to live inside PlayerCapeView3D — moved up
+ * here so we can pin them to the outer pane corner with the rest of
+ * the overlay chrome (status pill, drag hint), instead of inside the
+ * canvas's bounding box.
+ */
+function PaneToggle({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <div className="pointer-events-auto inline-flex border border-[var(--rule-strong)] bg-black/65 backdrop-blur-sm">
+      {options.map((opt) => {
+        const active = value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            className={`px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] transition-colors ${
+              active ? 'bg-white text-black' : 'text-white/70 hover:text-white'
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
