@@ -8,6 +8,11 @@ RUN npm install --no-audit --no-fund
 
 COPY src ./src
 COPY public ./public
+# Drizzle migration files + runner script need to land in the runtime
+# image, so they have to exist in the build stage too — multi-stage
+# `COPY --from=build` can only pull paths that were present here.
+COPY scripts ./scripts
+COPY migrations ./migrations
 RUN npm run build
 
 # -------- Runtime stage --------
@@ -20,6 +25,12 @@ COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
 COPY --from=build /app/package.json /app/package-lock.json* ./
 COPY --from=build /app/next.config.ts ./
+# `npm start` chains `npm run db:migrate` which is `tsx scripts/migrate.ts`
+# — both the runner and the SQL files it reads need to be present at
+# runtime. drizzle.config.ts is build-time only (drizzle-kit) and
+# stays out of the runtime image.
+COPY --from=build /app/scripts ./scripts
+COPY --from=build /app/migrations ./migrations
 
 # Prod-only install (sharp + bcrypt + jwt still needed at runtime)
 RUN npm install --omit=dev --no-audit --no-fund
