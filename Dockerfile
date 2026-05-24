@@ -3,7 +3,7 @@
 FROM node:22-slim AS build
 WORKDIR /app
 
-COPY package.json package-lock.json* tsconfig.json next.config.ts postcss.config.mjs tailwind.config.ts next-env.d.ts ./
+COPY package.json package-lock.json* tsconfig.json next.config.js postcss.config.mjs tailwind.config.ts next-env.d.ts ./
 RUN npm install --no-audit --no-fund
 
 COPY src ./src
@@ -24,7 +24,7 @@ ENV NODE_ENV=production
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
 COPY --from=build /app/package.json /app/package-lock.json* ./
-COPY --from=build /app/next.config.ts ./
+COPY --from=build /app/next.config.js ./
 # `npm start` chains `npm run db:migrate` which is `tsx scripts/migrate.ts`
 # — both the runner and the SQL files it reads need to be present at
 # runtime. drizzle.config.ts is build-time only (drizzle-kit) and
