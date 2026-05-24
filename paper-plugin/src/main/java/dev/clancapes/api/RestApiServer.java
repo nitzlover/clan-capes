@@ -84,11 +84,20 @@ public final class RestApiServer {
             if (!config.isDebugLogging()) {
                 return;
             }
+            // Skip the high-volume health-check polls that Railway / the
+            // panel fire every 15-30 s — they drowned the log even when
+            // the operator just wanted to debug a single cape upload.
+            // Health failures still surface through the exception
+            // handler below.
+            String path = ctx.path();
+            if ("/api/health".equals(path) || path.startsWith("/api/health/")) {
+                return;
+            }
             Long start = ctx.attribute("clancapes-start");
             long ms = start == null ? 0 : System.currentTimeMillis() - start;
             plugin.getLogger().info(String.format(
                     "REST %s %s -> %d (%dms) ip=%s",
-                    ctx.method().name(), ctx.path(), ctx.statusCode(), ms, ctx.ip()));
+                    ctx.method().name(), path, ctx.statusCode(), ms, ctx.ip()));
         });
 
         app.exception(Exception.class, (e, ctx) -> {
