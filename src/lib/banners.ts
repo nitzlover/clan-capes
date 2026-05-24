@@ -112,6 +112,66 @@ export const PATTERN_PREVIEW_FALLBACK: Record<string, string> = {
   vhr: 'hhb',
 };
 
+/**
+ * Short code → vanilla shield pattern texture filename under
+ * /public/mc/shield-patterns/. These textures (extracted from
+ * assets/minecraft/textures/entity/shield/<pattern>.png in the 1.21
+ * resource pack) project the pattern onto the shield's 3D front-face
+ * UVs, so using them as the mask for the shield preview gives an exact
+ * in-game appearance — including the slight edge wrapping that flat
+ * banner patterns don't have.
+ *
+ * The map mirrors the plugin's `BannerPatternCodes` resolver so what
+ * the editor previews matches what the plugin actually applies.
+ */
+export const SHIELD_PATTERN_FILE: Record<string, string> = {
+  b: 'base',
+  bo: 'border',
+  bri: 'bricks',
+  bt: 'triangle_bottom',
+  bts: 'triangles_bottom',
+  cbo: 'curly_border',
+  cr: 'cross',
+  cra: 'creeper',
+  cre: 'creeper',
+  cs: 'stripe_center',
+  dls: 'diagonal_left',
+  drs: 'diagonal_up_right',
+  flo: 'flower',
+  flw: 'flow',
+  glb: 'globe',
+  gra: 'gradient',
+  gru: 'gradient_up',
+  gus: 'guster',
+  hh: 'half_horizontal',
+  hhb: 'half_horizontal_bottom',
+  ld: 'diagonal_up_left',
+  lud: 'diagonal_right',
+  mc: 'mojang',
+  mr: 'rhombus',
+  ms: 'stripe_downleft',
+  msb: 'stripe_middle',
+  mss: 'small_stripes',
+  pig: 'piglin',
+  rd: 'diagonal_right',
+  rs: 'stripe_right',
+  rud: 'stripe_downright',
+  sbl: 'square_bottom_left',
+  sbr: 'square_bottom_right',
+  sc: 'square_bottom_left',
+  sku: 'skull',
+  ss: 'straight_cross',
+  stl: 'square_top_left',
+  str: 'square_top_right',
+  tl: 'stripe_top',
+  tr: 'triangle_top',
+  ts: 'stripe_left',
+  tt: 'triangle_top',
+  tts: 'triangles_top',
+  vh: 'half_vertical',
+  vhr: 'half_vertical_right',
+};
+
 export function colorForOrdinal(o: number): BannerColor {
   return BANNER_COLORS[Math.max(0, Math.min(15, o | 0))];
 }

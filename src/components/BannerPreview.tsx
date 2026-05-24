@@ -3,6 +3,7 @@
 import {
   BANNER_COLORS,
   PATTERN_PREVIEW_FALLBACK,
+  SHIELD_PATTERN_FILE,
   type BannerSpec,
   colorForOrdinal,
 } from '@/lib/banners';
@@ -15,6 +16,18 @@ function maskUrlFor(code: string): string {
   // correctly server-side.
   const target = PATTERN_PREVIEW_FALLBACK[code] ?? code;
   return `/banner/patterns/${target}.png`;
+}
+
+/**
+ * Shield-specific pattern mask. These come from the vanilla
+ * entity/shield/ atlas (1.21 textures pack) and are already projected
+ * onto the shield's 3D front-face UVs — using them gives an exact
+ * in-game appearance, not a flat banner cropped to a shield rectangle.
+ * Returns null when the code has no shield mapping (no layer drawn).
+ */
+function shieldMaskUrlFor(code: string): string | null {
+  const file = SHIELD_PATTERN_FILE[code];
+  return file ? `/mc/shield-patterns/${file}.png` : null;
 }
 
 type Props = {
@@ -79,7 +92,13 @@ export function BannerPreview({
     shape === 'block' ? Math.round(width * 2.4) :
     width * 2;
 
-  const layers = safe.patterns.map((p, idx) => {
+  // Two layer renderers: flat banner masks (banner mode + block mode)
+  // use the 20×40 cloth-shaped masks in /banner/patterns; the shield
+  // mode uses the vanilla entity/shield/*.png masks which are already
+  // projected onto the 3D shield front face. Keeping them separate
+  // means each preview reads correctly without one accidentally borrowing
+  // the other's UVs.
+  const bannerLayers = safe.patterns.map((p, idx) => {
     const c = colorForOrdinal(p.color);
     return (
       <div
@@ -101,14 +120,49 @@ export function BannerPreview({
     );
   });
 
+  // Shield pattern masks are extracted from a 64×32 vanilla atlas where
+  // only the top-left 12×22 block holds the front-face projection. The
+  // mask must therefore be scaled so that 12 atlas px line up with the
+  // container width (== ShieldSprite's wood/front-face zone). 64/12 ≈
+  // 5.333 → 533.33% mask-size on X; 32/22 ≈ 1.455 → 145.45% on Y. With
+  // mask-position 0 0 the visible mask area lands on the same pixels
+  // the wood-backing background-image lands on, so every layer composes
+  // pixel-perfect with the others.
+  const SHIELD_MASK_SIZE = `${(64 / 12) * 100}% ${(32 / 22) * 100}%`;
+  const shieldLayers = safe.patterns.map((p, idx) => {
+    const c = colorForOrdinal(p.color);
+    const url = shieldMaskUrlFor(p.pattern);
+    if (!url) return null;
+    return (
+      <div
+        key={idx}
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundColor: c.hex,
+          WebkitMaskImage: `url(${url})`,
+          maskImage: `url(${url})`,
+          WebkitMaskSize: SHIELD_MASK_SIZE,
+          maskSize: SHIELD_MASK_SIZE,
+          WebkitMaskPosition: '0 0',
+          maskPosition: '0 0',
+          WebkitMaskRepeat: 'no-repeat',
+          maskRepeat: 'no-repeat',
+          imageRendering: 'pixelated',
+        }}
+      />
+    );
+  });
+
   const inner =
     shape === 'shield' ? (
       <ShieldSprite width={width} height={h} baseHex={base.hex}>
-        {layers}
+        {shieldLayers}
       </ShieldSprite>
     ) : shape === 'block' ? (
       <BannerBlockSprite width={width} height={h} baseHex={base.hex}>
-        {layers}
+        {bannerLayers}
       </BannerBlockSprite>
     ) : (
       <div
@@ -121,7 +175,7 @@ export function BannerPreview({
           imageRendering: 'pixelated',
         }}
       >
-        {layers}
+        {bannerLayers}
       </div>
     );
 
@@ -238,37 +292,57 @@ function ShieldSprite({
         }}
       />
 
-      {/* Wood front face — pulled from the vanilla atlas crop. */}
+      {/* Front face zone — 12×22 native px. Holds the vanilla wood
+          backing, the base-coloured cloth (also pulled from the vanilla
+          shield/base atlas), and the pattern layers (each using the
+          matching vanilla shield/<pattern> atlas as its mask). */}
       <div
-        aria-hidden
         style={{
           position: 'absolute',
           left: woodLeft,
           top: woodTop,
           width: woodW,
           height: woodH,
-          backgroundImage: 'url(/mc/shield_base_nopattern.png)',
-          backgroundRepeat: 'no-repeat',
-          backgroundSize: `${atlasW}px ${atlasH}px`,
-          backgroundPosition: '0 0',
           imageRendering: 'pixelated',
         }}
       >
-        {/* Banner cloth across the cloth UV window. */}
+        {/* Wood backing — shield_base_nopattern.png 12×22 front face. */}
         <div
           aria-hidden
           style={{
             position: 'absolute',
-            left: `${clothLeft}%`,
-            top: `${clothTop}%`,
-            width: `${clothW}%`,
-            height: `${clothH}%`,
-            background: baseHex,
+            inset: 0,
+            backgroundImage: 'url(/mc/shield_base_nopattern.png)',
+            backgroundRepeat: 'no-repeat',
+            backgroundSize: `${atlasW}px ${atlasH}px`,
+            backgroundPosition: '0 0',
             imageRendering: 'pixelated',
           }}
-        >
-          <div style={{ position: 'absolute', inset: 0 }}>{children}</div>
-        </div>
+        />
+        {/* Cloth — vanilla shield/base.png as the alpha mask so the
+            cloth lands exactly on the same pixels the MC client paints. */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundColor: baseHex,
+            WebkitMaskImage: 'url(/mc/shield-patterns/base.png)',
+            maskImage: 'url(/mc/shield-patterns/base.png)',
+            WebkitMaskSize: `${atlasW}px ${atlasH}px`,
+            maskSize: `${atlasW}px ${atlasH}px`,
+            WebkitMaskPosition: '0 0',
+            maskPosition: '0 0',
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat',
+            imageRendering: 'pixelated',
+          }}
+        />
+        {/* Pattern layers — passed in by the parent. Each one's mask
+            is the vanilla shield/<pattern>.png atlas, sized identically
+            so the projection lines up pixel-for-pixel with the wood and
+            cloth layers below. */}
+        <div style={{ position: 'absolute', inset: 0 }}>{children}</div>
       </div>
     </div>
   );
