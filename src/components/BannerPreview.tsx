@@ -146,13 +146,22 @@ export function BannerPreview({
 }
 
 /**
- * Minecraft shield inventory sprite — wood plank + iron rim + cloth.
+ * Vanilla shield with banner painted onto its front face — matches the
+ * in-game item, not the previous heater silhouette.
  *
- * The proportions are taken from the vanilla shield item icon:
- *   - 4px iron rim around the outside
- *   - 2px wood plank band visible above the cloth (the "shield boss"
- *     band that runs across the top in the in-game item icon)
- *   - cloth fills the rest, with iron rivets at each corner
+ * Reference (vanilla MC shield held by a player):
+ *   - thin iron rim wraps the whole shield (~7% of the width)
+ *   - the banner cloth covers the FULL front face inside the rim
+ *     (no wood visible on a banner-applied shield)
+ *   - a small handle stub sticks out from the right side, set back
+ *     in z so it reads like the grip behind the shield front
+ *
+ * Implementation:
+ *   - outer `frame` div is iron-coloured with subtle vertical highlights
+ *     (the shield rim has a slight column shading in MC's pixel art)
+ *   - the cloth sits inset by the rim width and holds the pattern layers
+ *   - the handle is a separate sibling div, partially behind the frame
+ *     via a negative `right` offset and a darker iron gradient
  */
 function ShieldSprite({
   width,
@@ -165,72 +174,70 @@ function ShieldSprite({
   baseHex: string;
   children: React.ReactNode;
 }) {
-  const ironRim = '#a4a4a4';
-  const ironRimDark = '#5b5b5b';
-  const wood = '#7c5a32';
-  const woodDark = '#4a3416';
+  const ironLight = '#cfcfcf';
+  const ironMid = '#9a9a9a';
+  const ironDark = '#5e5e5e';
+  const ironShadow = '#2a2a2a';
 
+  // Rim thickness as a % of the shorter axis — matches the vanilla item.
+  const rim = '7%';
+
+  // Handle width sits beyond the shield's right edge; the body needs
+  // room for it, so we let the inner content area take a slightly
+  // narrower horizontal slot.
   return (
     <div
       style={{
         position: 'relative',
         width,
         height,
-        background: ironRim,
-        boxShadow: 'inset 0 0 0 1px ' + ironRimDark + ', 0 6px 18px rgba(0,0,0,0.45)',
         imageRendering: 'pixelated',
+        filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.45))',
       }}
     >
-      {/* Wood plank backing — inset 4% so iron rim shows around it. */}
+      {/* Handle stub on the right — drawn first so it sits behind the
+          shield body. Looks like the grip you see at the back of a
+          held shield in the in-game render. */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
-          inset: '4%',
-          background: `repeating-linear-gradient(180deg, ${wood} 0 6%, ${woodDark} 6% 7%, ${wood} 7% 13%)`,
-          imageRendering: 'pixelated',
+          right: '-8%',
+          top: '38%',
+          width: '14%',
+          height: '24%',
+          background: `linear-gradient(90deg, ${ironMid} 0%, ${ironDark} 50%, ${ironShadow} 100%)`,
+          boxShadow: `inset 1px 0 0 ${ironLight}, inset -1px 0 0 ${ironShadow}`,
         }}
       />
-      {/* Cloth area — banner sits across most of the shield, leaving the
-          top wood band visible like in the vanilla item icon. */}
+
+      {/* Iron frame — full bleed, the cloth sits inside it. */}
       <div
-        aria-hidden
         style={{
           position: 'absolute',
-          top: '12%',
-          left: '10%',
-          right: '10%',
-          bottom: '8%',
-          background: baseHex,
-          imageRendering: 'pixelated',
-          boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.25)',
+          inset: 0,
+          background: `linear-gradient(180deg, ${ironLight} 0%, ${ironMid} 18%, ${ironMid} 82%, ${ironDark} 100%)`,
+          boxShadow: `inset 0 0 0 1px ${ironShadow}`,
         }}
       >
-        <div style={{ position: 'absolute', inset: 0 }}>{children}</div>
+        {/* Banner cloth — fills the front face entirely. */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            top: rim,
+            left: rim,
+            right: rim,
+            bottom: rim,
+            background: baseHex,
+            imageRendering: 'pixelated',
+            boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.35)',
+          }}
+        >
+          <div style={{ position: 'absolute', inset: 0 }}>{children}</div>
+        </div>
       </div>
-      {/* Iron rivet pins at the corners. */}
-      <Rivet x="6%" y="6%" />
-      <Rivet x="84%" y="6%" />
-      <Rivet x="6%" y="84%" />
-      <Rivet x="84%" y="84%" />
     </div>
-  );
-}
-
-function Rivet({ x, y }: { x: string; y: string }) {
-  return (
-    <div
-      aria-hidden
-      style={{
-        position: 'absolute',
-        left: x,
-        top: y,
-        width: '10%',
-        height: '9%',
-        background: 'radial-gradient(circle at 30% 30%, #efefef, #5b5b5b 70%, #1c1c1c)',
-        boxShadow: '0 1px 1px rgba(0,0,0,0.55)',
-      }}
-    />
   );
 }
 

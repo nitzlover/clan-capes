@@ -12,7 +12,11 @@ type Props = {
   width?: number;
   /** Canvas CSS height. */
   height?: number;
-  /** Auto-rotate the player. Set false for static preview. */
+  /**
+   * Auto-rotate the player. Default OFF — admins reported the spinning
+   * was distracting, and OrbitControls already let them drag-rotate
+   * manually if they want to inspect the cape from another angle.
+   */
   rotate?: boolean;
   /** Show a small mono label above the canvas. */
   label?: string;
@@ -45,7 +49,7 @@ export function PlayerCapeView3D({
   skinUrl = DEFAULT_SKIN,
   width = 200,
   height = 280,
-  rotate = true,
+  rotate = false,
   label,
   view = 'back',
 }: Props) {
