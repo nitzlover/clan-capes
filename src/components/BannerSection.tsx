@@ -113,7 +113,7 @@ export function BannerSection() {
               key={c.tag}
               className="border-t border-[var(--rule)] first:border-t-0"
             >
-              <div className="grid grid-cols-[64px_1fr_auto] items-center gap-6 py-5">
+              <div className="grid grid-cols-[64px_1fr_auto] items-center gap-6 py-5 transition-colors hover:bg-white/[0.02]">
                 <BannerPreview spec={spec} width={50} framed={false} shape="shield" />
                 <div className="min-w-0">
                   <div className="font-mono text-base font-semibold tracking-wider text-white">

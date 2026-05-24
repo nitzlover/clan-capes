@@ -9,6 +9,29 @@ export function getToken(): string | null {
   return localStorage.getItem('clancapes_token');
 }
 
+/**
+ * Thrown when any panel request returns 401. Carried as a typed error so
+ * callers can branch on `instanceof UnauthorizedError` instead of regex-
+ * matching the message string.
+ *
+ * The constructor also clears the stale token and dispatches a global
+ * `clancapes:unauthorized` event so listeners (the dashboard shell)
+ * can route the user to /login *once*, no matter how many components
+ * trip the 401 in parallel. Without this every component that fetches
+ * /panel/clans would silently fail and hammer the server every render —
+ * the bug visible in the network panel.
+ */
+export class UnauthorizedError extends Error {
+  constructor(message = 'unauthorized') {
+    super(message);
+    this.name = 'UnauthorizedError';
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('clancapes_token');
+      window.dispatchEvent(new CustomEvent('clancapes:unauthorized'));
+    }
+  }
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   const res = await fetch(`/api${path}`, {
@@ -18,6 +41,9 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
+  if (res.status === 401) {
+    throw new UnauthorizedError();
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error((err as { error?: string }).error ?? 'Request failed');
@@ -70,6 +96,7 @@ export async function fetchClanBanner(tag: string): Promise<ClanBannerDto | null
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (res.status === 404) return null;
+  if (res.status === 401) throw new UnauthorizedError();
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error((err as { error?: string }).error ?? 'Request failed');

@@ -6,7 +6,7 @@ import { BannerSection } from '@/components/BannerSection';
 import { CapeBackPreview } from '@/components/CapeBackPreview';
 import { UploadSection } from '@/components/UploadSection';
 import { PluginStatus } from '@/components/PluginStatus';
-import { api, type ClanRow, getToken } from '@/lib/api';
+import { api, type ClanRow, getToken, UnauthorizedError } from '@/lib/api';
 
 type AuditEntry = { timestamp: string; raw: string };
 
@@ -42,8 +42,9 @@ export default function DashboardPage() {
       const clanRes = await api<{ clans: ClanRow[] }>('/panel/clans');
       setClans(clanRes.clans);
     } catch (e) {
-      if (e instanceof Error && /unauthor|invalid token/i.test(e.message)) {
-        router.replace('/');
+      if (e instanceof UnauthorizedError) {
+        // Central handler below also fires on the global event — bail
+        // here so we don't continue loading the audit endpoint.
         return;
       }
       setClans([]);
@@ -51,7 +52,8 @@ export default function DashboardPage() {
     try {
       const auditRes = await api<{ entries: AuditEntry[] }>('/panel/audit');
       setAudit(auditRes.entries);
-    } catch {
+    } catch (e) {
+      if (e instanceof UnauthorizedError) return;
       setAudit([]);
     }
     setLoading(false);
@@ -60,6 +62,19 @@ export default function DashboardPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Any component anywhere in the dashboard tree that hits a 401 throws
+  // an UnauthorizedError which fires this global event from a single
+  // place (api.ts). One listener, one redirect — no race between the
+  // dashboard, UploadSection and BannerSection all trying to redirect
+  // independently.
+  useEffect(() => {
+    function onUnauthorized() {
+      router.replace('/');
+    }
+    window.addEventListener('clancapes:unauthorized', onUnauthorized);
+    return () => window.removeEventListener('clancapes:unauthorized', onUnauthorized);
+  }, [router]);
 
   useEffect(() => {
     if (!file) {
@@ -137,13 +152,13 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-6xl px-6 pb-24 sm:px-10">
         {/* Hero / overview chapter. */}
         <section className="py-16">
-          <p className="eyebrow">Overview</p>
-          <h1 className="display mt-5">
+          <p className="eyebrow reveal-eyebrow">Overview</p>
+          <h1 className="display reveal mt-5" style={{ animationDelay: '40ms' }}>
             Capes, banners, audit —
             <br />
             <span className="text-[var(--text-faint)]">one operator surface.</span>
           </h1>
-          <div className="mt-10 grid grid-cols-2 gap-x-12 gap-y-6 sm:grid-cols-4 sm:max-w-3xl">
+          <div className="reveal mt-10 grid grid-cols-2 gap-x-12 gap-y-6 sm:grid-cols-4 sm:max-w-3xl" style={{ animationDelay: '140ms' }}>
             <Metric label="Clans" value={clans.length} />
             <Metric label="With cape" value={clans.filter((c) => c.capeUrl).length} />
             <Metric label="Audit lines" value={audit.length} />
@@ -156,7 +171,7 @@ export default function DashboardPage() {
         </section>
 
         {/* Cape upload chapter. */}
-        <section className="chapter">
+        <section className="chapter reveal" style={{ animationDelay: '60ms' }}>
           <div className="chapter-head">
             <p className="eyebrow">01 — Cape</p>
             <h2 className="display">Upload PNG per clan.</h2>
@@ -174,7 +189,7 @@ export default function DashboardPage() {
         </section>
 
         {/* Clan roster chapter. */}
-        <section className="chapter mt-16">
+        <section className="chapter reveal mt-16" style={{ animationDelay: '120ms' }}>
           <div className="chapter-head">
             <p className="eyebrow">02 — Roster</p>
             <h2 className="display">
@@ -193,7 +208,7 @@ export default function DashboardPage() {
               {clans.map((c) => (
                 <li
                   key={c.tag}
-                  className="grid grid-cols-[64px_1fr_auto] items-center gap-6 border-t border-[var(--rule)] py-5 first:border-t-0"
+                  className="group grid grid-cols-[64px_1fr_auto] items-center gap-6 border-t border-[var(--rule)] py-5 transition-colors first:border-t-0 hover:bg-white/[0.02]"
                 >
                   <CapeBackPreview url={c.capeUrl} zoom={5} />
                   <div className="min-w-0">
@@ -217,7 +232,7 @@ export default function DashboardPage() {
         </section>
 
         {/* Banners chapter. */}
-        <section className="chapter mt-16">
+        <section className="chapter reveal mt-16" style={{ animationDelay: '180ms' }}>
           <div className="chapter-head">
             <p className="eyebrow">03 — Shield banners</p>
             <h2 className="display">Per-clan crest.</h2>
@@ -226,7 +241,7 @@ export default function DashboardPage() {
         </section>
 
         {/* Audit chapter. */}
-        <section className="chapter mt-16">
+        <section className="chapter reveal mt-16" style={{ animationDelay: '240ms' }}>
           <div className="chapter-head">
             <p className="eyebrow">04 — Audit</p>
             <h2 className="display">Operator trail.</h2>
