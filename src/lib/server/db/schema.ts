@@ -183,6 +183,31 @@ export const clanInvitations = pgTable('clan_invitations', {
     .defaultNow(),
 });
 
+/**
+ * Per-clan shield banner specification. One row per clan; cleared
+ * on disband via the FK cascade. Patterns ship as a JSON array of
+ * `{ color, pattern }` objects matching the NBT shape vanilla uses,
+ * so the plugin reads + applies them without translation.
+ *
+ * `updatedBy` is informational (admin username or in-game player
+ * name) — the FK to `servers` is implicit via the clan row's
+ * `server_id`, no extra column needed.
+ */
+export const clanBanners = pgTable(
+  'clan_banners',
+  {
+    clanId: integer('clan_id')
+      .primaryKey()
+      .references(() => clans.id, { onDelete: 'cascade' }),
+    baseColor: integer('base_color').notNull(),
+    patterns: jsonb('patterns').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedBy: text('updated_by').notNull(),
+  },
+);
+
 // ─── Audit ────────────────────────────────────────────────────────────
 
 /**

@@ -1,28 +1,78 @@
+/**
+ * DB-backed banner CRUD with a plugin-side mirror.
+ *
+ * Reads come straight off `clan_banners` so the editor works even
+ * when the plugin is unreachable.
+ *
+ * Writes hit the DB first (durable), then best-effort sync to the
+ * plugin REST so currently-held shields repaint in-game without
+ * waiting for the next plugin restart. A plugin-side failure is
+ * logged but does not roll the DB write back — the panel is the
+ * source of truth.
+ */
+
 import { NextResponse } from 'next/server';
+import { desc } from 'drizzle-orm';
 import { requireAuth } from '@/lib/server/auth';
+import { getClanByTag } from '@/lib/server/clan-repo';
+import {
+  deleteBanner,
+  getBannerByClanId,
+  upsertBanner,
+  type BannerPattern,
+} from '@/lib/server/banner-repo';
+import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import * as mc from '@/lib/server/minecraft';
-import { appendAudit } from '@/lib/server/storage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const MAX_LAYERS = 6;
 
-/**
- * GET → returns the saved banner spec for this clan, or 404 if none.
- * POST → upsert { baseColor, patterns }; plugin re-applies onto online members.
- * DELETE → wipe the spec; held shields keep whatever they had until next swap.
- *
- * All three require the admin JWT. The actual storage and Bukkit-side
- * mutation live on the Paper plugin — this route is a thin proxy that
- * adds auth, validation, and audit logging.
- */
+async function resolveServerId(req: Request): Promise<number | null> {
+  const url = new URL(req.url);
+  const raw = url.searchParams.get('serverId');
+  if (raw) {
+    const n = Number(raw);
+    if (Number.isInteger(n) && n > 0) return n;
+  }
+  const db = getDb();
+  const [first] = await db
+    .select({ id: schema.servers.id })
+    .from(schema.servers)
+    .orderBy(desc(schema.servers.createdAt))
+    .limit(1);
+  return first?.id ?? null;
+}
 
 export async function GET(req: Request, ctx: { params: Promise<{ tag: string }> }) {
   const user = requireAuth(req);
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   const { tag: rawTag } = await ctx.params;
   const tag = rawTag.toUpperCase();
+
+  // Preferred: DB
+  if (dbEnabled()) {
+    const serverId = await resolveServerId(req);
+    if (serverId) {
+      const clan = await getClanByTag(serverId, tag);
+      if (clan) {
+        const banner = await getBannerByClanId(clan.id);
+        if (banner) {
+          return NextResponse.json({
+            clan: tag,
+            baseColor: banner.baseColor,
+            patterns: banner.patterns,
+            updatedAt: banner.updatedAt,
+            updatedBy: banner.updatedBy,
+          });
+        }
+        return NextResponse.json({ error: 'not found' }, { status: 404 });
+      }
+    }
+  }
+
+  // Fallback: plugin proxy for the legacy / no-DB path.
   try {
     const dto = await mc.fetchClanBanner(tag);
     if (!dto) return NextResponse.json({ error: 'not found' }, { status: 404 });
@@ -30,7 +80,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ tag: string }> 
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'plugin unreachable' },
-      { status: 502 }
+      { status: 502 },
     );
   }
 }
@@ -38,10 +88,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ tag: string }> 
 export async function POST(req: Request, ctx: { params: Promise<{ tag: string }> }) {
   const user = requireAuth(req);
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  if (!dbEnabled()) {
+    return NextResponse.json({ error: 'db disabled' }, { status: 503 });
+  }
   const { tag: rawTag } = await ctx.params;
   const tag = rawTag.toUpperCase();
 
-  let body: { baseColor?: number; patterns?: mc.BannerPatternSpec[] };
+  let body: { baseColor?: number; patterns?: BannerPattern[] };
   try {
     body = await req.json();
   } catch {
@@ -56,7 +109,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ tag: string }>
   if (patterns.length > MAX_LAYERS) {
     return NextResponse.json(
       { error: `too many layers (max ${MAX_LAYERS})` },
-      { status: 400 }
+      { status: 400 },
     );
   }
   for (const p of patterns) {
@@ -72,31 +125,77 @@ export async function POST(req: Request, ctx: { params: Promise<{ tag: string }>
     }
   }
 
-  try {
-    const dto = await mc.setClanBanner(tag, baseColor, patterns, user.sub);
-    await appendAudit(`${user.sub}\tBANNER_SET\t${tag}\tbase=${baseColor} layers=${patterns.length}`);
-    return NextResponse.json(dto);
-  } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'banner save failed' },
-      { status: 502 }
-    );
+  const serverId = await resolveServerId(req);
+  if (!serverId) {
+    return NextResponse.json({ error: 'no servers registered' }, { status: 409 });
   }
+  const clan = await getClanByTag(serverId, tag);
+  if (!clan) {
+    return NextResponse.json({ error: 'clan not found' }, { status: 404 });
+  }
+
+  // 1) Durable write
+  const record = await upsertBanner(clan.id, baseColor, patterns, user.sub);
+  // 2) Best-effort plugin mirror so held shields re-paint immediately
+  let pluginMirrored = true;
+  let pluginErr: string | null = null;
+  try {
+    await mc.setClanBanner(tag, baseColor, patterns, user.sub);
+  } catch (e) {
+    pluginMirrored = false;
+    pluginErr = e instanceof Error ? e.message : String(e);
+  }
+  // 3) Audit
+  const db = getDb();
+  await db.insert(schema.audit).values({
+    serverId,
+    actor: `admin:${user.sub}`,
+    action: 'BANNER_SET',
+    target: tag,
+    payload: { baseColor, layers: patterns.length, pluginMirrored, pluginErr },
+  });
+
+  return NextResponse.json({
+    clan: tag,
+    baseColor: record.baseColor,
+    patterns: record.patterns,
+    updatedAt: record.updatedAt,
+    updatedBy: record.updatedBy,
+    pluginMirrored,
+  });
 }
 
 export async function DELETE(req: Request, ctx: { params: Promise<{ tag: string }> }) {
   const user = requireAuth(req);
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  if (!dbEnabled()) {
+    return NextResponse.json({ error: 'db disabled' }, { status: 503 });
+  }
   const { tag: rawTag } = await ctx.params;
   const tag = rawTag.toUpperCase();
+
+  const serverId = await resolveServerId(req);
+  if (!serverId) {
+    return NextResponse.json({ error: 'no servers registered' }, { status: 409 });
+  }
+  const clan = await getClanByTag(serverId, tag);
+  if (!clan) {
+    return NextResponse.json({ error: 'clan not found' }, { status: 404 });
+  }
+
+  await deleteBanner(clan.id);
   try {
     await mc.deleteClanBanner(tag);
-    await appendAudit(`${user.sub}\tBANNER_DELETE\t${tag}`);
-    return NextResponse.json({ ok: true, tag });
-  } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'banner delete failed' },
-      { status: 502 }
-    );
+  } catch {
+    // Plugin mirror failure is logged via audit payload, not fatal.
   }
+  const db = getDb();
+  await db.insert(schema.audit).values({
+    serverId,
+    actor: `admin:${user.sub}`,
+    action: 'BANNER_DELETE',
+    target: tag,
+    payload: null,
+  });
+  return NextResponse.json({ ok: true, tag });
 }

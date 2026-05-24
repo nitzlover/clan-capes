@@ -60,6 +60,38 @@ export default function ClansPage() {
     load(null);
   }, [load]);
 
+  async function refreshNames() {
+    if (!serverId) return;
+    if (!confirm('Re-resolve every "Leader" / "Member" placeholder name via Mojang? Existing real names are untouched.')) {
+      return;
+    }
+    try {
+      const res = await api<{
+        refreshed: number;
+        skipped: number;
+        report: Array<{ uuid: string; old: string; new?: string; reason?: string }>;
+      }>('/panel/clans/backfill-names', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serverId }),
+      });
+      alert(
+        `Refreshed ${res.refreshed}, skipped ${res.skipped}.\n\n` +
+          res.report
+            .map((r) =>
+              r.new
+                ? `${r.old} → ${r.new}`
+                : `${r.old}: ${r.reason ?? 'no change'}`,
+            )
+            .join('\n'),
+      );
+      load(serverId);
+    } catch (e) {
+      if (e instanceof UnauthorizedError) return;
+      alert(e instanceof Error ? e.message : 'Refresh failed');
+    }
+  }
+
   async function importFromPowerClans() {
     if (!serverId) return;
     if (
@@ -105,13 +137,22 @@ export default function ClansPage() {
         </div>
         <div className="flex items-center gap-3">
           {serverId && (
-            <button
-              onClick={importFromPowerClans}
-              className="btn-ghost"
-              title="Pull PowerClans data via the plugin REST"
-            >
-              + Import PowerClans
-            </button>
+            <>
+              <button
+                onClick={refreshNames}
+                className="btn-ghost"
+                title='Re-resolve "Leader" placeholder names via Mojang'
+              >
+                ⟳ Refresh names
+              </button>
+              <button
+                onClick={importFromPowerClans}
+                className="btn-ghost"
+                title="Pull PowerClans data via the plugin REST"
+              >
+                + Import PowerClans
+              </button>
+            </>
           )}
           {servers.length > 0 && (
             <select
