@@ -29,9 +29,15 @@ export async function GET(req: Request) {
       } catch {
         /* ignore — local CDN still serves it */
       }
+      // Version the URL by file mtime so a re-upload looks like a new
+      // resource to every HTTP cache between us and the browser. Without
+      // it, a previous-cape PNG that landed in a user's cache would keep
+      // showing up forever even after the admin replaced the underlying
+      // file — that's the "two users see different capes" bug.
+      const v = Math.floor(stat.mtimeMs);
       return {
         tag,
-        capeUrl: `${cdn}/${file}`,
+        capeUrl: `${cdn}/${file}?v=${v}`,
         updatedAt: remote?.updatedAt ?? stat.mtimeMs,
         updatedBy: remote?.updatedBy ?? 'panel',
       };

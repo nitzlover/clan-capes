@@ -63,7 +63,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ tag: string }>
     const outPath = capeFilePath(tag);
     await fs.writeFile(outPath, normalized);
 
-    const publicUrl = `${CDN_PUBLIC_URL}/${tag}.png`;
+    // Append a version query string based on the file's fresh mtime so
+    // the URL we hand to (a) the Paper plugin (which forwards it to
+    // every Fabric client) and (b) the panel UI changes on every
+    // re-upload. Same URL forever was the cause of stale-cape rendering
+    // for users who had loaded the previous file once — see the
+    // matching version logic in /api/panel/clans.
+    const stat = await fs.stat(outPath);
+    const v = Math.floor(stat.mtimeMs);
+    const publicUrl = `${CDN_PUBLIC_URL}/${tag}.png?v=${v}`;
     const actor = user.sub;
     await mc.setClanCape(tag, publicUrl, actor);
     await appendAudit(`${actor}\tUPLOAD\t${tag}\t${publicUrl}`);
