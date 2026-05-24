@@ -223,14 +223,49 @@ public final class ClanCapeCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    /**
+     * Soft reload — re-reads config.yml, swaps the in-memory
+     * PluginConfig wrapper, refreshes the cape cache, and (when the
+     * panel block is set) fires one verification heartbeat so the
+     * operator immediately learns whether the new key/URL works.
+     *
+     * Does NOT disable/enable the plugin. Use this instead of
+     * /plugman reload ClanCapes — the latter triggers a Jetty
+     * classloader crash with shaded Javalin (FilterMapping
+     * NoClassDefFoundError on doStop) and leaves Paper in a
+     * half-disabled state requiring a full server restart.
+     */
     private boolean handleReload(CommandSender sender) {
         if (!sender.hasPermission("clan.cape.admin")) {
             sender.sendMessage(config.msg("no-permission"));
             return true;
         }
-        plugin.reloadConfig();
+        plugin.refreshPluginConfig();
         capeService.reloadCache();
         sender.sendMessage(config.msg("cape-reloaded"));
+
+        // If the panel block is now configured, fire one heartbeat to
+        // tell the operator whether the new credentials work. Silent
+        // skip when either field is empty — same idiom as the
+        // scheduled HeartbeatTask.
+        var cfg = plugin.getPluginConfig();
+        String panelUrl = cfg.getPanelUrl();
+        String apiKey = cfg.getPanelApiKey();
+        if (panelUrl != null && !panelUrl.isBlank() && apiKey != null && !apiKey.isBlank()) {
+            plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+                try {
+                    var client = new PanelClient(plugin);
+                    var res = client.heartbeat(panelUrl, apiKey, null);
+                    plugin.getServer().getScheduler().runTask(plugin, () ->
+                            sender.sendMessage(config.prefix() + "§a✓ Panel reachable"
+                                    + (res.server != null ? " (server=" + res.server.name + ")" : "") + "."));
+                } catch (PanelClient.PanelException e) {
+                    plugin.getServer().getScheduler().runTask(plugin, () ->
+                            sender.sendMessage(config.prefix() + "§cPanel verify failed: " + e.getMessage()));
+                    plugin.getLogger().log(Level.WARNING, "panel verify after reload failed", e);
+                }
+            });
+        }
         return true;
     }
 

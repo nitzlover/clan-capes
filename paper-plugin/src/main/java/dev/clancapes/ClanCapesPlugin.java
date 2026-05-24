@@ -109,4 +109,21 @@ public final class ClanCapesPlugin extends JavaPlugin {
     public PowerClansHook getPowerClansHook() {
         return powerClansHook;
     }
+
+    /**
+     * Soft reload — re-read config.yml off disk, swap the in-memory
+     * PluginConfig wrapper so callers that hold {@code getPluginConfig()}
+     * (HeartbeatTask, RestApiServer, etc.) start seeing the fresh
+     * values on their next tick. Does NOT disable/enable the plugin,
+     * which avoids the Paper-classloader + shaded-Jetty crash that
+     * {@code /plugman reload ClanCapes} triggers on shutdown.
+     *
+     * Use this whenever config.yml changed and the operator wants the
+     * plugin to pick up the change without restarting the whole
+     * server.
+     */
+    public void refreshPluginConfig() {
+        reloadConfig();
+        pluginConfig = new PluginConfig(getConfig());
+    }
 }
