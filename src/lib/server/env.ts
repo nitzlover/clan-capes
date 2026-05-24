@@ -28,11 +28,27 @@ export const MAX_UPLOAD_KB = Number(process.env.MAX_UPLOAD_KB) || 256;
  */
 export const CDN_PUBLIC_URL = (process.env.CDN_PUBLIC_URL ?? 'http://localhost:3000/api/static/capes').replace(/\/$/, '');
 
+/**
+ * Postgres connection string. Railway injects `DATABASE_URL` automatically
+ * when a Postgres service is attached to the deployment. Locally you can
+ * point it at any reachable Postgres instance (Docker, native install,
+ * etc.) via .env.local. Empty string disables DB-backed code paths so
+ * the legacy file-based audit + cape directory keeps working during the
+ * Phase 0 transition.
+ */
+export const DATABASE_URL = process.env.DATABASE_URL ?? '';
+
 if (process.env.NODE_ENV === 'production') {
   if (JWT_SECRET === 'dev-secret-change-me') {
     console.warn('[env] JWT_SECRET is using a dev default in production');
   }
   if (ADMIN_PASSWORD === 'admin' && !ADMIN_PASSWORD_HASH) {
     console.warn('[env] ADMIN_PASSWORD is the default "admin" — set ADMIN_PASSWORD_HASH');
+  }
+  if (!DATABASE_URL) {
+    console.warn(
+      '[env] DATABASE_URL not set — DB-backed features disabled, ' +
+        'panel runs in legacy file-only mode',
+    );
   }
 }
