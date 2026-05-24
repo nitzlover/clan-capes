@@ -10,7 +10,11 @@
  * starts serving requests.
  */
 
-import 'dotenv/config';
+// On Railway the platform injects env vars natively, so dotenv would
+// be dead weight. For local dev pass DATABASE_URL explicitly:
+//   DATABASE_URL=postgres://... npm run db:migrate
+// or use Node's built-in `--env-file=.env.local` flag via:
+//   node --env-file=.env.local --import tsx scripts/migrate.ts
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
