@@ -31,6 +31,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ file: string }
       headers: {
         'Content-Type': 'image/png',
         'Cache-Control': 'public, max-age=604800, immutable',
+        // Cape PNGs are loaded by skinview3d's TextureLoader, which
+        // requests with `crossOrigin = 'anonymous'`. Without an
+        // Access-Control-Allow-Origin response header the texture is
+        // treated as "tainted" and Three.js silently refuses to upload
+        // it to WebGL — the body renders but the cape stays missing.
+        // Mojang's own cape host returns a wildcard CORS header for the
+        // same reason. The bytes are already public (no auth on this
+        // route), so a wildcard is the right scope.
+        'Access-Control-Allow-Origin': '*',
+        'Cross-Origin-Resource-Policy': 'cross-origin',
       },
     });
   } catch {

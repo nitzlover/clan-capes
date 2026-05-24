@@ -96,21 +96,19 @@ export default function CapesPage() {
         </span>
       </div>
 
-      <section className="brutal-card p-8">
-        <UploadSection
-          tag={tag}
-          onTagChange={setTag}
-          file={file}
-          onFileChange={setFile}
-          pngPreview={preview}
-          onPngUpload={uploadPng}
-          message={message}
-          optionsRefresh={optionsRefresh}
-        />
-      </section>
+      <UploadSection
+        tag={tag}
+        onTagChange={setTag}
+        file={file}
+        onFileChange={setFile}
+        pngPreview={preview}
+        onPngUpload={uploadPng}
+        message={message}
+        optionsRefresh={optionsRefresh}
+      />
 
-      <section className="mt-12">
-        <div className="mb-4 flex items-end justify-between border-b-2 border-[var(--rule-strong)] pb-3">
+      <section className="mt-14">
+        <div className="mb-5 flex items-end justify-between border-b-2 border-[var(--rule-strong)] pb-3">
           <h2 className="font-sans text-2xl font-extrabold uppercase tracking-tight text-white">
             Roster
           </h2>
@@ -125,29 +123,32 @@ export default function CapesPage() {
             No clans with capes yet.
           </p>
         ) : (
-          <ul>
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {clans.map((c) => (
               <li
                 key={c.tag}
-                className="grid grid-cols-[110px_1fr_auto] items-center gap-6 border-b border-[var(--rule)] py-5 transition-colors hover:bg-white/[0.02]"
+                className="brutal-card flex items-start gap-5 p-5"
               >
                 <PlayerCapeView3D
                   capeUrl={c.capeUrl}
-                  width={100}
-                  height={150}
+                  width={84}
+                  height={126}
                   view="back"
                 />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="font-sans text-lg font-extrabold uppercase tracking-wider text-white">
                     {c.tag}
                   </div>
-                  <div className="mt-1 truncate font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-                    {c.capeUrl || 'no cape'}
+                  <div className="mt-1 truncate font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+                    {c.capeUrl ? c.capeUrl.split('/').pop() : 'no cape'}
                   </div>
+                  <button
+                    onClick={() => removeCape(c.tag)}
+                    className="mt-4 border border-[var(--rule-strong)] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-mute)] transition-colors hover:border-white hover:bg-white hover:text-black"
+                  >
+                    Delete
+                  </button>
                 </div>
-                <button onClick={() => removeCape(c.tag)} className="btn-danger-link">
-                  Delete
-                </button>
               </li>
             ))}
           </ul>

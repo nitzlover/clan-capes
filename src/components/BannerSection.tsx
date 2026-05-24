@@ -101,7 +101,7 @@ export function BannerSection() {
         </p>
       )}
 
-      <ul>
+      <ul className="flex flex-col gap-3">
         {clans.map((c) => {
           const banner = banners[c.tag] ?? null;
           const spec: BannerSpec = banner
@@ -111,15 +111,15 @@ export function BannerSection() {
           return (
             <li
               key={c.tag}
-              className="border-t border-[var(--rule)] first:border-t-0"
+              className="border-2 border-[var(--rule)] transition-colors"
             >
-              <div className="grid grid-cols-[64px_1fr_auto] items-center gap-6 py-5 transition-colors hover:bg-white/[0.02]">
+              <div className="grid grid-cols-[60px_1fr_auto] items-center gap-5 px-5 py-4 hover:bg-white/[0.02]">
                 <BannerPreview spec={spec} width={50} framed={false} shape="shield" />
                 <div className="min-w-0">
-                  <div className="font-mono text-base font-semibold tracking-wider text-white">
+                  <div className="font-sans text-base font-extrabold uppercase tracking-wider text-white">
                     {c.tag}
                   </div>
-                  <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-faint)]">
+                  <div className="mt-1 truncate font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-faint)]">
                     {banner
                       ? `${banner.patterns.length} layer${banner.patterns.length === 1 ? '' : 's'} · ${new Date(banner.updatedAt).toLocaleString()}`
                       : 'no banner — vanilla shield'}
@@ -131,13 +131,17 @@ export function BannerSection() {
                     setEditorError(null);
                     setOpenTag(isOpen ? null : c.tag);
                   }}
-                  className="font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--text-mute)] underline-offset-4 hover:text-white hover:underline"
+                  className={`shrink-0 border-2 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.22em] transition-colors ${
+                    isOpen
+                      ? 'border-white bg-white text-black'
+                      : 'border-[var(--rule-strong)] text-[var(--text-soft)] hover:border-white hover:bg-white hover:text-black'
+                  }`}
                 >
-                  {isOpen ? 'close' : banner ? 'edit' : 'set'}
+                  {isOpen ? 'Close' : banner ? 'Edit' : 'Set'}
                 </button>
               </div>
               {isOpen && (
-                <div className="border-t border-[var(--rule)] py-6">
+                <div className="overflow-x-auto border-t-2 border-[var(--rule-strong)] bg-[var(--bg-sink)] px-5 py-6">
                   <BannerEditor
                     initial={spec}
                     onSave={(s) => save(c.tag, s)}
