@@ -23,6 +23,7 @@ import {
   normaliseTag,
 } from '@/lib/server/clan-validators';
 import * as mc from '@/lib/server/minecraft';
+import { resolveMojangName } from '@/lib/server/mojang';
 import { desc } from 'drizzle-orm';
 
 export const runtime = 'nodejs';
@@ -115,6 +116,14 @@ export async function POST(req: Request) {
       continue;
     }
 
+    // Best-effort Mojang lookup so the imported row carries a real
+    // username instead of the "Leader" placeholder. Null result =
+    // Mojang doesn't know the UUID (cracked player, offline-only
+    // account, transient outage) — fall back to the tag itself so
+    // the row is still readable on the panel UI.
+    const resolved = await resolveMojangName(pc.leader);
+    const leaderName = resolved ?? `Leader of ${tag}`;
+
     const [clan] = await db
       .insert(schema.clans)
       .values({
@@ -128,7 +137,7 @@ export async function POST(req: Request) {
     await db.insert(schema.clanMembers).values({
       clanId: clan.id,
       playerUuid: pc.leader,
-      playerName: 'Leader',
+      playerName: leaderName,
       role: 'leader',
     });
     await db.insert(schema.audit).values({
