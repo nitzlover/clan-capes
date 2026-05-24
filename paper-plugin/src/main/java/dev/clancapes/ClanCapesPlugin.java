@@ -1,6 +1,7 @@
 package dev.clancapes;
 
 import dev.clancapes.api.RestApiServer;
+import dev.clancapes.clan.ClanRepository;
 import dev.clancapes.command.ClanCapeCommand;
 import dev.clancapes.config.PluginConfig;
 import dev.clancapes.hook.PowerClansHook;
@@ -13,6 +14,7 @@ import dev.clancapes.sync.CapeSyncChannel;
 import dev.clancapes.storage.StorageFactory;
 import dev.clancapes.storage.CapeStorage;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 
 public final class ClanCapesPlugin extends JavaPlugin {
     private static ClanCapesPlugin instance;
@@ -26,6 +28,8 @@ public final class ClanCapesPlugin extends JavaPlugin {
     private PowerClansHook powerClansHook;
     private PlaceholderHook placeholderHook;
     private HeartbeatTask heartbeatTask;
+    private ClanRepository clanRepository;
+    private BukkitTask clanRefreshTask;
 
     @Override
     public void onEnable() {
@@ -72,12 +76,29 @@ public final class ClanCapesPlugin extends JavaPlugin {
         heartbeatTask = new HeartbeatTask(this);
         heartbeatTask.start();
 
+        // Bootstrap the clan repository — initial async pull off the
+        // panel, then a quiet 5-minute schedule to keep the in-memory
+        // cache in sync. Both no-op when the panel block isn't
+        // configured; the repository simply stays empty until the
+        // operator runs /clancape setup + link.
+        clanRepository = new ClanRepository(this);
+        clanRepository.refreshAsync(null);
+        clanRefreshTask = getServer().getScheduler().runTaskTimerAsynchronously(
+                this,
+                () -> clanRepository.refreshAsync(null),
+                20L * 60 * 5,  // first periodic refresh: +5 min after enable
+                20L * 60 * 5); // every 5 min thereafter
+
         getLogger().info("ClanCapes enabled (storage=" + pluginConfig.getStorageType()
                 + ", api=" + pluginConfig.isApiEnabled() + ")");
     }
 
     @Override
     public void onDisable() {
+        if (clanRefreshTask != null) {
+            clanRefreshTask.cancel();
+            clanRefreshTask = null;
+        }
         if (heartbeatTask != null) {
             heartbeatTask.stop();
         }
@@ -108,6 +129,16 @@ public final class ClanCapesPlugin extends JavaPlugin {
 
     public PowerClansHook getPowerClansHook() {
         return powerClansHook;
+    }
+
+    /**
+     * DB-backed clan source of truth. Populated asynchronously from
+     * {@code /api/plugin/clans} after enable; may be empty for the
+     * first few hundred milliseconds. Coexists with PowerClansHook
+     * during Phase 2.1–2.4 and replaces it entirely in Phase 2.5.
+     */
+    public ClanRepository getClanRepository() {
+        return clanRepository;
     }
 
     /**

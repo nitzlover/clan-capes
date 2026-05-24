@@ -168,6 +168,106 @@ public final class PanelClient {
         public String name;
     }
 
+    // ──────── Clan reads (Phase 2.1) ──────────────────────────────────
+
+    /**
+     * GET /api/plugin/clans — list every active clan on this server.
+     * Wraps any non-2xx into {@link PanelException} so callers can do
+     * single-catch error handling; 404 doesn't apply here because the
+     * list endpoint always returns 200 with a (possibly empty) array.
+     */
+    public java.util.List<dev.clancapes.clan.Clan> fetchClans(String panelUrl, String apiKey)
+            throws PanelException {
+        String url = panelUrl.replaceAll("/+$", "") + "/api/plugin/clans";
+        HttpResponse<String> res = sendAuthed(url, apiKey, "GET", null);
+        if (res.statusCode() / 100 != 2) {
+            throw new PanelException(errorMessage(res.body(), "HTTP " + res.statusCode()));
+        }
+        try {
+            ClanListResponse parsed = gson.fromJson(res.body(), ClanListResponse.class);
+            return parsed != null && parsed.clans != null ? parsed.clans : java.util.List.of();
+        } catch (Exception e) {
+            throw new PanelException("malformed clans response: " + res.body(), e);
+        }
+    }
+
+    /**
+     * GET /api/plugin/clans/{tag} — single lookup. Returns null on 404
+     * so callers can branch without catching PanelException for a
+     * legitimate miss.
+     */
+    public dev.clancapes.clan.Clan fetchClanByTag(String panelUrl, String apiKey, String tag)
+            throws PanelException {
+        String url = panelUrl.replaceAll("/+$", "") + "/api/plugin/clans/"
+                + java.net.URLEncoder.encode(tag, java.nio.charset.StandardCharsets.UTF_8);
+        HttpResponse<String> res = sendAuthed(url, apiKey, "GET", null);
+        if (res.statusCode() == 404) return null;
+        if (res.statusCode() / 100 != 2) {
+            throw new PanelException(errorMessage(res.body(), "HTTP " + res.statusCode()));
+        }
+        try {
+            return gson.fromJson(res.body(), ClanResponse.class).clan;
+        } catch (Exception e) {
+            throw new PanelException("malformed clan response: " + res.body(), e);
+        }
+    }
+
+    /**
+     * GET /api/plugin/players/{uuid}/clan — resolve a player to their
+     * clan on this server. Returns null when the player is unclanned
+     * (panel responds with 404).
+     */
+    public dev.clancapes.clan.Clan fetchClanForPlayer(String panelUrl, String apiKey,
+                                                       java.util.UUID uuid) throws PanelException {
+        String url = panelUrl.replaceAll("/+$", "") + "/api/plugin/players/"
+                + uuid + "/clan";
+        HttpResponse<String> res = sendAuthed(url, apiKey, "GET", null);
+        if (res.statusCode() == 404) return null;
+        if (res.statusCode() / 100 != 2) {
+            throw new PanelException(errorMessage(res.body(), "HTTP " + res.statusCode()));
+        }
+        try {
+            return gson.fromJson(res.body(), ClanResponse.class).clan;
+        } catch (Exception e) {
+            throw new PanelException("malformed clan response: " + res.body(), e);
+        }
+    }
+
+    /**
+     * Internal helper — builds a Bearer-authed request with the standard
+     * user agent + JSON content type, sends it, surfaces transport
+     * failures as {@link PanelException}.
+     */
+    private HttpResponse<String> sendAuthed(String url, String apiKey, String method, String body)
+            throws PanelException {
+        HttpRequest.Builder b = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(15))
+                .header("Authorization", "Bearer " + apiKey)
+                .header("User-Agent", "ClanCapes-Paper/" + plugin.getDescription().getVersion());
+        if (body != null) {
+            b.header("Content-Type", "application/json");
+            b.method(method, HttpRequest.BodyPublishers.ofString(body));
+        } else if ("GET".equalsIgnoreCase(method)) {
+            b.GET();
+        } else {
+            b.method(method, HttpRequest.BodyPublishers.noBody());
+        }
+        try {
+            return http.send(b.build(), HttpResponse.BodyHandlers.ofString());
+        } catch (Exception e) {
+            throw new PanelException(method + " " + url + " transport: " + e.getMessage(), e);
+        }
+    }
+
+    private static final class ClanListResponse {
+        java.util.List<dev.clancapes.clan.Clan> clans;
+    }
+
+    private static final class ClanResponse {
+        dev.clancapes.clan.Clan clan;
+    }
+
     /** Raised on any non-2xx response or transport failure. */
     public static final class PanelException extends Exception {
         public PanelException(String message) {
