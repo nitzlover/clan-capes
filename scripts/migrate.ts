@@ -32,12 +32,17 @@ async function main() {
 
   const pool = new Pool({
     connectionString: url,
+    // Mirror the SSL policy from src/lib/server/db: Railway-style
+    // self-signed certs accepted by default in production; operators
+    // can flip DATABASE_SSL_REJECT_UNAUTHORIZED=true once they have
+    // a real CA bundle. Dev runs over plain TCP.
     ssl:
-      process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === 'false'
-        ? { rejectUnauthorized: false }
-        : process.env.NODE_ENV === 'production'
-          ? { rejectUnauthorized: true }
-          : false,
+      process.env.NODE_ENV === 'production'
+        ? {
+            rejectUnauthorized:
+              process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === 'true',
+          }
+        : false,
   });
 
   const db = drizzle(pool);

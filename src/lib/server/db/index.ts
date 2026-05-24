@@ -32,16 +32,20 @@ export function getDb() {
   }
   pool = new Pool({
     connectionString: DATABASE_URL,
-    // Railway's Postgres requires SSL; node-postgres reads the
-    // standard PGSSL* env vars but Railway provides the cert chain
-    // implicitly, so we only need to flip rejectUnauthorized when
-    // running against a self-signed dev DB.
+    // Railway's managed Postgres (and most platform-hosted Postgres
+    // services) serves SSL with a self-signed certificate over its
+    // proxy hostname. Verifying the chain fails out of the box, so
+    // default to TLS-without-verification in production and let
+    // operators opt back into strict verification by setting
+    // DATABASE_SSL_REJECT_UNAUTHORIZED=true when they've installed
+    // a proper CA bundle. Local dev keeps SSL off entirely.
     ssl:
-      process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === 'false'
-        ? { rejectUnauthorized: false }
-        : process.env.NODE_ENV === 'production'
-          ? { rejectUnauthorized: true }
-          : false,
+      process.env.NODE_ENV === 'production'
+        ? {
+            rejectUnauthorized:
+              process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === 'true',
+          }
+        : false,
   });
   db = drizzle(pool, { schema });
   return db;
