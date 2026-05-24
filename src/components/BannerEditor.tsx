@@ -5,6 +5,7 @@ import {
   BANNER_COLORS,
   BANNER_PATTERNS,
   EMPTY_SPEC,
+  SHIELD_ATLAS_SHAPE_ID,
   parseNbtSpec,
   specToNbt,
   type BannerSpec,
@@ -26,19 +27,27 @@ type Props = {
 };
 
 /**
- * Per-clan banner editor.
+ * Per-clan banner editor — minecraft.tools-style.
  *
- * Layout: base-color dropdown on the left, list of pattern rows below, live
- * preview on the right. Each pattern row has a colour + pattern dropdown
- * and add/remove/reorder buttons. The full vanilla 16 colours and 34
- * patterns are exposed — no curation, no permission tiers, no banner-
- * loom-style "you must craft this item first" gating.
+ * Layout: base-colour swatch grid + 6 stackable pattern layers on the
+ * left, live shield preview on the right. Each layer exposes the full
+ * vanilla 16-colour swatch picker and a 41-tile shape grid sliced
+ * straight out of `/public/mc/shieldx7.png` — clicking a tile sets the
+ * pattern code, clicking a swatch sets the dye ordinal. No dropdowns,
+ * no banner-loom gating, no per-pattern unlock tiers.
  *
- * Vanilla server-side caps shields at 6 pattern layers; we enforce the same
- * limit client-side so an admin can't accidentally build a banner the
- * plugin won't be able to apply.
+ * Vanilla server-side caps shields at 6 pattern layers; we enforce the
+ * same limit client-side so the saved spec is always plugin-applyable.
  */
 const MAX_LAYERS = 6;
+
+// Only show shape tiles for pattern codes that exist in the atlas — the
+// editor previews the shield only, so codes without an atlas column
+// (flw, gus) can't be picked visually here. NBT import still accepts
+// them; this list just gates the visual grid.
+const SHIELD_PATTERN_CODES = BANNER_PATTERNS
+  .map((p) => p.code)
+  .filter((code) => SHIELD_ATLAS_SHAPE_ID[code] != null);
 
 export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) {
   const [spec, setSpec] = useState<BannerSpec>(() => ({
@@ -96,7 +105,7 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
     if (spec.patterns.length >= MAX_LAYERS) return;
     setSpec((s) => ({
       ...s,
-      patterns: [...s.patterns, { color: 0, pattern: BANNER_PATTERNS[0].code }],
+      patterns: [...s.patterns, { color: 0, pattern: SHIELD_PATTERN_CODES[0] }],
     }));
   }
 
@@ -118,22 +127,12 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
     <div className="grid gap-10 md:grid-cols-[1fr_auto]">
       <div className="space-y-8">
         <div>
-          <label htmlFor="banner-base" className="label-mono mb-2 block">
-            Base colour
-          </label>
-          <select
-            id="banner-base"
+          <p className="label-mono mb-3">Base colour</p>
+          <ColorSwatches
             value={spec.baseColor}
             disabled={busy}
-            onChange={(e) => updateBase(Number(e.target.value))}
-            className="input max-w-xs disabled:opacity-50"
-          >
-            {BANNER_COLORS.map((c) => (
-              <option key={c.ordinal} value={c.ordinal}>
-                {c.name} · {c.hex}
-              </option>
-            ))}
-          </select>
+            onChange={updateBase}
+          />
         </div>
 
         <div>
@@ -155,65 +154,60 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
               No patterns. Base colour only.
             </p>
           )}
-          <ul>
+          <ul className="space-y-6">
             {spec.patterns.map((p, idx) => (
               <li
                 key={idx}
-                className="grid grid-cols-[auto_1fr_1.4fr_auto] items-center gap-3 border-t border-[var(--rule)] py-3 first:border-t-0"
+                className="border-t border-[var(--rule)] pt-5 first:border-t-0 first:pt-0"
               >
-                <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--text-faint)] tabular">
-                  {String(idx + 1).padStart(2, '0')}
-                </span>
-                <select
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+                    Layer {String(idx + 1).padStart(2, '0')}
+                    {' · '}
+                    <span className="text-[var(--text-mute)]">{p.pattern}</span>
+                  </span>
+                  <div className="flex items-center gap-3 text-[var(--text-mute)]">
+                    <button
+                      type="button"
+                      onClick={() => moveLayer(idx, -1)}
+                      disabled={busy || idx === 0}
+                      className="hover:text-white disabled:opacity-25"
+                      aria-label="Move up"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveLayer(idx, 1)}
+                      disabled={busy || idx === spec.patterns.length - 1}
+                      className="hover:text-white disabled:opacity-25"
+                      aria-label="Move down"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeLayer(idx)}
+                      disabled={busy}
+                      className="hover:text-white disabled:opacity-25"
+                      aria-label="Remove"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <ColorSwatches
                   value={p.color}
                   disabled={busy}
-                  onChange={(e) => setLayer(idx, { color: Number(e.target.value) })}
-                  className="input py-1.5 text-sm disabled:opacity-50"
-                >
-                  {BANNER_COLORS.map((c) => (
-                    <option key={c.ordinal} value={c.ordinal}>{c.name}</option>
-                  ))}
-                </select>
-                <select
-                  value={p.pattern}
-                  disabled={busy}
-                  onChange={(e) => setLayer(idx, { pattern: e.target.value })}
-                  className="input py-1.5 text-sm disabled:opacity-50"
-                >
-                  {BANNER_PATTERNS.map((pat) => (
-                    <option key={pat.code} value={pat.code}>
-                      {pat.code} — {pat.label}
-                    </option>
-                  ))}
-                </select>
-                <div className="flex items-center gap-2 text-[var(--text-mute)]">
-                  <button
-                    type="button"
-                    onClick={() => moveLayer(idx, -1)}
-                    disabled={busy || idx === 0}
-                    className="hover:text-white disabled:opacity-25"
-                    aria-label="Move up"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveLayer(idx, 1)}
-                    disabled={busy || idx === spec.patterns.length - 1}
-                    className="hover:text-white disabled:opacity-25"
-                    aria-label="Move down"
-                  >
-                    ↓
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeLayer(idx)}
+                  onChange={(v) => setLayer(idx, { color: v })}
+                />
+                <div className="mt-3">
+                  <ShapeGrid
+                    value={p.pattern}
+                    dyeOrdinal={p.color}
                     disabled={busy}
-                    className="hover:text-white disabled:opacity-25"
-                    aria-label="Remove"
-                  >
-                    ✕
-                  </button>
+                    onChange={(code) => setLayer(idx, { pattern: code })}
+                  />
                 </div>
               </li>
             ))}
@@ -248,8 +242,7 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
       </div>
 
       <div className="flex flex-col items-start justify-start gap-6 md:items-center">
-        <BannerPreview spec={spec} width={140} label="Shield" shape="shield" />
-        <BannerPreview spec={spec} width={70} label="Banner block" shape="block" />
+        <BannerPreview spec={spec} width={160} label="Shield" shape="shield" />
       </div>
 
       <div className="md:col-span-2 border-t border-[var(--rule)] pt-6">
@@ -299,8 +292,6 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
         <ImageToBannerCard
           busy={busy}
           onAccept={(converted) => {
-            // Take the converter output verbatim — the algorithm already
-            // caps to MAX_LAYERS, so no extra slicing needed here.
             setSpec(converted);
             setNbtMsg({
               kind: 'ok',
@@ -310,5 +301,160 @@ export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) 
         />
       </div>
     </div>
+  );
+}
+
+/**
+ * 16-cell dye swatch row. Used for both the base-colour and per-layer
+ * colour pickers. Click sets the DyeColor ordinal directly. Grid is
+ * locked to 16 columns via inline `grid-template-columns` because the
+ * default Tailwind grid scale stops at 12.
+ */
+function ColorSwatches({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: number;
+  disabled?: boolean;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div
+      className="grid gap-1"
+      style={{ gridTemplateColumns: 'repeat(16, minmax(0, 1fr))' }}
+    >
+      {BANNER_COLORS.map((c) => {
+        const active = value === c.ordinal;
+        return (
+          <button
+            key={c.ordinal}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(c.ordinal)}
+            title={c.name}
+            aria-label={c.name}
+            aria-pressed={active}
+            className={`aspect-square border transition-colors disabled:opacity-40 ${
+              active
+                ? 'border-white ring-1 ring-white'
+                : 'border-[var(--rule)] hover:border-[var(--rule-strong)]'
+            }`}
+            style={{ backgroundColor: c.hex }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Grid of shape tiles, each one a single (shape × dye) cell out of the
+ * shieldx7.png atlas. The dye colour passed in is the colour the user
+ * already picked for this layer — so every tile previews how the shape
+ * will actually look in that colour, exactly the way minecraft.tools
+ * shows it.
+ */
+function ShapeGrid({
+  value,
+  dyeOrdinal,
+  disabled,
+  onChange,
+}: {
+  value: string;
+  dyeOrdinal: number;
+  disabled?: boolean;
+  onChange: (code: string) => void;
+}) {
+  const TILE_W = 40;
+  return (
+    <div
+      className="grid gap-1"
+      style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${TILE_W}px, 1fr))` }}
+    >
+      {SHIELD_PATTERN_CODES.map((code) => (
+        <ShapeTile
+          key={code}
+          code={code}
+          dyeOrdinal={dyeOrdinal}
+          tileWidth={TILE_W}
+          selected={value === code}
+          disabled={disabled}
+          onClick={() => onChange(code)}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Single atlas-sliced thumbnail of one (shape × dye) combination.
+ * Same math as ShieldSprite but at thumbnail scale — keeps the editor
+ * pickers visually consistent with the big preview on the right.
+ */
+function ShapeTile({
+  code,
+  dyeOrdinal,
+  tileWidth,
+  selected,
+  disabled,
+  onClick,
+}: {
+  code: string;
+  dyeOrdinal: number;
+  tileWidth: number;
+  selected: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  const NATIVE_CELL_W = 84;
+  const NATIVE_CELL_H = 154;
+  const ATLAS_COLS = 42;
+  const ATLAS_ROWS = 16;
+
+  const shapeId = SHIELD_ATLAS_SHAPE_ID[code];
+  if (shapeId == null) return null;
+
+  const scale = tileWidth / NATIVE_CELL_W;
+  const cellW = NATIVE_CELL_W * scale;
+  const cellH = NATIVE_CELL_H * scale;
+  const atlasW = ATLAS_COLS * cellW;
+  const atlasH = ATLAS_ROWS * cellH;
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      title={code}
+      aria-label={code}
+      aria-pressed={selected}
+      className={`relative border transition-colors disabled:opacity-40 ${
+        selected
+          ? 'border-white ring-1 ring-white'
+          : 'border-[var(--rule)] hover:border-[var(--rule-strong)]'
+      }`}
+      style={{
+        width: cellW,
+        height: cellH,
+        // Dark MC-ish backdrop so transparent pattern pixels read against
+        // something instead of bleeding into the page bg.
+        backgroundColor: '#1d1d21',
+        imageRendering: 'pixelated',
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: 'url(/mc/shieldx7.png)',
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: `${atlasW}px ${atlasH}px`,
+          backgroundPosition: `${-shapeId * cellW}px ${-dyeOrdinal * cellH}px`,
+          imageRendering: 'pixelated',
+        }}
+      />
+    </button>
   );
 }
