@@ -153,10 +153,11 @@ export function UploadSection({
       <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_auto]">
         <PlayerCapeView3D
           capeUrl={pngPreview}
-          width={220}
-          height={300}
+          width={260}
+          height={340}
           label="On player"
           view="back"
+          showControls
         />
         <CapePreview
           url={pngPreview}
