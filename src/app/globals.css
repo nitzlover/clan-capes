@@ -378,3 +378,151 @@ canvas.pixelated {
     animation: none !important;
   }
 }
+
+/*
+ * Brutalist B&W shell.
+ *
+ * Layered on top of the monochrome system above — same ink scale, no
+ * accent hue, but with hard borders and offset white shadows to push the
+ * interface into something that looks deliberately blocky and
+ * operator-grade. Used by the dashboard sidebar + content cards. The
+ * editorial chapter rule above still applies in long-form pages.
+ */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  vertical-align: middle;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+.material-symbols-outlined.filled {
+  font-variation-settings: 'FILL' 1;
+}
+
+@layer components {
+  /*
+   * Brutalist card — 2px white border + offset white shadow. The hover
+   * "knock" (translate up-left + bigger shadow) is what the mockups
+   * lean on instead of color/glow to signal interactive surfaces.
+   * Stays B&W per project memory; no accent fill on hover.
+   */
+  .brutal-card {
+    border: 2px solid var(--rule-strong);
+    background: var(--bg-raise);
+    box-shadow: 6px 6px 0 0 rgba(255, 255, 255, 0.10);
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  }
+  .brutal-card.is-interactive:hover,
+  a.brutal-card:hover,
+  button.brutal-card:hover {
+    border-color: var(--ink-50);
+    box-shadow: 9px 9px 0 0 rgba(255, 255, 255, 0.22);
+    transform: translate(-3px, -3px);
+  }
+  .brutal-card.is-flat {
+    box-shadow: none;
+  }
+
+  /* Solid white logo / accent tile — used in the sidebar header. */
+  .brutal-tile {
+    border: 2px solid var(--ink-50);
+    background: var(--ink-50);
+    color: var(--ink-900);
+  }
+
+  /*
+   * Sidebar nav row. Inactive = transparent rule, hover = subtle wash.
+   * Active = inverted slab (white bg, black ink) with a hard shadow
+   * pushed to the right — same "lifted" trick the brutalist mocks use
+   * to mark current page.
+   */
+  .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.62rem 0.85rem;
+    border: 2px solid transparent;
+    color: var(--text-mute);
+    font-family: theme('fontFamily.sans');
+    font-weight: 700;
+    font-size: 0.8125rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease,
+      transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  .nav-link:hover {
+    border-color: var(--rule-strong);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--ink-0);
+  }
+  .nav-link.is-active {
+    background: var(--ink-50);
+    color: var(--ink-900);
+    border-color: var(--ink-50);
+    box-shadow: 4px 4px 0 0 var(--ink-0);
+    transform: translate(-2px, -2px);
+  }
+  .nav-link.is-active:hover {
+    background: var(--ink-0);
+  }
+  .nav-link .material-symbols-outlined {
+    font-size: 20px;
+  }
+
+  /*
+   * Page header band — display heading + optional right-side meta.
+   * Sits at the top of every subroute. The 2px under-rule mirrors the
+   * sidebar's right border so the L-shape reads as one frame.
+   */
+  .page-band {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 2px solid var(--rule-strong);
+    margin-bottom: 2.5rem;
+  }
+  .page-title {
+    font-family: theme('fontFamily.sans');
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 0.95;
+    text-transform: uppercase;
+    font-size: clamp(2rem, 4vw + 0.5rem, 3.25rem);
+    color: var(--ink-0);
+  }
+  .page-subtitle {
+    margin-top: 0.5rem;
+    color: var(--text-mute);
+    font-size: 0.875rem;
+    max-width: 60ch;
+  }
+
+  /* Inline meta tag with hard border — used in the page band. */
+  .meta-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.32rem 0.6rem;
+    border: 2px solid var(--rule-strong);
+    font-family: theme('fontFamily.mono');
+    font-size: 0.6875rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+    background: var(--bg-raise);
+  }
+}

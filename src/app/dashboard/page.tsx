@@ -1,300 +1,197 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { BannerSection } from '@/components/BannerSection';
-import { PlayerCapeView3D } from '@/components/PlayerCapeView3D';
-import { UploadSection } from '@/components/UploadSection';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { api, type ClanRow, UnauthorizedError } from '@/lib/api';
 import { PluginStatus } from '@/components/PluginStatus';
-import { api, type ClanRow, getToken, UnauthorizedError } from '@/lib/api';
 
 type AuditEntry = { timestamp: string; raw: string };
 
 /**
- * Dashboard — monochrome modern.
+ * Overview — the top of the brutalist shell.
  *
- * No card grid, no nested panels. Each operational area is a "chapter":
- * a thin 1px top rule, a small mono eyebrow, a display headline, and the
- * controls below. Sections breathe vertically — spacing carries the
- * hierarchy that color and surface chrome would carry in a coloured
- * brand interface.
- *
- * The clan list is a typographic table-style rail (rows separated by
- * rules), not a wall of cards. Audit log is the same rail in monospace.
+ * Cards summarise how many clans are registered, how many have capes
+ * applied, and the size of the audit trail. Below the cards a 5-line
+ * audit preview hints at recent activity; clicking through goes to the
+ * full audit route. No editing happens here — this is a one-glance
+ * status surface.
  */
-export default function DashboardPage() {
-  const router = useRouter();
+export default function DashboardOverviewPage() {
   const [clans, setClans] = useState<ClanRow[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
-  const [tag, setTag] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [message, setMessage] = useState('');
-  const [optionsRefresh, setOptionsRefresh] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    if (!getToken()) {
-      router.replace('/');
-      return;
-    }
-    try {
-      const clanRes = await api<{ clans: ClanRow[] }>('/panel/clans');
-      setClans(clanRes.clans);
-    } catch (e) {
-      if (e instanceof UnauthorizedError) {
-        // Central handler below also fires on the global event — bail
-        // here so we don't continue loading the audit endpoint.
-        return;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const c = await api<{ clans: ClanRow[] }>('/panel/clans');
+        if (!cancelled) setClans(c.clans);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) return;
       }
-      setClans([]);
-    }
-    try {
-      const auditRes = await api<{ entries: AuditEntry[] }>('/panel/audit');
-      setAudit(auditRes.entries);
-    } catch (e) {
-      if (e instanceof UnauthorizedError) return;
-      setAudit([]);
-    }
-    setLoading(false);
-  }, [router]);
+      try {
+        const a = await api<{ entries: AuditEntry[] }>('/panel/audit');
+        if (!cancelled) setAudit(a.entries);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) return;
+      }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  // Any component anywhere in the dashboard tree that hits a 401 throws
-  // an UnauthorizedError which fires this global event from a single
-  // place (api.ts). One listener, one redirect — no race between the
-  // dashboard, UploadSection and BannerSection all trying to redirect
-  // independently.
-  useEffect(() => {
-    function onUnauthorized() {
-      router.replace('/');
-    }
-    window.addEventListener('clancapes:unauthorized', onUnauthorized);
-    return () => window.removeEventListener('clancapes:unauthorized', onUnauthorized);
-  }, [router]);
-
-  useEffect(() => {
-    if (!file) {
-      setPreview(null);
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
-
-  async function uploadPng(e: React.FormEvent) {
-    e.preventDefault();
-    if (!tag || !file) return;
-    setMessage('');
-    const fd = new FormData();
-    fd.append('cape', file);
-    const token = getToken();
-    const res = await fetch(`/api/panel/clans/${tag.toUpperCase()}/cape`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: fd,
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      setMessage((err as { error?: string }).error ?? 'Upload failed');
-      return;
-    }
-    setMessage('PNG cape uploaded');
-    setTag('');
-    setFile(null);
-    setOptionsRefresh((n) => n + 1);
-    load();
-  }
-
-  async function removeCape(clanTag: string) {
-    if (!confirm(`Remove cape for ${clanTag}?`)) return;
-    await api(`/panel/clans/${clanTag}/cape`, { method: 'DELETE' });
-    load();
-  }
-
-  function logout() {
-    localStorage.removeItem('clancapes_token');
-    router.replace('/');
-  }
-
-  if (loading) {
-    return (
-      <main className="min-h-[100dvh] bg-[var(--bg)] px-6 py-12 text-[var(--text-mute)]">
-        <p className="eyebrow">Loading…</p>
-      </main>
-    );
-  }
+  const withCape = clans.filter((c) => c.capeUrl).length;
 
   return (
-    <main className="min-h-[100dvh] bg-[var(--bg)] text-[var(--text)]">
-      {/* Top rail. */}
-      <header className="sticky top-0 z-20 flex items-center justify-between border-b border-[var(--rule)] bg-[var(--bg)]/95 px-6 py-4 backdrop-blur-sm sm:px-10">
-        <div className="flex items-baseline gap-6">
-          <span className="font-mono text-[11px] uppercase tracking-[0.32em] text-white">
-            Clan / Capes
-          </span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
-            Dashboard
-          </span>
+    <div>
+      <div className="page-band">
+        <div>
+          <h1 className="page-title">Overview</h1>
+          <p className="page-subtitle">
+            Live counters across clans, capes, and the operator trail.
+          </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <span className="meta-tag">
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+              shield_lock
+            </span>
+            Plugin
+          </span>
           <PluginStatus />
-          <button onClick={logout} className="btn-danger-link">
-            Sign out
-          </button>
         </div>
-      </header>
+      </div>
 
-      <div className="mx-auto max-w-6xl px-6 pb-24 sm:px-10">
-        {/* Hero / overview chapter. */}
-        <section className="py-16">
-          <p className="eyebrow reveal-eyebrow">Overview</p>
-          <h1 className="display reveal mt-5" style={{ animationDelay: '40ms' }}>
-            Capes, banners, audit —
-            <br />
-            <span className="text-[var(--text-faint)]">one operator surface.</span>
-          </h1>
-          <div className="reveal mt-10 grid grid-cols-2 gap-x-12 gap-y-6 sm:grid-cols-4 sm:max-w-3xl" style={{ animationDelay: '140ms' }}>
-            <Metric label="Clans" value={clans.length} />
-            <Metric label="With cape" value={clans.filter((c) => c.capeUrl).length} />
-            <Metric label="Audit lines" value={audit.length} />
-            <Metric
-              label="Plugin"
-              value={<span className="text-white">live</span>}
-              suffix="status above"
+      {loading ? (
+        <p className="eyebrow">Loading…</p>
+      ) : (
+        <>
+          <div className="grid gap-6 md:grid-cols-3">
+            <MetricCard
+              label="Clans"
+              value={clans.length}
+              icon="groups"
+              hint="PowerClans roster"
+            />
+            <MetricCard
+              label="With cape"
+              value={withCape}
+              icon="image"
+              hint={`${clans.length - withCape} pending`}
+            />
+            <MetricCard
+              label="Audit lines"
+              value={audit.length}
+              icon="receipt_long"
+              hint="Operator log"
             />
           </div>
-        </section>
 
-        {/* Cape upload chapter. */}
-        <section className="chapter reveal" style={{ animationDelay: '60ms' }}>
-          <div className="chapter-head">
-            <p className="eyebrow">01 — Cape</p>
-            <h2 className="display">Upload PNG per clan.</h2>
+          <div className="mt-12 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+            <RecentAuditCard entries={audit.slice(0, 6)} />
+            <QuickLinksCard />
           </div>
-          <UploadSection
-            tag={tag}
-            onTagChange={setTag}
-            file={file}
-            onFileChange={setFile}
-            pngPreview={preview}
-            onPngUpload={uploadPng}
-            message={message}
-            optionsRefresh={optionsRefresh}
-          />
-        </section>
-
-        {/* Clan roster chapter. */}
-        <section className="chapter reveal mt-16" style={{ animationDelay: '120ms' }}>
-          <div className="chapter-head">
-            <p className="eyebrow">02 — Roster</p>
-            <h2 className="display">
-              Clans <span className="text-[var(--text-faint)] tabular">·{' '}
-              {String(clans.length).padStart(2, '0')}
-              </span>
-            </h2>
-          </div>
-
-          {clans.length === 0 ? (
-            <p className="py-8 text-sm text-[var(--text-mute)]">
-              No clans with capes yet.
-            </p>
-          ) : (
-            <ul className="mt-2">
-              {clans.map((c) => (
-                <li
-                  key={c.tag}
-                  className="group grid grid-cols-[110px_1fr_auto] items-center gap-6 border-t border-[var(--rule)] py-5 transition-colors first:border-t-0 hover:bg-white/[0.02]"
-                >
-                  <PlayerCapeView3D
-                    capeUrl={c.capeUrl}
-                    width={100}
-                    height={150}
-                    view="back"
-                  />
-                  <div className="min-w-0">
-                    <div className="font-mono text-base font-semibold tracking-wider text-white">
-                      {c.tag}
-                    </div>
-                    <div className="mt-1 truncate font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-                      {c.capeUrl || 'no cape'}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => removeCape(c.tag)}
-                    className="btn-danger-link"
-                  >
-                    Delete
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* Banners chapter. */}
-        <section className="chapter reveal mt-16" style={{ animationDelay: '180ms' }}>
-          <div className="chapter-head">
-            <p className="eyebrow">03 — Shield banners</p>
-            <h2 className="display">Per-clan crest.</h2>
-          </div>
-          <BannerSection />
-        </section>
-
-        {/* Audit chapter. */}
-        <section className="chapter reveal mt-16" style={{ animationDelay: '240ms' }}>
-          <div className="chapter-head">
-            <p className="eyebrow">04 — Audit</p>
-            <h2 className="display">Operator trail.</h2>
-          </div>
-          <ul className="max-h-72 overflow-y-auto font-mono text-[11px] text-[var(--text-mute)]">
-            {audit.map((a, i) => (
-              <li
-                key={i}
-                className="grid grid-cols-[auto_1fr] gap-4 border-t border-[var(--rule)] py-2 first:border-t-0"
-              >
-                <span className="text-[var(--text-faint)] tabular">
-                  {a.timestamp}
-                </span>
-                <span className="truncate text-[var(--text-soft)]">{a.raw}</span>
-              </li>
-            ))}
-            {audit.length === 0 && (
-              <li className="py-6 text-[var(--text-faint)]">No entries.</li>
-            )}
-          </ul>
-        </section>
-      </div>
-    </main>
+        </>
+      )}
+    </div>
   );
 }
 
-function Metric({
+function MetricCard({
   label,
   value,
-  suffix,
+  icon,
+  hint,
 }: {
   label: string;
-  value: React.ReactNode;
-  suffix?: string;
+  value: number | string;
+  icon: string;
+  hint?: string;
 }) {
   return (
-    <div>
-      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
-        {label}
-      </p>
-      <p className="mt-2 font-sans text-3xl font-bold tabular text-white">
-        {value}
-      </p>
-      {suffix && (
-        <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-          {suffix}
+    <div className="brutal-card flex items-start gap-5 p-6">
+      <div className="brutal-tile flex aspect-square h-12 w-12 shrink-0 items-center justify-center">
+        <span className="material-symbols-outlined">{icon}</span>
+      </div>
+      <div className="min-w-0">
+        <p className="label-mono">{label}</p>
+        <p className="mt-2 font-sans text-5xl font-extrabold tabular leading-none text-white">
+          {typeof value === 'number' ? String(value).padStart(2, '0') : value}
         </p>
+        {hint && (
+          <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-faint)]">
+            {hint}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RecentAuditCard({ entries }: { entries: AuditEntry[] }) {
+  return (
+    <div className="brutal-card flex flex-col p-6">
+      <div className="mb-4 flex items-center justify-between">
+        <span className="label-mono">Recent activity</span>
+        <Link
+          href="/dashboard/audit"
+          className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-mute)] underline-offset-4 hover:text-white hover:underline"
+        >
+          full trail →
+        </Link>
+      </div>
+      {entries.length === 0 ? (
+        <p className="py-2 text-sm text-[var(--text-faint)]">No entries yet.</p>
+      ) : (
+        <ul className="flex flex-col">
+          {entries.map((a, i) => (
+            <li
+              key={i}
+              className="grid grid-cols-[auto_1fr] gap-4 border-t border-[var(--rule)] py-2 first:border-t-0 font-mono text-[11px]"
+            >
+              <span className="text-[var(--text-faint)] tabular">{a.timestamp}</span>
+              <span className="truncate text-[var(--text-soft)]">{a.raw}</span>
+            </li>
+          ))}
+        </ul>
       )}
+    </div>
+  );
+}
+
+function QuickLinksCard() {
+  const links: Array<{ href: string; label: string; icon: string; hint: string }> = [
+    { href: '/dashboard/capes', label: 'Upload cape', icon: 'upload', hint: 'PNG → clan' },
+    { href: '/dashboard/banners', label: 'Edit banner', icon: 'shield', hint: 'Per-clan crest' },
+    { href: '/dashboard/audit', label: 'View audit', icon: 'receipt_long', hint: 'Full trail' },
+  ];
+  return (
+    <div className="brutal-card flex flex-col p-6">
+      <span className="label-mono mb-4 block">Jump to</span>
+      <div className="flex flex-col gap-3">
+        {links.map((l) => (
+          <Link
+            key={l.href}
+            href={l.href}
+            className="group flex items-center justify-between border border-[var(--rule)] px-4 py-3 transition-colors hover:border-white hover:bg-white/[0.04]"
+          >
+            <span className="flex items-center gap-3">
+              <span className="material-symbols-outlined text-[var(--text-soft)] group-hover:text-white">
+                {l.icon}
+              </span>
+              <span className="font-sans text-sm font-bold uppercase tracking-wider text-white">
+                {l.label}
+              </span>
+            </span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)] group-hover:text-white">
+              {l.hint} →
+            </span>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
