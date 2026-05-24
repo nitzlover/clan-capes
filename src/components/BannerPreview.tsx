@@ -3,7 +3,7 @@
 import {
   BANNER_COLORS,
   PATTERN_PREVIEW_FALLBACK,
-  SHIELD_PATTERN_FILE,
+  SHIELD_ATLAS_SHAPE_ID,
   type BannerSpec,
   colorForOrdinal,
 } from '@/lib/banners';
@@ -16,18 +16,6 @@ function maskUrlFor(code: string): string {
   // correctly server-side.
   const target = PATTERN_PREVIEW_FALLBACK[code] ?? code;
   return `/banner/patterns/${target}.png`;
-}
-
-/**
- * Shield-specific pattern mask. These come from the vanilla
- * entity/shield/ atlas (1.21 textures pack) and are already projected
- * onto the shield's 3D front-face UVs — using them gives an exact
- * in-game appearance, not a flat banner cropped to a shield rectangle.
- * Returns null when the code has no shield mapping (no layer drawn).
- */
-function shieldMaskUrlFor(code: string): string | null {
-  const file = SHIELD_PATTERN_FILE[code];
-  return file ? `/mc/shield-patterns/${file}.png` : null;
 }
 
 type Props = {
@@ -125,10 +113,13 @@ export function BannerPreview({
       <ShieldSprite
         width={width}
         baseHex={base.hex}
-        patterns={safe.patterns.map((p) => ({
-          color: colorForOrdinal(p.color).hex,
-          maskUrl: shieldMaskUrlFor(p.pattern),
-        }))}
+        baseOrdinal={safe.baseColor}
+        layers={safe.patterns
+          .map((p) => ({
+            colorOrdinal: p.color,
+            shapeId: SHIELD_ATLAS_SHAPE_ID[p.pattern] ?? null,
+          }))
+          .filter((l): l is { colorOrdinal: number; shapeId: number } => l.shapeId !== null)}
       />
     ) : shape === 'block' ? (
       <BannerBlockSprite width={width} height={h} baseHex={base.hex}>
@@ -170,177 +161,109 @@ export function BannerPreview({
 }
 
 /**
- * Vanilla shield with iron rim, wood backing, banner cloth and grip
- * stub — rendered to match the in-game item icon, not the raw entity
- * texture atlas.
+ * Shield preview rendered via minecraft.tools' pre-baked sprite atlas.
  *
- * `shield_base_nopattern.png` (64×32) only contains the WOOD front
- * face in its top-left 12×22 block — the iron rim around the in-game
- * shield is geometry on the side faces of the 3D model, never painted
- * onto the front-face crop. Our previous version naively cropped that
- * block and shipped it as the whole shield, which is why the result
- * looked like a wooden plank with a banner stuck on it.
+ * Approach mirrors what minecraft.tools/en/shield.php ships:
+ *   - One 3528×2464 PNG (`/public/mc/shieldx7.png`) holding every
+ *     (pattern × dye-colour) combination at 84×154 per cell, laid out
+ *     42 columns (shape_id) × 16 rows (colour, inverted so row 0 =
+ *     WHITE / DyeColor 15 and row 15 = BLACK / DyeColor 0).
+ *   - One 84×154 shadow PNG (`/public/mc/shield-shadow-x7.png`) that
+ *     bakes the iron rim, the grip stub and the cloth window's alpha.
  *
- * This version frames a 14×24 outer container, insets the wood front
- * by 1px on each side, lays the banner cloth across the
- * 10×20 cloth UV window inside the wood (x=1..10, y=2..21), and adds
- * a small grip stub poking out on the right. Iron is drawn as a CSS
- * gradient with a slight diagonal highlight so the rim reads as
- * polished metal at any scale.
+ * For each layer we render a nested div with:
+ *   background-image: shieldx7.png
+ *   background-position: -(shape_id × cellW)px  -(dyeOrdinal × cellH)px
+ *
+ * The `.shield-big` outer container also takes the BASE colour as
+ * `background-color`. That colour bleeds through the cloth area of
+ * every layer because pattern cells include alpha — so a shield with
+ * a black base and a red rhombus pattern renders exactly the way
+ * Minecraft would paint it: black cloth where no pattern is set, red
+ * pixels where the rhombus mask is opaque, iron rim baked into the
+ * shadow on top.
+ *
+ * Position math is identical to minecraft.tools' `get_position()`:
+ * after inverting their UI colour id back to DyeColor ordinal the X
+ * becomes shapeId × cellW and the Y becomes dyeOrdinal × cellH.
  */
 function ShieldSprite({
   width,
   baseHex,
-  patterns,
+  baseOrdinal,
+  layers,
 }: {
   width: number;
   baseHex: string;
-  patterns: Array<{ color: string; maskUrl: string | null }>;
+  baseOrdinal: number;
+  layers: Array<{ colorOrdinal: number; shapeId: number }>;
 }) {
-  // Outer shield silhouette = 14 native px wide × 24 native px tall:
-  // a 12×22 wood front face + 1 px of iron rim on every side. We use
-  // the user-supplied width as the outer width and derive everything
-  // else from it so the proportions stay locked.
-  const scale = width / 14;
-  const outerW = width;
-  const outerH = 24 * scale;
+  // The native atlas is 84 × 154 per cell — that's minecraft.tools' "big"
+  // size. We scale everything proportionally to whatever width the parent
+  // asked for so the same atlas drives the editor preview, the clan
+  // thumbnail and any other call site without resampling.
+  const NATIVE_CELL_W = 84;
+  const NATIVE_CELL_H = 154;
+  const ATLAS_COLS = 42;
+  const ATLAS_ROWS = 16;
 
-  // The vanilla shield atlas (`shield_base_nopattern.png`,
-  // `shield/<pattern>.png`) is 64×64 px. The shield model JSON places
-  // the FRONT-FACE UV at (3.5, 0.25)..(6.5, 5.75) in 16-unit space,
-  // which in pixels is (14, 1)..(26, 23). So when we drop a 12×22
-  // wood front into our DOM, the atlas behind it needs to be scaled
-  // up so that one atlas pixel = one wood pixel (so the front-face
-  // crop renders 1:1), and shifted left/up by 14 / 1 atlas pixels so
-  // the top-left of the crop lines up with the top-left of the wood
-  // div.
-  const woodW = 12 * scale;
-  const woodH = 22 * scale;
-  const woodLeft = 1 * scale;
-  const woodTop = 1 * scale;
-  const atlasW = 64 * scale;
-  const atlasH = 64 * scale;
-  const atlasOffX = -14 * scale;
-  const atlasOffY = -1 * scale;
+  const scale = width / NATIVE_CELL_W;
+  const cellW = NATIVE_CELL_W * scale;
+  const cellH = NATIVE_CELL_H * scale;
+  const atlasW = ATLAS_COLS * cellW;
+  const atlasH = ATLAS_ROWS * cellH;
 
-  const ironLight = '#c8c8c8';
-  const ironMid = '#8e8e8e';
-  const ironDark = '#5b5b5b';
-  const ironShadow = '#2a2a2a';
+  const posFor = (shapeId: number, dyeOrdinal: number) =>
+    `${-shapeId * cellW}px ${-dyeOrdinal * cellH}px`;
 
   return (
     <div
       style={{
         position: 'relative',
-        width: outerW,
-        height: outerH,
+        width: cellW,
+        height: cellH,
+        backgroundColor: baseHex,
         imageRendering: 'pixelated',
         filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.45))',
       }}
     >
-      {/* Grip stub — drawn first, peeks out behind the right edge. */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          right: `${-2 * scale}px`,
-          top: `${8 * scale}px`,
-          width: `${3 * scale}px`,
-          height: `${8 * scale}px`,
-          background: `linear-gradient(90deg, ${ironMid} 0%, ${ironDark} 60%, ${ironShadow} 100%)`,
-          boxShadow: `inset 1px 0 0 ${ironLight}, inset -1px 0 0 ${ironShadow}`,
-        }}
-      />
-
-      {/* Iron rim — outer rectangle filled with a polished-metal gradient. */}
+      {/* Each pattern layer — nested div with the atlas sliced to the
+          right (shape, colour) cell. base colour shows through wherever
+          the cell's pattern is transparent. */}
+      {layers.map((l, idx) => (
+        <div
+          key={idx}
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: 'url(/mc/shieldx7.png)',
+            backgroundRepeat: 'no-repeat',
+            backgroundSize: `${atlasW}px ${atlasH}px`,
+            backgroundPosition: posFor(l.shapeId, l.colorOrdinal),
+            imageRendering: 'pixelated',
+          }}
+        />
+      ))}
+      {/* Shadow — bakes the iron rim, the grip-stub silhouette and the
+          inner cloth-edge shading the way the in-game item icon shows
+          them. Drawn last so it sits on top of every pattern layer. */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
           inset: 0,
-          background: `linear-gradient(180deg, ${ironLight} 0%, ${ironMid} 30%, ${ironMid} 70%, ${ironDark} 100%)`,
-          boxShadow: `inset 0 0 0 ${Math.max(1, scale * 0.4)}px ${ironShadow}`,
+          backgroundImage: 'url(/mc/shield-shadow-x7.png)',
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: `${cellW}px ${cellH}px`,
+          backgroundPosition: '0 0',
+          imageRendering: 'pixelated',
         }}
       />
-
-      {/* Front face zone — 12×22 native px. Holds the vanilla wood
-          backing, the base-coloured cloth (also pulled from the vanilla
-          shield/base atlas), and the pattern layers (each using the
-          matching vanilla shield/<pattern> atlas as its mask).
-
-          Every layer shares the same atlas-sized background-/mask-size
-          and the same (-14, -1) atlas-pixel offset, so the wood, the
-          cloth, and every pattern composite pixel-for-pixel exactly the
-          way the MC client paints them. */}
-      <div
-        style={{
-          position: 'absolute',
-          left: woodLeft,
-          top: woodTop,
-          width: woodW,
-          height: woodH,
-          imageRendering: 'pixelated',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Wood backing — shield_base_nopattern.png 12×22 front face. */}
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundImage: 'url(/mc/shield_base_nopattern.png)',
-            backgroundRepeat: 'no-repeat',
-            backgroundSize: `${atlasW}px ${atlasH}px`,
-            backgroundPosition: `${atlasOffX}px ${atlasOffY}px`,
-            imageRendering: 'pixelated',
-          }}
-        />
-        {/* Cloth — vanilla shield/base.png as the alpha mask so the
-            cloth lands exactly on the same pixels the MC client paints. */}
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundColor: baseHex,
-            WebkitMaskImage: 'url(/mc/shield-patterns/base.png)',
-            maskImage: 'url(/mc/shield-patterns/base.png)',
-            WebkitMaskSize: `${atlasW}px ${atlasH}px`,
-            maskSize: `${atlasW}px ${atlasH}px`,
-            WebkitMaskPosition: `${atlasOffX}px ${atlasOffY}px`,
-            maskPosition: `${atlasOffX}px ${atlasOffY}px`,
-            WebkitMaskRepeat: 'no-repeat',
-            maskRepeat: 'no-repeat',
-            imageRendering: 'pixelated',
-          }}
-        />
-        {/* Pattern layers — each rendered with the same atlas geometry
-            so the projection lines up with everything else. */}
-        {patterns.map((p, idx) => {
-          if (!p.maskUrl) return null;
-          return (
-            <div
-              key={idx}
-              aria-hidden
-              style={{
-                position: 'absolute',
-                inset: 0,
-                backgroundColor: p.color,
-                WebkitMaskImage: `url(${p.maskUrl})`,
-                maskImage: `url(${p.maskUrl})`,
-                WebkitMaskSize: `${atlasW}px ${atlasH}px`,
-                maskSize: `${atlasW}px ${atlasH}px`,
-                WebkitMaskPosition: `${atlasOffX}px ${atlasOffY}px`,
-                maskPosition: `${atlasOffX}px ${atlasOffY}px`,
-                WebkitMaskRepeat: 'no-repeat',
-                maskRepeat: 'no-repeat',
-                imageRendering: 'pixelated',
-              }}
-            />
-          );
-        })}
-      </div>
+      {/* baseOrdinal is captured purely for hierarchy / debugging — the
+          base colour itself is already painted via the container's
+          background-color above. */}
+      <span hidden>{baseOrdinal}</span>
     </div>
   );
 }

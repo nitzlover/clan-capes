@@ -124,6 +124,69 @@ export const PATTERN_PREVIEW_FALLBACK: Record<string, string> = {
  * The map mirrors the plugin's `BannerPatternCodes` resolver so what
  * the editor previews matches what the plugin actually applies.
  */
+/**
+ * Short code → shape column index inside the minecraft.tools shield
+ * atlas (`/public/mc/shieldx7.png`, 42 columns × 16 rows, 84×154 px
+ * per cell). The atlas itself is a verbatim copy of minecraft.tools'
+ * pre-rendered sprite sheet — column N holds the pattern they call
+ * shape `N`. We map each of our short codes onto the column whose
+ * pattern visually matches the label the user sees in the editor.
+ *
+ * `null` means the code has no entry in the atlas (atlas is locked to
+ * the 41 patterns shipped on minecraft.tools — `flw`, `gus` aren't on
+ * it). Those layers skip rendering on the shield preview.
+ *
+ * Source: scraped from minecraft.tools' /give command output by
+ * iterating shape_id 0..40, see the project README for the procedure.
+ */
+export const SHIELD_ATLAS_SHAPE_ID: Record<string, number | null> = {
+  bo: 26,
+  bri: 28,
+  bt: 21,
+  bts: 24,
+  cbo: 25,
+  cr: 17,
+  cra: 30,
+  cre: 30,
+  cs: 11,
+  dls: 15,
+  drs: 16,
+  flo: 32,
+  flw: null,
+  glb: 39,
+  gra: 29,
+  gru: 36,
+  gus: null,
+  hh: 6,
+  hhb: 37,
+  ld: 18,
+  lud: 34,
+  mc: 1,
+  moj: 33,
+  mr: 22,
+  ms: 13,
+  msb: 13,
+  mss: 27,
+  pig: 40,
+  rd: 35,
+  rs: 12,
+  rud: 19,
+  sbl: 2,
+  sbr: 3,
+  sc: 4,
+  sku: 31,
+  ss: 14,
+  stl: 4,
+  str: 5,
+  tl: 8,
+  tr: 20,
+  ts: 10,
+  tt: 20,
+  tts: 23,
+  vh: 9,
+  vhr: 38,
+};
+
 export const SHIELD_PATTERN_FILE: Record<string, string> = {
   b: 'base',
   bo: 'border',
