@@ -127,6 +127,7 @@ export default function ServersPage() {
               <thead>
                 <tr className="border-b border-[var(--rule)]">
                   <Th>Name</Th>
+                  <Th>Status</Th>
                   <Th>Created</Th>
                   <Th>Last seen</Th>
                   <Th align="right">Actions</Th>
@@ -139,6 +140,9 @@ export default function ServersPage() {
                       <span className="font-sans text-sm font-extrabold uppercase tracking-wider text-white">
                         {s.name}
                       </span>
+                    </Td>
+                    <Td>
+                      <StatusPill lastSeenAt={s.lastSeenAt} />
                     </Td>
                     <Td>
                       <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--text-soft)]">
@@ -189,6 +193,40 @@ export default function ServersPage() {
         <RevealModal data={revealed} onClose={() => setRevealed(null)} />
       )}
     </div>
+  );
+}
+
+/**
+ * Status pill driven by the heartbeat freshness window. Anything seen
+ * inside the last 10 minutes counts as online — the plugin pings every
+ * 5 by default, so a single missed beat still reads as healthy. Past
+ * 30 minutes we call it stale; older than 24h or never seen drops to
+ * the offline state.
+ */
+function StatusPill({ lastSeenAt }: { lastSeenAt: string | null }) {
+  if (!lastSeenAt) {
+    return (
+      <span className="meta-tag" title="No heartbeat received yet">
+        <span className="status-dot" aria-hidden /> never
+      </span>
+    );
+  }
+  const ageMs = Date.now() - new Date(lastSeenAt).getTime();
+  const minutes = ageMs / 60_000;
+  let label = 'online';
+  let cls = 'status-pill ok';
+  if (minutes > 30) {
+    label = 'offline';
+    cls = 'status-pill bad';
+  } else if (minutes > 10) {
+    label = 'stale';
+    cls = 'status-pill';
+  }
+  return (
+    <span className={cls} title={`Last heartbeat ${Math.round(minutes)} min ago`}>
+      <span className="status-dot" aria-hidden />
+      {label}
+    </span>
   );
 }
 
