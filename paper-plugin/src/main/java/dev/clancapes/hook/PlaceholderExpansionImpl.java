@@ -1,12 +1,22 @@
 package dev.clancapes.hook;
 
 import dev.clancapes.ClanCapesPlugin;
+import dev.clancapes.clan.Clan;
+import dev.clancapes.clan.ClanMember;
+import dev.clancapes.clan.ClanRepository;
 import dev.clancapes.service.CapeService;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Optional;
+
 /**
+ * PlaceholderAPI expansion — exposes both legacy cape placeholders
+ * (cape_url, updated_at) and the Phase 2 clan-system placeholders
+ * (tag, name, color, role, members) backed by the panel-driven
+ * {@link ClanRepository}.
+ *
  * Loaded only when PlaceholderAPI is on the server classpath at runtime.
  */
 public final class PlaceholderExpansionImpl extends PlaceholderExpansion {
@@ -43,13 +53,76 @@ public final class PlaceholderExpansionImpl extends PlaceholderExpansion {
         if (player == null) {
             return "";
         }
+        String key = params.toLowerCase();
+
+        // Cape placeholders (unchanged from Phase 1).
         var dto = capeService.resolvePlayer(player.getUniqueId());
-        return switch (params.toLowerCase()) {
-            case "has_cape" -> String.valueOf(dto.hasCape());
-            case "cape_url" -> dto.capeUrl() != null ? dto.capeUrl() : "";
-            case "clan" -> dto.clan() != null ? dto.clan() : "";
-            case "updated_at" -> String.valueOf(dto.updatedAt());
+        switch (key) {
+            case "has_cape": return String.valueOf(dto.hasCape());
+            case "cape_url": return dto.capeUrl() != null ? dto.capeUrl() : "";
+            case "updated_at": return String.valueOf(dto.updatedAt());
+            default:
+                // Fall through to clan placeholders below.
+        }
+
+        // Clan placeholders — backed by ClanRepository when configured,
+        // otherwise fall back to the legacy capeService cape DTO so
+        // %clancapes_clan% keeps returning the PowerClans-resolved tag
+        // for servers that haven't migrated yet.
+        ClanRepository repo = plugin.getClanRepository();
+        Optional<Clan> clanOpt =
+                repo != null ? repo.byPlayer(player.getUniqueId()) : Optional.empty();
+        Clan clan = clanOpt.orElse(null);
+
+        return switch (key) {
+            case "clan", "tag" ->
+                    clan != null ? clan.tag() : (dto.clan() != null ? dto.clan() : "");
+            case "name" -> clan != null ? clan.name() : "";
+            case "color", "colour", "color_hex" ->
+                    clan != null ? clan.colorHex() : "";
+            case "color_prefix" ->
+                    // Convenience: "[TAG] " in the clan's color, formatted
+                    // for legacy &-codes so chat plugins that don't speak
+                    // Adventure still render it. Falls back to plain "[TAG] "
+                    // when no color is set.
+                    clan != null
+                            ? "§x" + hexLegacy(clan.colorHex()) + "[" + clan.tag() + "]§r "
+                            : "";
+            case "role" -> roleFor(clan, player);
+            case "members" -> clan != null ? String.valueOf(clan.members().size()) : "0";
+            case "is_leader" -> String.valueOf(
+                    clan != null && clan.leaderUuid().equals(player.getUniqueId()));
+            case "is_deputy" -> {
+                if (clan == null) yield "false";
+                yield clan.members().stream()
+                        .anyMatch(m -> m.playerUuid().equals(player.getUniqueId())
+                                && m.role() == ClanMember.Role.DEPUTY)
+                        ? "true" : "false";
+            }
             default -> null;
         };
+    }
+
+    private static String roleFor(Clan clan, OfflinePlayer player) {
+        if (clan == null) return "";
+        for (ClanMember m : clan.members()) {
+            if (m.playerUuid().equals(player.getUniqueId())) {
+                return m.role().name().toLowerCase();
+            }
+        }
+        return "";
+    }
+
+    /**
+     * Convert "#RRGGBB" to Minecraft's legacy hex-color format
+     * "§x§R§R§G§G§B§B" without the leading "§x" (callers prefix it).
+     */
+    private static String hexLegacy(String hex) {
+        if (hex == null || hex.length() != 7) return "ffffff";
+        StringBuilder b = new StringBuilder();
+        for (int i = 1; i < 7; i++) {
+            b.append('§').append(hex.charAt(i));
+        }
+        return b.toString();
     }
 }

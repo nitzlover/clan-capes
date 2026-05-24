@@ -2,7 +2,10 @@ package dev.clancapes;
 
 import dev.clancapes.api.RestApiServer;
 import dev.clancapes.clan.ClanRepository;
+import dev.clancapes.clan.ClanTeamManager;
+import dev.clancapes.clan.PendingInvites;
 import dev.clancapes.command.ClanCapeCommand;
+import dev.clancapes.command.ClanCommand;
 import dev.clancapes.config.PluginConfig;
 import dev.clancapes.hook.PowerClansHook;
 import dev.clancapes.hook.PlaceholderHook;
@@ -29,6 +32,8 @@ public final class ClanCapesPlugin extends JavaPlugin {
     private PlaceholderHook placeholderHook;
     private HeartbeatTask heartbeatTask;
     private ClanRepository clanRepository;
+    private ClanTeamManager clanTeamManager;
+    private PendingInvites pendingInvites;
     private BukkitTask clanRefreshTask;
 
     @Override
@@ -76,18 +81,36 @@ public final class ClanCapesPlugin extends JavaPlugin {
         heartbeatTask = new HeartbeatTask(this);
         heartbeatTask.start();
 
-        // Bootstrap the clan repository — initial async pull off the
-        // panel, then a quiet 5-minute schedule to keep the in-memory
-        // cache in sync. Both no-op when the panel block isn't
-        // configured; the repository simply stays empty until the
-        // operator runs /clancape setup + link.
+        // Bootstrap the clan repository + team manager. Repository pulls
+        // the full clan list off the panel; team manager mirrors that
+        // into vanilla scoreboard teams (one per clan) so nametag +
+        // TAB prefixes paint themselves without packet magic. Both
+        // no-op while the panel block is empty.
         clanRepository = new ClanRepository(this);
-        clanRepository.refreshAsync(null);
+        clanTeamManager = new ClanTeamManager(this);
+        pendingInvites = new PendingInvites();
+
+        Runnable syncTeamsOnMain = () ->
+                getServer().getScheduler().runTask(this, () -> clanTeamManager.sync());
+        clanRepository.refreshAsync(syncTeamsOnMain);
         clanRefreshTask = getServer().getScheduler().runTaskTimerAsynchronously(
                 this,
-                () -> clanRepository.refreshAsync(null),
+                () -> clanRepository.refreshAsync(syncTeamsOnMain),
                 20L * 60 * 5,  // first periodic refresh: +5 min after enable
                 20L * 60 * 5); // every 5 min thereafter
+
+        // /clans command — uses `clans` as primary name to coexist
+        // with PowerClans's /clan during the migration window. Once
+        // PowerClans is removed, the `clan` alias in plugin.yml takes
+        // over automatically.
+        var clanCmd = new ClanCommand(this, pendingInvites);
+        var clansBukkit = getCommand("clans");
+        if (clansBukkit != null) {
+            clansBukkit.setExecutor(clanCmd);
+            clansBukkit.setTabCompleter(clanCmd);
+        } else {
+            getLogger().warning("Command 'clans' missing from plugin.yml; /clans disabled");
+        }
 
         getLogger().info("ClanCapes enabled (storage=" + pluginConfig.getStorageType()
                 + ", api=" + pluginConfig.isApiEnabled() + ")");
@@ -98,6 +121,13 @@ public final class ClanCapesPlugin extends JavaPlugin {
         if (clanRefreshTask != null) {
             clanRefreshTask.cancel();
             clanRefreshTask = null;
+        }
+        if (clanTeamManager != null) {
+            try {
+                clanTeamManager.shutdown();
+            } catch (Exception ignored) {
+                // Scoreboard may already be torn down on shutdown.
+            }
         }
         if (heartbeatTask != null) {
             heartbeatTask.stop();

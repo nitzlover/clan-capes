@@ -68,6 +68,97 @@ public final class ClanRepository {
         return byTag.get().size();
     }
 
+    /** True if the panel block is configured — gate for any write op. */
+    public boolean isConfigured() {
+        String panelUrl = plugin.getPluginConfig().getPanelUrl();
+        String apiKey = plugin.getPluginConfig().getPanelApiKey();
+        return panelUrl != null && !panelUrl.isBlank() && apiKey != null && !apiKey.isBlank();
+    }
+
+    // ──────── Sync writes (panel round-trip → cache refresh) ──────────
+
+    public Clan createClan(String tag, String name, UUID leaderUuid, String leaderName,
+                            String colorHex) throws PanelClient.PanelException {
+        requireConfigured();
+        Clan c = panelClient.createClan(
+                plugin.getPluginConfig().getPanelUrl(),
+                plugin.getPluginConfig().getPanelApiKey(),
+                tag, name, leaderUuid, leaderName, colorHex);
+        refreshAsync(null);
+        return c;
+    }
+
+    public void disbandClan(String tag, UUID actorUuid) throws PanelClient.PanelException {
+        requireConfigured();
+        panelClient.disbandClan(
+                plugin.getPluginConfig().getPanelUrl(),
+                plugin.getPluginConfig().getPanelApiKey(),
+                tag, actorUuid);
+        refreshAsync(null);
+    }
+
+    public Clan editClan(String tag, String newName, String newColor, UUID actorUuid)
+            throws PanelClient.PanelException {
+        requireConfigured();
+        Clan c = panelClient.editClan(
+                plugin.getPluginConfig().getPanelUrl(),
+                plugin.getPluginConfig().getPanelApiKey(),
+                tag, newName, newColor, actorUuid);
+        refreshAsync(null);
+        return c;
+    }
+
+    public Clan addMember(String tag, UUID playerUuid, String playerName,
+                           ClanMember.Role role, UUID actorUuid)
+            throws PanelClient.PanelException {
+        requireConfigured();
+        Clan c = panelClient.addMember(
+                plugin.getPluginConfig().getPanelUrl(),
+                plugin.getPluginConfig().getPanelApiKey(),
+                tag, playerUuid, playerName, role, actorUuid);
+        refreshAsync(null);
+        return c;
+    }
+
+    public Clan changeRole(String tag, UUID playerUuid, ClanMember.Role role, UUID actorUuid)
+            throws PanelClient.PanelException {
+        requireConfigured();
+        Clan c = panelClient.changeRole(
+                plugin.getPluginConfig().getPanelUrl(),
+                plugin.getPluginConfig().getPanelApiKey(),
+                tag, playerUuid, role, actorUuid);
+        refreshAsync(null);
+        return c;
+    }
+
+    public void removeMember(String tag, UUID playerUuid, UUID actorUuid)
+            throws PanelClient.PanelException {
+        requireConfigured();
+        panelClient.removeMember(
+                plugin.getPluginConfig().getPanelUrl(),
+                plugin.getPluginConfig().getPanelApiKey(),
+                tag, playerUuid, actorUuid);
+        refreshAsync(null);
+    }
+
+    public Clan transferLeader(String tag, UUID newLeaderUuid, UUID actorUuid)
+            throws PanelClient.PanelException {
+        requireConfigured();
+        Clan c = panelClient.transferLeader(
+                plugin.getPluginConfig().getPanelUrl(),
+                plugin.getPluginConfig().getPanelApiKey(),
+                tag, newLeaderUuid, actorUuid);
+        refreshAsync(null);
+        return c;
+    }
+
+    private void requireConfigured() throws PanelClient.PanelException {
+        if (!isConfigured()) {
+            throw new PanelClient.PanelException(
+                    "panel not configured — run /clancape link <ck_live_…> first");
+        }
+    }
+
     /**
      * Async refresh — pulls the full clan list off the panel and
      * swaps both maps atomically. Logs failures at WARNING but keeps

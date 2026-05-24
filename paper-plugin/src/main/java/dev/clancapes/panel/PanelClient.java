@@ -233,6 +233,115 @@ public final class PanelClient {
         }
     }
 
+    // ──────── Clan writes (Phase 2.2-2.4) ─────────────────────────────
+
+    /** POST /api/plugin/clans — create a new clan. */
+    public dev.clancapes.clan.Clan createClan(String panelUrl, String apiKey,
+                                               String tag, String name,
+                                               java.util.UUID leaderUuid, String leaderName,
+                                               String colorHex) throws PanelException {
+        JsonObject body = new JsonObject();
+        body.addProperty("tag", tag);
+        body.addProperty("name", name);
+        body.addProperty("leaderUuid", leaderUuid.toString());
+        body.addProperty("leaderName", leaderName);
+        if (colorHex != null && !colorHex.isBlank()) body.addProperty("colorHex", colorHex);
+        return mutationClan(panelUrl + "/api/plugin/clans", apiKey, "POST", body);
+    }
+
+    /** PATCH /api/plugin/clans/{tag} — rename / recolor. */
+    public dev.clancapes.clan.Clan editClan(String panelUrl, String apiKey, String tag,
+                                              String newName, String newColorHex,
+                                              java.util.UUID actorUuid) throws PanelException {
+        JsonObject body = new JsonObject();
+        if (newName != null) body.addProperty("name", newName);
+        if (newColorHex != null) body.addProperty("colorHex", newColorHex);
+        if (actorUuid != null) body.addProperty("actorUuid", actorUuid.toString());
+        String url = panelUrl + "/api/plugin/clans/" + urlEnc(tag);
+        return mutationClan(url, apiKey, "PATCH", body);
+    }
+
+    /** DELETE /api/plugin/clans/{tag} — disband. */
+    public void disbandClan(String panelUrl, String apiKey, String tag,
+                            java.util.UUID actorUuid) throws PanelException {
+        JsonObject body = new JsonObject();
+        if (actorUuid != null) body.addProperty("actorUuid", actorUuid.toString());
+        String url = panelUrl + "/api/plugin/clans/" + urlEnc(tag);
+        HttpResponse<String> res = sendAuthed(url, apiKey, "DELETE", gson.toJson(body));
+        if (res.statusCode() / 100 != 2) {
+            throw new PanelException(errorMessage(res.body(), "HTTP " + res.statusCode()));
+        }
+    }
+
+    /** POST /api/plugin/clans/{tag}/members — add member. */
+    public dev.clancapes.clan.Clan addMember(String panelUrl, String apiKey, String tag,
+                                              java.util.UUID playerUuid, String playerName,
+                                              dev.clancapes.clan.ClanMember.Role role,
+                                              java.util.UUID actorUuid) throws PanelException {
+        JsonObject body = new JsonObject();
+        body.addProperty("playerUuid", playerUuid.toString());
+        body.addProperty("playerName", playerName);
+        if (role != null) body.addProperty("role", role.name().toLowerCase());
+        if (actorUuid != null) body.addProperty("actorUuid", actorUuid.toString());
+        String url = panelUrl + "/api/plugin/clans/" + urlEnc(tag) + "/members";
+        return mutationClan(url, apiKey, "POST", body);
+    }
+
+    /** PATCH /api/plugin/clans/{tag}/members/{uuid} — promote / demote. */
+    public dev.clancapes.clan.Clan changeRole(String panelUrl, String apiKey, String tag,
+                                                java.util.UUID playerUuid,
+                                                dev.clancapes.clan.ClanMember.Role role,
+                                                java.util.UUID actorUuid) throws PanelException {
+        JsonObject body = new JsonObject();
+        body.addProperty("role", role.name().toLowerCase());
+        if (actorUuid != null) body.addProperty("actorUuid", actorUuid.toString());
+        String url = panelUrl + "/api/plugin/clans/" + urlEnc(tag) + "/members/" + playerUuid;
+        return mutationClan(url, apiKey, "PATCH", body);
+    }
+
+    /** DELETE /api/plugin/clans/{tag}/members/{uuid} — kick / leave. */
+    public void removeMember(String panelUrl, String apiKey, String tag,
+                              java.util.UUID playerUuid, java.util.UUID actorUuid)
+            throws PanelException {
+        JsonObject body = new JsonObject();
+        if (actorUuid != null) body.addProperty("actorUuid", actorUuid.toString());
+        String url = panelUrl + "/api/plugin/clans/" + urlEnc(tag) + "/members/" + playerUuid;
+        HttpResponse<String> res = sendAuthed(url, apiKey, "DELETE", gson.toJson(body));
+        if (res.statusCode() / 100 != 2) {
+            throw new PanelException(errorMessage(res.body(), "HTTP " + res.statusCode()));
+        }
+    }
+
+    /** POST /api/plugin/clans/{tag}/transfer — hand over leadership. */
+    public dev.clancapes.clan.Clan transferLeader(String panelUrl, String apiKey, String tag,
+                                                    java.util.UUID newLeaderUuid,
+                                                    java.util.UUID actorUuid) throws PanelException {
+        JsonObject body = new JsonObject();
+        body.addProperty("newLeaderUuid", newLeaderUuid.toString());
+        if (actorUuid != null) body.addProperty("actorUuid", actorUuid.toString());
+        String url = panelUrl + "/api/plugin/clans/" + urlEnc(tag) + "/transfer";
+        return mutationClan(url, apiKey, "POST", body);
+    }
+
+    /** Helper: every mutation endpoint that returns the updated clan. */
+    private dev.clancapes.clan.Clan mutationClan(String url, String apiKey, String method,
+                                                  JsonObject body) throws PanelException {
+        HttpResponse<String> res = sendAuthed(url, apiKey, method,
+                body == null ? null : gson.toJson(body));
+        if (res.statusCode() / 100 != 2) {
+            throw new PanelException(errorMessage(res.body(), "HTTP " + res.statusCode()));
+        }
+        try {
+            return gson.fromJson(res.body(), ClanResponse.class).clan;
+        } catch (Exception e) {
+            throw new PanelException("malformed clan response: " + res.body(), e);
+        }
+    }
+
+    private static String urlEnc(String s) {
+        return java.net.URLEncoder.encode(s, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
     /**
      * Internal helper — builds a Bearer-authed request with the standard
      * user agent + JSON content type, sends it, surfaces transport

@@ -11,6 +11,13 @@ commands:
     description: Clan cape management
     usage: /clancape [set <url>|remove|reload|setup|link]
     aliases: [clancapes, ccape]
+  clans:
+    description: Panel-backed clan management
+    usage: /clans <create|disband|info|list|invite|accept|decline|leave|kick|promote|demote|transfer|color>
+    # `/clan` collides with PowerClans during the Phase 2 transition;
+    # we register `clans` as primary so both plugins can coexist. The
+    # alias resolves only when PowerClans is unloaded.
+    aliases: [clan, cl, myclan]
 permissions:
   clan.cape:
     description: Manage your clan cape
@@ -21,3 +28,6 @@ permissions:
   clan.cape.setup:
     description: Register this server with the panel (one-time-pass setup)
     default: op
+  clancapes.clan.use:
+    description: Use the /clans command
+    default: true
