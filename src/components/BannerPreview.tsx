@@ -120,46 +120,16 @@ export function BannerPreview({
     );
   });
 
-  // Shield pattern masks are extracted from a 64×32 vanilla atlas where
-  // only the top-left 12×22 block holds the front-face projection. The
-  // mask must therefore be scaled so that 12 atlas px line up with the
-  // container width (== ShieldSprite's wood/front-face zone). 64/12 ≈
-  // 5.333 → 533.33% mask-size on X; 32/22 ≈ 1.455 → 145.45% on Y. With
-  // mask-position 0 0 the visible mask area lands on the same pixels
-  // the wood-backing background-image lands on, so every layer composes
-  // pixel-perfect with the others.
-  const SHIELD_MASK_SIZE = `${(64 / 12) * 100}% ${(32 / 22) * 100}%`;
-  const shieldLayers = safe.patterns.map((p, idx) => {
-    const c = colorForOrdinal(p.color);
-    const url = shieldMaskUrlFor(p.pattern);
-    if (!url) return null;
-    return (
-      <div
-        key={idx}
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundColor: c.hex,
-          WebkitMaskImage: `url(${url})`,
-          maskImage: `url(${url})`,
-          WebkitMaskSize: SHIELD_MASK_SIZE,
-          maskSize: SHIELD_MASK_SIZE,
-          WebkitMaskPosition: '0 0',
-          maskPosition: '0 0',
-          WebkitMaskRepeat: 'no-repeat',
-          maskRepeat: 'no-repeat',
-          imageRendering: 'pixelated',
-        }}
-      />
-    );
-  });
-
   const inner =
     shape === 'shield' ? (
-      <ShieldSprite width={width} height={h} baseHex={base.hex}>
-        {shieldLayers}
-      </ShieldSprite>
+      <ShieldSprite
+        width={width}
+        baseHex={base.hex}
+        patterns={safe.patterns.map((p) => ({
+          color: colorForOrdinal(p.color).hex,
+          maskUrl: shieldMaskUrlFor(p.pattern),
+        }))}
+      />
     ) : shape === 'block' ? (
       <BannerBlockSprite width={width} height={h} baseHex={base.hex}>
         {bannerLayers}
@@ -221,12 +191,11 @@ export function BannerPreview({
 function ShieldSprite({
   width,
   baseHex,
-  children,
+  patterns,
 }: {
   width: number;
-  height: number;
   baseHex: string;
-  children: React.ReactNode;
+  patterns: Array<{ color: string; maskUrl: string | null }>;
 }) {
   // Outer shield silhouette = 14 native px wide × 24 native px tall:
   // a 12×22 wood front face + 1 px of iron rim on every side. We use
@@ -236,21 +205,23 @@ function ShieldSprite({
   const outerW = width;
   const outerH = 24 * scale;
 
-  // Atlas crop: 64×32 atlas, front face is the top-left 12×22 block.
-  // To show that block in our wood-area we scale the atlas so 12 native
-  // px lines up with the wood width.
+  // The vanilla shield atlas (`shield_base_nopattern.png`,
+  // `shield/<pattern>.png`) is 64×64 px. The shield model JSON places
+  // the FRONT-FACE UV at (3.5, 0.25)..(6.5, 5.75) in 16-unit space,
+  // which in pixels is (14, 1)..(26, 23). So when we drop a 12×22
+  // wood front into our DOM, the atlas behind it needs to be scaled
+  // up so that one atlas pixel = one wood pixel (so the front-face
+  // crop renders 1:1), and shifted left/up by 14 / 1 atlas pixels so
+  // the top-left of the crop lines up with the top-left of the wood
+  // div.
   const woodW = 12 * scale;
   const woodH = 22 * scale;
   const woodLeft = 1 * scale;
   const woodTop = 1 * scale;
-  const atlasW = (64 / 12) * woodW;
-  const atlasH = (32 / 22) * woodH;
-
-  // Cloth UV inside the 12×22 front face: x=1..10, y=2..21.
-  const clothLeft = (1 / 12) * 100;
-  const clothTop = (2 / 22) * 100;
-  const clothW = (10 / 12) * 100;
-  const clothH = (20 / 22) * 100;
+  const atlasW = 64 * scale;
+  const atlasH = 64 * scale;
+  const atlasOffX = -14 * scale;
+  const atlasOffY = -1 * scale;
 
   const ironLight = '#c8c8c8';
   const ironMid = '#8e8e8e';
@@ -295,7 +266,12 @@ function ShieldSprite({
       {/* Front face zone — 12×22 native px. Holds the vanilla wood
           backing, the base-coloured cloth (also pulled from the vanilla
           shield/base atlas), and the pattern layers (each using the
-          matching vanilla shield/<pattern> atlas as its mask). */}
+          matching vanilla shield/<pattern> atlas as its mask).
+
+          Every layer shares the same atlas-sized background-/mask-size
+          and the same (-14, -1) atlas-pixel offset, so the wood, the
+          cloth, and every pattern composite pixel-for-pixel exactly the
+          way the MC client paints them. */}
       <div
         style={{
           position: 'absolute',
@@ -304,6 +280,7 @@ function ShieldSprite({
           width: woodW,
           height: woodH,
           imageRendering: 'pixelated',
+          overflow: 'hidden',
         }}
       >
         {/* Wood backing — shield_base_nopattern.png 12×22 front face. */}
@@ -315,7 +292,7 @@ function ShieldSprite({
             backgroundImage: 'url(/mc/shield_base_nopattern.png)',
             backgroundRepeat: 'no-repeat',
             backgroundSize: `${atlasW}px ${atlasH}px`,
-            backgroundPosition: '0 0',
+            backgroundPosition: `${atlasOffX}px ${atlasOffY}px`,
             imageRendering: 'pixelated',
           }}
         />
@@ -331,18 +308,38 @@ function ShieldSprite({
             maskImage: 'url(/mc/shield-patterns/base.png)',
             WebkitMaskSize: `${atlasW}px ${atlasH}px`,
             maskSize: `${atlasW}px ${atlasH}px`,
-            WebkitMaskPosition: '0 0',
-            maskPosition: '0 0',
+            WebkitMaskPosition: `${atlasOffX}px ${atlasOffY}px`,
+            maskPosition: `${atlasOffX}px ${atlasOffY}px`,
             WebkitMaskRepeat: 'no-repeat',
             maskRepeat: 'no-repeat',
             imageRendering: 'pixelated',
           }}
         />
-        {/* Pattern layers — passed in by the parent. Each one's mask
-            is the vanilla shield/<pattern>.png atlas, sized identically
-            so the projection lines up pixel-for-pixel with the wood and
-            cloth layers below. */}
-        <div style={{ position: 'absolute', inset: 0 }}>{children}</div>
+        {/* Pattern layers — each rendered with the same atlas geometry
+            so the projection lines up with everything else. */}
+        {patterns.map((p, idx) => {
+          if (!p.maskUrl) return null;
+          return (
+            <div
+              key={idx}
+              aria-hidden
+              style={{
+                position: 'absolute',
+                inset: 0,
+                backgroundColor: p.color,
+                WebkitMaskImage: `url(${p.maskUrl})`,
+                maskImage: `url(${p.maskUrl})`,
+                WebkitMaskSize: `${atlasW}px ${atlasH}px`,
+                maskSize: `${atlasW}px ${atlasH}px`,
+                WebkitMaskPosition: `${atlasOffX}px ${atlasOffY}px`,
+                maskPosition: `${atlasOffX}px ${atlasOffY}px`,
+                WebkitMaskRepeat: 'no-repeat',
+                maskRepeat: 'no-repeat',
+                imageRendering: 'pixelated',
+              }}
+            />
+          );
+        })}
       </div>
     </div>
   );
