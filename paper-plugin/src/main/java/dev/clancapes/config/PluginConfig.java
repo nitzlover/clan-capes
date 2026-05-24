@@ -84,6 +84,36 @@ public final class PluginConfig {
         return config.getBoolean("logging.debug", false);
     }
 
+    /**
+     * Base URL of the web panel this server is registered with. Set
+     * once by the operator before running {@code /clancape setup}, then
+     * baked into config.yml by {@code /clancape link} (no UI write).
+     * Empty string means the plugin runs offline-only (no panel sync).
+     */
+    public String getPanelUrl() {
+        return config.getString("panel.url", "");
+    }
+
+    /**
+     * Long-lived API key issued by the panel at the end of the
+     * one-time-pass setup flow. Persisted under {@code panel.api-key}
+     * in config.yml. Empty until the operator runs {@code /clancape
+     * link <ck_live_…>}.
+     */
+    public String getPanelApiKey() {
+        return config.getString("panel.api-key", "");
+    }
+
+    /**
+     * Human-friendly name handed to the panel so multiple registered
+     * servers can be told apart in the admin UI. Defaults to the
+     * Bukkit motd-like name {@code clancapes-server} if the operator
+     * doesn't set one.
+     */
+    public String getPanelServerName() {
+        return config.getString("panel.server-name", "clancapes-server");
+    }
+
     public String prefix() {
         return colorize(config.getString("messages.prefix", ""));
     }

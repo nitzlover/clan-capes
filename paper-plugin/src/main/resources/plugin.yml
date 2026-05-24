@@ -9,7 +9,7 @@ softdepend: [PowerClans, PlaceholderAPI]
 commands:
   clancape:
     description: Clan cape management
-    usage: /clancape [set <url>|remove|reload]
+    usage: /clancape [set <url>|remove|reload|setup|link]
     aliases: [clancapes, ccape]
 permissions:
   clan.cape:
@@ -17,4 +17,7 @@ permissions:
     default: op
   clan.cape.admin:
     description: Admin cape management for any clan
+    default: op
+  clan.cape.setup:
+    description: Register this server with the panel (one-time-pass setup)
     default: op
