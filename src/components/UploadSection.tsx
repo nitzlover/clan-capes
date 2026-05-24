@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { CapePreview } from '@/components/CapePreview';
-import { CapeBackPreview } from '@/components/CapeBackPreview';
+import { PlayerCapeView3D } from '@/components/PlayerCapeView3D';
 import { fetchClanOptions, type ClanOption } from '@/lib/api';
 
 const TEMPLATE_URL = '/templates/template_64x32.png';
@@ -150,8 +150,14 @@ export function UploadSection({
         )}
       </form>
 
-      <div className="grid grid-cols-2 gap-6 md:grid-cols-1 md:grid-rows-2">
-        <CapeBackPreview url={pngPreview} zoom={8} label="On player back" />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-[1fr_auto]">
+        <PlayerCapeView3D
+          capeUrl={pngPreview}
+          width={220}
+          height={300}
+          label="On player"
+          view="back"
+        />
         <CapePreview
           url={pngPreview}
           scale={4}

@@ -150,61 +150,28 @@ export default function LoginPage() {
 }
 
 /**
- * Decorative shield motif anchored to the top-right of the hero left
- * field. A pure-SVG mark drawn in low-opacity rule strokes so it acts
- * like editorial chrome without competing with the display headline.
- *
- * Sized as % of the parent so it scales with viewport — at lg the
- * outline reads at ~50% of the column, at sm it collapses to a corner
- * accent. No animation: the entry choreography lives on the headline.
+ * Editorial mark anchored to the top-right of the hero. Pure rules and
+ * tabular numerals — no fake/stylised MC items, just typographic chrome
+ * so the empty space carries visual weight without pretending to be a
+ * Minecraft asset.
  */
 function ShieldMotif() {
   return (
-    <div className="pointer-events-none absolute right-6 top-6 hidden h-[58%] w-[44%] opacity-[0.18] lg:block">
-      <svg
-        viewBox="0 0 100 120"
-        preserveAspectRatio="xMaxYMin meet"
-        className="h-full w-full"
-        aria-hidden
-      >
-        {/* heater shield outline */}
-        <path
-          d="M10 4 L90 4 L96 10 L96 70 L88 90 L50 116 L12 90 L4 70 L4 10 Z"
-          fill="none"
-          stroke="white"
-          strokeWidth="0.6"
-        />
-        {/* inner cloth boundary */}
-        <path
-          d="M16 12 L84 12 L90 18 L90 66 L84 82 L50 104 L16 82 L10 66 L10 18 Z"
-          fill="none"
-          stroke="white"
-          strokeWidth="0.4"
-          strokeDasharray="1.2 1.6"
-        />
-        {/* horizontal rules — banner pattern stack hint */}
-        {[28, 42, 56, 70].map((y) => (
-          <line key={y} x1="16" x2="84" y1={y} y2={y} stroke="white" strokeWidth="0.3" />
-        ))}
-        {/* central rhombus mark, same as the user's go-to layer */}
-        <path
-          d="M50 38 L62 56 L50 74 L38 56 Z"
-          fill="none"
-          stroke="white"
-          strokeWidth="0.6"
-        />
-        {/* index numerals lower-left */}
-        <text
-          x="6"
-          y="118"
-          fill="white"
-          fontFamily="monospace"
-          fontSize="3.2"
-          letterSpacing="0.8"
-        >
-          NO. 01 · CAPES
-        </text>
-      </svg>
+    <div className="pointer-events-none absolute right-8 top-8 hidden flex-col items-end gap-3 opacity-50 lg:flex">
+      <div className="h-px w-40 bg-[var(--rule-strong)]" />
+      <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--text-mute)]">
+        Vol. 01
+      </div>
+      <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--text-faint)]">
+        Operator surface
+      </div>
+      <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--text-faint)]">
+        Capes · Banners · Audit
+      </div>
+      <div className="mt-2 h-12 w-px bg-[var(--rule)]" />
+      <div className="font-mono text-5xl font-bold tracking-tighter text-[var(--ink-50)] tabular leading-none">
+        /01
+      </div>
     </div>
   );
 }

@@ -25,41 +25,41 @@ type Props = {
   label?: string;
   /** Outer frame visible? Set false when embedding inside another card. */
   framed?: boolean;
-  /** Render as a shield-shaped silhouette with silver rim instead of a
-   *  flat banner rectangle. Used in the editor so admins see what the
-   *  in-game shield will actually look like. */
-  shape?: 'banner' | 'shield';
+  /**
+   * Render style.
+   *   "banner" — flat 20×40 cloth, used in the editor side-panel preview.
+   *   "shield" — Minecraft inventory-style shield: brown wooden plank
+   *              backing + iron rim + iron rivet pins at the 4 corners,
+   *              cloth painted in the centre.
+   *   "block"  — vanilla banner block: cloth + wooden pole hanging
+   *              below it, like the banner item in a player's hand.
+   */
+  shape?: 'banner' | 'shield' | 'block';
 };
 
 /**
- * Heater-shield silhouette as a CSS polygon — percentage coords scale to
- * the container at any size. The rim is drawn by stacking two clipped
- * boxes: outer one filled with wood-tone, inner one (slightly inset)
- * holds the actual banner content. This keeps the rim visible as a thin
- * band around the cloth, mimicking the vanilla shield item.
- */
-const SHIELD_POLYGON = `polygon(
-  10% 0%,
-  90% 0%,
-  96% 4%,
-  96% 64%,
-  88% 80%,
-  50% 100%,
-  12% 80%,
-  4% 64%,
-  4% 4%
-)`;
-const SHIELD_RATIO = 1.25; // height / width — heater shield aspect
-
-/**
- * Live composite of a banner: base colour rectangle + one CSS-masked layer
- * per pattern. Each pattern PNG under `/banner/patterns/<code>.png` is a
- * 20×40 alpha mask, so we render a `<div>` filled with the layer's dye
- * colour and use the PNG as `mask-image` to cut out the pattern shape.
+ * Banner / shield preview painted in Minecraft's own pixel-art language.
  *
- * Order matters — later patterns paint on top of earlier ones, same as
- * Minecraft itself. We rely on the browser's `mask-image` (modern Chrome,
- * Firefox, Safari) — no canvas, no Skia, zero JS per repaint.
+ * The cloth itself uses the same CSS mask-image trick as before — each
+ * pattern is a 20×40 alpha PNG, dye colour fills the rect, mask cuts it
+ * to the pattern shape. The previous shield mode tried to render a
+ * stylised SVG heater silhouette which looked nothing like the in-game
+ * item. This rewrite drops the heater shape entirely:
+ *
+ *   - shield mode mirrors the vanilla shield's INVENTORY sprite: a wood
+ *     plank background, iron rim line, iron rivet pins at the corners,
+ *     and the banner cloth painted across the front. That's the shape
+ *     players actually see in their hotbar and in their hand.
+ *   - block mode mirrors the vanilla banner ITEM: cloth on top with a
+ *     small wooden pole hanging below it. Same shape as a banner held
+ *     in offhand or sitting in an item frame.
+ *   - banner mode is unchanged — flat cloth, used in the editor's
+ *     side-by-side "you are editing this 20×40 texture" preview.
+ *
+ * Everything is plain CSS + img masks. No external textures, no canvas,
+ * no Three.js. Pixel-perfect look comes from the `imageRendering:
+ * pixelated` lock and from snapping all the woodgrain accents to
+ * percentage units so they read like 1-px MC pixels at any size.
  */
 export function BannerPreview({
   spec,
@@ -70,10 +70,14 @@ export function BannerPreview({
 }: Props) {
   const safe = spec ?? { baseColor: 0, patterns: [] };
   const base = colorForOrdinal(safe.baseColor);
-  // Banner mode keeps the native 20×40 aspect; shield mode crops the
-  // bottom half of the banner into the shield silhouette, so its height
-  // is governed by the shield path's 20×24 aspect.
-  const h = shape === 'shield' ? Math.round(width * SHIELD_RATIO) : width * 2;
+
+  // Native banner aspect = 1:2. Shield items render slightly wider —
+  // closer to the in-game inventory sprite (1:1.15 give or take). Block
+  // mode adds a pole below the cloth, so its overall height is taller.
+  const h =
+    shape === 'shield' ? Math.round(width * 1.18) :
+    shape === 'block' ? Math.round(width * 2.4) :
+    width * 2;
 
   const layers = safe.patterns.map((p, idx) => {
     const c = colorForOrdinal(p.color);
@@ -97,90 +101,43 @@ export function BannerPreview({
     );
   });
 
-  const innerStyle = {
-    position: 'relative' as const,
-    width,
-    height: h,
-    boxShadow: framed ? '0 6px 18px rgba(0,0,0,0.45)' : undefined,
-    imageRendering: 'pixelated' as const,
-  };
-
   const inner =
     shape === 'shield' ? (
-      <div style={{ ...innerStyle, overflow: 'visible' }}>
-        {/* Wood/silver rim — outer shield silhouette filled with a
-            gradient, clipped to the shield polygon. */}
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background:
-              'linear-gradient(180deg, #b4995f 0%, #7d6438 55%, #463713 100%)',
-            clipPath: SHIELD_POLYGON,
-            WebkitClipPath: SHIELD_POLYGON,
-          }}
-        />
-        {/* Banner cloth — same silhouette, inset ~10% to leave the rim
-            visible around the edges. The native 20×40 banner content is
-            anchored to the top so the bottom (off-shield) part of the
-            pattern hangs out of view, mirroring how the item renders
-            in-game (only the top ~60% of the banner sits on the shield). */}
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            top: '6%',
-            left: '10%',
-            right: '10%',
-            bottom: '12%',
-            clipPath: SHIELD_POLYGON,
-            WebkitClipPath: SHIELD_POLYGON,
-            overflow: 'hidden',
-            background: base.hex,
-            imageRendering: 'pixelated',
-          }}
-        >
-          {/* Stretch the banner to the inner cloth area; the layers stack
-              on top via the same percentage inset. */}
-          <div style={{ position: 'absolute', inset: 0 }}>{layers}</div>
-        </div>
-        {/* Small silver boss for that shield look. */}
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            left: '47%',
-            top: '40%',
-            width: '6%',
-            height: '5%',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle at 30% 30%, #efe6c8, #8c7c4a)',
-            boxShadow: '0 1px 1px rgba(0,0,0,0.5)',
-          }}
-        />
-      </div>
+      <ShieldSprite width={width} height={h} baseHex={base.hex}>
+        {layers}
+      </ShieldSprite>
+    ) : shape === 'block' ? (
+      <BannerBlockSprite width={width} height={h} baseHex={base.hex}>
+        {layers}
+      </BannerBlockSprite>
     ) : (
-      <div style={{ ...innerStyle, background: base.hex }}>{layers}</div>
+      <div
+        style={{
+          position: 'relative',
+          width,
+          height: h,
+          background: base.hex,
+          boxShadow: framed ? '0 6px 18px rgba(0,0,0,0.45)' : undefined,
+          imageRendering: 'pixelated',
+        }}
+      >
+        {layers}
+      </div>
     );
 
   return (
     <div className="inline-flex flex-col gap-2">
       {label && (
-        <p className="text-xs uppercase tracking-[0.18em] text-white/40">{label}</p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+          {label}
+        </p>
       )}
-      <div
-        className={
-          framed
-            ? 'overflow-visible rounded border border-white/10 bg-[#1e1e1e] p-2'
-            : ''
-        }
-      >
+      <div className={framed ? 'inline-block bg-[var(--bg-sink)] p-2' : ''}>
         {inner}
       </div>
       {framed && (
-        <p className="text-[10px] uppercase tracking-[0.14em] text-white/30">
-          {shape === 'shield' ? 'shield · ' : 'base · '}
+        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+          {shape === 'shield' ? 'shield · ' : shape === 'block' ? 'banner · ' : 'base · '}
           {BANNER_COLORS[safe.baseColor]?.name ?? 'white'} · {safe.patterns.length} layer{safe.patterns.length === 1 ? '' : 's'}
         </p>
       )}
@@ -188,3 +145,165 @@ export function BannerPreview({
   );
 }
 
+/**
+ * Minecraft shield inventory sprite — wood plank + iron rim + cloth.
+ *
+ * The proportions are taken from the vanilla shield item icon:
+ *   - 4px iron rim around the outside
+ *   - 2px wood plank band visible above the cloth (the "shield boss"
+ *     band that runs across the top in the in-game item icon)
+ *   - cloth fills the rest, with iron rivets at each corner
+ */
+function ShieldSprite({
+  width,
+  height,
+  baseHex,
+  children,
+}: {
+  width: number;
+  height: number;
+  baseHex: string;
+  children: React.ReactNode;
+}) {
+  const ironRim = '#a4a4a4';
+  const ironRimDark = '#5b5b5b';
+  const wood = '#7c5a32';
+  const woodDark = '#4a3416';
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        width,
+        height,
+        background: ironRim,
+        boxShadow: 'inset 0 0 0 1px ' + ironRimDark + ', 0 6px 18px rgba(0,0,0,0.45)',
+        imageRendering: 'pixelated',
+      }}
+    >
+      {/* Wood plank backing — inset 4% so iron rim shows around it. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: '4%',
+          background: `repeating-linear-gradient(180deg, ${wood} 0 6%, ${woodDark} 6% 7%, ${wood} 7% 13%)`,
+          imageRendering: 'pixelated',
+        }}
+      />
+      {/* Cloth area — banner sits across most of the shield, leaving the
+          top wood band visible like in the vanilla item icon. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          top: '12%',
+          left: '10%',
+          right: '10%',
+          bottom: '8%',
+          background: baseHex,
+          imageRendering: 'pixelated',
+          boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.25)',
+        }}
+      >
+        <div style={{ position: 'absolute', inset: 0 }}>{children}</div>
+      </div>
+      {/* Iron rivet pins at the corners. */}
+      <Rivet x="6%" y="6%" />
+      <Rivet x="84%" y="6%" />
+      <Rivet x="6%" y="84%" />
+      <Rivet x="84%" y="84%" />
+    </div>
+  );
+}
+
+function Rivet({ x, y }: { x: string; y: string }) {
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: 'absolute',
+        left: x,
+        top: y,
+        width: '10%',
+        height: '9%',
+        background: 'radial-gradient(circle at 30% 30%, #efefef, #5b5b5b 70%, #1c1c1c)',
+        boxShadow: '0 1px 1px rgba(0,0,0,0.55)',
+      }}
+    />
+  );
+}
+
+/**
+ * Vanilla banner block sprite — cloth + wooden pole hanging below.
+ * Used as the small clan-row thumbnail and in the editor's secondary
+ * preview. The cloth keeps its native 1:2 aspect; the pole sits below.
+ */
+function BannerBlockSprite({
+  width,
+  height,
+  baseHex,
+  children,
+}: {
+  width: number;
+  height: number;
+  baseHex: string;
+  children: React.ReactNode;
+}) {
+  const clothH = Math.round(width * 2);
+  const poleH = height - clothH;
+  const wood = '#5a3c1f';
+  const woodHi = '#7c5a32';
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        width,
+        height,
+        imageRendering: 'pixelated',
+      }}
+    >
+      {/* Cloth — same 1:2 banner rectangle. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width,
+          height: clothH,
+          background: baseHex,
+          boxShadow: '0 6px 18px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(0,0,0,0.25)',
+        }}
+      >
+        <div style={{ position: 'absolute', inset: 0 }}>{children}</div>
+      </div>
+      {/* Wood crossbar attaching the cloth to the pole. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          top: clothH,
+          left: '-10%',
+          width: '120%',
+          height: Math.max(4, Math.round(poleH * 0.18)),
+          background: `linear-gradient(180deg, ${woodHi}, ${wood})`,
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.45)',
+        }}
+      />
+      {/* Vertical pole. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          top: clothH + Math.round(poleH * 0.18),
+          left: '45%',
+          width: '10%',
+          bottom: 0,
+          background: `linear-gradient(90deg, ${wood} 0%, ${woodHi} 50%, ${wood} 100%)`,
+        }}
+      />
+    </div>
+  );
+}

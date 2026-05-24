@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { BannerSection } from '@/components/BannerSection';
-import { CapeBackPreview } from '@/components/CapeBackPreview';
+import { PlayerCapeView3D } from '@/components/PlayerCapeView3D';
 import { UploadSection } from '@/components/UploadSection';
 import { PluginStatus } from '@/components/PluginStatus';
 import { api, type ClanRow, getToken, UnauthorizedError } from '@/lib/api';
@@ -208,9 +208,14 @@ export default function DashboardPage() {
               {clans.map((c) => (
                 <li
                   key={c.tag}
-                  className="group grid grid-cols-[64px_1fr_auto] items-center gap-6 border-t border-[var(--rule)] py-5 transition-colors first:border-t-0 hover:bg-white/[0.02]"
+                  className="group grid grid-cols-[110px_1fr_auto] items-center gap-6 border-t border-[var(--rule)] py-5 transition-colors first:border-t-0 hover:bg-white/[0.02]"
                 >
-                  <CapeBackPreview url={c.capeUrl} zoom={5} />
+                  <PlayerCapeView3D
+                    capeUrl={c.capeUrl}
+                    width={100}
+                    height={150}
+                    view="back"
+                  />
                   <div className="min-w-0">
                     <div className="font-mono text-base font-semibold tracking-wider text-white">
                       {c.tag}
