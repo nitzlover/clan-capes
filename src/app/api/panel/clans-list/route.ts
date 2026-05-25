@@ -8,10 +8,11 @@
  */
 
 import { NextResponse } from 'next/server';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { requireAuth } from '@/lib/server/auth';
 import { listClansForServer } from '@/lib/server/clan-repo';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
+import { ensureSeasonKey } from '@/lib/server/stats-repo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -49,9 +50,45 @@ export async function GET(req: Request) {
   }
 
   const clans = await listClansForServer(serverId);
+
+  // Decorate each clan with its current-season K/D so /dashboard/clans
+  // can render the chip without a second round-trip. Batched fetch on
+  // clan_stats keyed by IN-list of ids — cheap for the typical
+  // <50-clan deployment.
+  let statsByClan = new Map<number, { kills: number; deaths: number }>();
+  const seasonKey = await ensureSeasonKey(serverId);
+  if (clans.length > 0) {
+    const rows = await db
+      .select({
+        clanId: schema.clanStats.clanId,
+        kills: schema.clanStats.kills,
+        deaths: schema.clanStats.deaths,
+      })
+      .from(schema.clanStats)
+      .where(
+        and(
+          inArray(schema.clanStats.clanId, clans.map((c) => c.id)),
+          eq(schema.clanStats.seasonKey, seasonKey),
+        ),
+      );
+    statsByClan = new Map(rows.map((r) => [r.clanId, { kills: r.kills, deaths: r.deaths }]));
+  }
+  const enrichedClans = clans.map((c) => {
+    const s = statsByClan.get(c.id) ?? { kills: 0, deaths: 0 };
+    return {
+      ...c,
+      stats: {
+        kills: s.kills,
+        deaths: s.deaths,
+        kd: s.deaths > 0 ? s.kills / s.deaths : s.kills,
+      },
+    };
+  });
+
   return NextResponse.json({
-    clans,
+    clans: enrichedClans,
     servers,
     serverId,
+    season: seasonKey,
   });
 }

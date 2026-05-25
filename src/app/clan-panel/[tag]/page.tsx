@@ -47,10 +47,15 @@ type Banner = {
   updatedBy: string;
 } | null;
 
+type StatsRow = { kills: number; deaths: number; kd: number };
+
 type ClanResponse = {
   clan: Clan;
   role: 'leader' | 'deputy';
   banner: Banner;
+  season: string;
+  stats: { season: StatsRow; lifetime: StatsRow };
+  memberStats: Array<{ playerUuid: string; kills: number; deaths: number; kd: number }>;
 };
 
 type Me = {
@@ -140,11 +145,13 @@ export default function ClanPanelTagPage() {
         await fetch('/api/leader/logout', { method: 'POST' }).catch(() => {});
         router.replace('/clan-panel');
       }} />
+      <StatsChips season={data.season} stats={data.stats} />
       <ClanInfoSection clan={data.clan} onSaved={reload} />
       <MembersSection
         clan={data.clan}
         me={me}
         role={data.role}
+        memberStats={data.memberStats}
         onChange={reload}
       />
       <BannerSection clan={data.clan} banner={data.banner} onChange={reload} />
@@ -152,6 +159,38 @@ export default function ClanPanelTagPage() {
         <DangerZone clan={data.clan} onDisbanded={() => router.replace('/clan-panel')} />
       )}
     </main>
+  );
+}
+
+function StatsChips({
+  season,
+  stats,
+}: {
+  season: string;
+  stats: { season: StatsRow; lifetime: StatsRow };
+}) {
+  return (
+    <div className="brutal-card mb-6 grid gap-4 p-5 md:grid-cols-2">
+      <StatBlock label={`Season · ${season}`} row={stats.season} />
+      <StatBlock label="Lifetime" row={stats.lifetime} />
+    </div>
+  );
+}
+
+function StatBlock({ label, row }: { label: string; row: StatsRow }) {
+  return (
+    <div>
+      <p className="label-mono text-[var(--text-faint)]">{label}</p>
+      <p className="mt-2 flex items-baseline gap-3 font-mono">
+        <span className="text-2xl text-white">{row.kd.toFixed(2)}</span>
+        <span className="text-[11px] uppercase tracking-[0.22em] text-[var(--text-mute)]">
+          K/D
+        </span>
+        <span className="ml-auto text-[11px] uppercase tracking-[0.18em] text-[var(--text-soft)]">
+          {row.kills} K · {row.deaths} D
+        </span>
+      </p>
+    </div>
   );
 }
 
@@ -282,11 +321,13 @@ function MembersSection({
   clan,
   me,
   role,
+  memberStats,
   onChange,
 }: {
   clan: Clan;
   me: Me;
   role: 'leader' | 'deputy';
+  memberStats: Array<{ playerUuid: string; kills: number; deaths: number; kd: number }>;
   onChange: () => void;
 }) {
   const sorted = useMemo(() => {
@@ -295,6 +336,14 @@ function MembersSection({
       order[a.role] - order[b.role] || a.playerName.localeCompare(b.playerName),
     );
   }, [clan.members]);
+
+  const statsByUuid = useMemo(
+    () =>
+      new Map(
+        memberStats.map((s) => [s.playerUuid.toLowerCase(), s] as const),
+      ),
+    [memberStats],
+  );
 
   async function transferTo(uuid: string, name: string) {
     if (role !== 'leader') return;
@@ -335,16 +384,23 @@ function MembersSection({
           const canKick = m.role !== 'leader' && !isSelf
             && (role === 'leader' || (role === 'deputy' && m.role === 'member'));
           const canTransfer = role === 'leader' && m.role !== 'leader' && !isSelf;
+          const memberStat = statsByUuid.get(m.playerUuid.toLowerCase());
           return (
             <li
               key={m.playerUuid}
-              className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 border-b border-[var(--rule)] px-5 py-3 last:border-b-0"
+              className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-4 border-b border-[var(--rule)] px-5 py-3 last:border-b-0"
             >
               <span>
                 <span className="block text-sm text-white">{m.playerName}</span>
                 <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
                   {m.playerUuid.slice(0, 8)}…
                 </span>
+              </span>
+              <span
+                className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-mute)]"
+                title={memberStat ? `${memberStat.kills} K · ${memberStat.deaths} D` : 'no kills'}
+              >
+                {memberStat ? memberStat.kd.toFixed(2) + ' K/D' : '— K/D'}
               </span>
               <span
                 className={`font-mono text-[10px] uppercase tracking-[0.22em] ${

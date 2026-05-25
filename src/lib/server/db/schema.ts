@@ -22,6 +22,7 @@
 import { sql } from 'drizzle-orm';
 import {
   pgTable,
+  primaryKey,
   serial,
   text,
   integer,
@@ -69,6 +70,10 @@ export const servers = pgTable(
       .notNull()
       .defaultNow(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    // Phase-5 active season pointer. Set on first kill ingest, bumped
+    // by the admin "reset season" button. Empty = "no season started
+    // yet" — the ingest endpoint fills it lazily.
+    currentSeasonKey: text('current_season_key').notNull().default(''),
   },
   (t) => ({
     nameIdx: uniqueIndex('servers_name_idx').on(t.name),
@@ -254,6 +259,100 @@ export const leaderTokens = pgTable(
   (t) => ({
     hashIdx: uniqueIndex('leader_tokens_hash_idx').on(t.tokenHash),
     playerIdx: index('leader_tokens_player_idx').on(t.serverId, t.playerUuid),
+  }),
+);
+
+// ─── Stats (Phase 5) ──────────────────────────────────────────────────
+
+/**
+ * Immutable row-per-kill audit log. Aggregates are computed via the
+ * `player_stats` / `clan_stats` rollup tables for fast leaderboard
+ * reads; this table lets a future audit / appeal flow replay the
+ * actual events without trusting the rollups. Both clan FKs are
+ * nullable so unclanned-vs-unclanned kills still record.
+ */
+export const killEvents = pgTable(
+  'kill_events',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    serverId: integer('server_id')
+      .notNull()
+      .references(() => servers.id, { onDelete: 'cascade' }),
+    killerUuid: uuid('killer_uuid').notNull(),
+    victimUuid: uuid('victim_uuid').notNull(),
+    killerClanId: integer('killer_clan_id').references(() => clans.id, {
+      onDelete: 'set null',
+    }),
+    victimClanId: integer('victim_clan_id').references(() => clans.id, {
+      onDelete: 'set null',
+    }),
+    seasonKey: text('season_key').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    serverSeasonIdx: index('kill_events_server_season_idx').on(t.serverId, t.seasonKey),
+    killerIdx: index('kill_events_killer_idx').on(t.serverId, t.killerUuid),
+    victimIdx: index('kill_events_victim_idx').on(t.serverId, t.victimUuid),
+  }),
+);
+
+/**
+ * Rolling per-player counters. Composite PK (server, player, season)
+ * so the same player keeps separate buckets across servers AND
+ * across seasons. Lifetime totals live under `season_key = 'lifetime'`
+ * — the ingest endpoint upserts BOTH the current season row and the
+ * lifetime row on every kill.
+ */
+export const playerStats = pgTable(
+  'player_stats',
+  {
+    serverId: integer('server_id')
+      .notNull()
+      .references(() => servers.id, { onDelete: 'cascade' }),
+    playerUuid: uuid('player_uuid').notNull(),
+    seasonKey: text('season_key').notNull(),
+    kills: integer('kills').notNull().default(0),
+    deaths: integer('deaths').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({
+      name: 'player_stats_pkey',
+      columns: [t.serverId, t.playerUuid, t.seasonKey],
+    }),
+    serverSeasonIdx: index('player_stats_server_season_idx').on(t.serverId, t.seasonKey),
+  }),
+);
+
+/**
+ * Rolling per-clan counters. Same shape as {@link playerStats} but
+ * keyed by clan id. The "lifetime" season key is also used for the
+ * disbanded-clans hall-of-fame so historical rosters keep their
+ * record.
+ */
+export const clanStats = pgTable(
+  'clan_stats',
+  {
+    clanId: integer('clan_id')
+      .notNull()
+      .references(() => clans.id, { onDelete: 'cascade' }),
+    seasonKey: text('season_key').notNull(),
+    kills: integer('kills').notNull().default(0),
+    deaths: integer('deaths').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({
+      name: 'clan_stats_pkey',
+      columns: [t.clanId, t.seasonKey],
+    }),
+    seasonIdx: index('clan_stats_season_idx').on(t.seasonKey),
   }),
 );
 

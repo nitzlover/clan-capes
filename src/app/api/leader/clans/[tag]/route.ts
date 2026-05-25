@@ -10,7 +10,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { getBannerByClanId } from '@/lib/server/banner-repo';
 import { getClanByTag } from '@/lib/server/clan-repo';
 import {
@@ -24,6 +24,11 @@ import {
   uniqueConstraintHint,
 } from '@/lib/server/pg-errors';
 import { getRequestId } from '@/lib/server/request-id';
+import {
+  ensureSeasonKey,
+  getClanStats,
+  LIFETIME_SEASON,
+} from '@/lib/server/stats-repo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,10 +39,56 @@ export async function GET(req: Request, ctx: { params: Promise<{ tag: string }> 
   if (scope instanceof NextResponse) return scope;
 
   const banner = await getBannerByClanId(scope.clan.id);
+  const seasonKey = await ensureSeasonKey(scope.session.serverId);
+  const [season, lifetime] = await Promise.all([
+    getClanStats(scope.clan.id, seasonKey),
+    getClanStats(scope.clan.id, LIFETIME_SEASON),
+  ]);
+
+  // Per-member season K/D — single batched read against player_stats
+  // for the roster's UUIDs so the panel can render the table without
+  // N+1.
+  const db = getDb();
+  const memberStatsRows = await db
+    .select({
+      playerUuid: schema.playerStats.playerUuid,
+      kills: schema.playerStats.kills,
+      deaths: schema.playerStats.deaths,
+    })
+    .from(schema.playerStats)
+    .where(
+      and(
+        eq(schema.playerStats.serverId, scope.session.serverId),
+        eq(schema.playerStats.seasonKey, seasonKey),
+        inArray(
+          schema.playerStats.playerUuid,
+          scope.clan.members.map((m) => m.playerUuid),
+        ),
+      ),
+    );
+  const statsByPlayer = new Map(
+    memberStatsRows.map((r) => [r.playerUuid.toLowerCase(), r]),
+  );
+  const memberStats = scope.clan.members.map((m) => {
+    const row = statsByPlayer.get(m.playerUuid.toLowerCase()) ?? {
+      kills: 0,
+      deaths: 0,
+    };
+    return {
+      playerUuid: m.playerUuid,
+      kills: row.kills,
+      deaths: row.deaths,
+      kd: row.deaths > 0 ? row.kills / row.deaths : row.kills,
+    };
+  });
+
   return NextResponse.json({
     clan: scope.clan,
     role: scope.role,
     banner: banner ?? null,
+    season: seasonKey,
+    stats: { season, lifetime },
+    memberStats,
   });
 }
 

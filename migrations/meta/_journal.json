@@ -29,6 +29,13 @@
       "when": 1779670000000,
       "tag": "0003_leader_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779680000000,
+      "tag": "0004_stats",
+      "breakpoints": true
     }
   ]
 }

@@ -18,6 +18,7 @@ type Clan = {
   leaderUuid: string;
   createdAt: string;
   members: Member[];
+  stats?: { kills: number; deaths: number; kd: number };
 };
 
 type ServerOpt = { id: number; name: string };
@@ -289,7 +290,7 @@ function ClanRow({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="grid w-full grid-cols-[auto_1fr_auto_auto_auto] items-center gap-5 px-6 py-4 text-left transition-colors hover:bg-white/[0.02]"
+        className="grid w-full grid-cols-[auto_1fr_auto_auto_auto_auto] items-center gap-5 px-6 py-4 text-left transition-colors hover:bg-white/[0.02]"
       >
         <span
           aria-hidden
@@ -324,6 +325,14 @@ function ClanRow({
         <span className="hidden font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)] sm:inline">
           {leader?.playerName ?? '—'}
         </span>
+        {clan.stats && (
+          <span
+            className="hidden font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-mute)] md:inline"
+            title={`${clan.stats.kills} kills · ${clan.stats.deaths} deaths`}
+          >
+            {clan.stats.kd.toFixed(2)} K/D
+          </span>
+        )}
         <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-mute)]">
           {open ? '▾' : '▸'}
         </span>
