@@ -458,6 +458,39 @@ public final class PanelClient {
         java.util.List<BannerJson> banners;
     }
 
+    // ──────── Leader-panel handshake (Phase 4) ─────────────────────────
+
+    /**
+     * POST /api/leader/issue-token — mint a short-lived single-use
+     * token bound to the player's UUID. Plugin shows the resulting
+     * URL (or raw token) to the player so they can sign into
+     * /clan-panel without a separate password.
+     */
+    public LeaderTokenResponse issueLeaderToken(
+            String panelUrl, String apiKey, java.util.UUID playerUuid, int expiresInSec)
+            throws PanelException {
+        JsonObject body = new JsonObject();
+        body.addProperty("playerUuid", playerUuid.toString());
+        if (expiresInSec > 0) body.addProperty("expiresInSec", expiresInSec);
+        String url = panelUrl.replaceAll("/+$", "") + "/api/leader/issue-token";
+        HttpResponse<String> res = sendAuthed(url, apiKey, "POST", gson.toJson(body));
+        if (res.statusCode() / 100 != 2) {
+            throw new PanelException(errorMessage(res.body(), "HTTP " + res.statusCode()));
+        }
+        try {
+            return gson.fromJson(res.body(), LeaderTokenResponse.class);
+        } catch (Exception e) {
+            throw new PanelException("malformed leader-token response: " + res.body(), e);
+        }
+    }
+
+    public static final class LeaderTokenResponse {
+        public boolean ok;
+        public String token;
+        public String expiresAt;
+        public String url;
+    }
+
     /** Raised on any non-2xx response or transport failure. */
     public static final class PanelException extends Exception {
         public PanelException(String message) {

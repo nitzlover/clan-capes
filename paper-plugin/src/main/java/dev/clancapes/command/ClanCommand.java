@@ -93,6 +93,7 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
             case "info" -> handleInfo(sender, args);
             case "list" -> handleList(sender);
             case "ranks", "leaderboard", "top" -> handleRanks(sender, args);
+            case "panel", "web" -> handlePanel(sender);
             case "invite" -> handleInvite(sender, args);
             case "accept" -> handleAccept(sender, args);
             case "decline" -> handleDecline(sender, args);
@@ -112,6 +113,7 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
     private void usage(CommandSender sender) {
         sender.sendMessage("§7/clan §fcreate §7<tag> <name> [#color]");
         sender.sendMessage("§7/clan §fdisband §8| §finfo §7[tag] §8| §flist §8| §franks §7[page] §8| §fleave");
+        sender.sendMessage("§7/clan §fpanel §8— web link for leaders/deputies");
         sender.sendMessage("§7/clan §finvite §7<player> §8| §faccept §7[tag] §8| §fdecline §7[tag]");
         sender.sendMessage("§7/clan §fkick §7<player> §8| §fpromote §7<player> §8| §fdemote §7<player>");
         sender.sendMessage("§7/clan §ftransfer §7<player> §8| §fcolor §7<#hex>");
@@ -306,6 +308,48 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
         if (totalPages > 1) {
             sender.sendMessage("§7Use §f/clan ranks " + Math.min(totalPages, page + 1) + " §7for the next page.");
         }
+        return true;
+    }
+
+    // ──────── panel (web leader-panel handshake) ──────────────────────
+
+    private boolean handlePanel(CommandSender sender) {
+        if (!(sender instanceof Player p)) return playersOnly(sender);
+        Optional<Clan> mine = repo.byPlayer(p.getUniqueId());
+        if (mine.isEmpty()) return notInClan(p);
+        Clan c = mine.get();
+        ClanMember me = c.members().stream()
+                .filter(m -> m.playerUuid().equals(p.getUniqueId()))
+                .findFirst().orElse(null);
+        if (me == null || (me.role() != ClanMember.Role.LEADER && me.role() != ClanMember.Role.DEPUTY)) {
+            p.sendMessage("§cClan panel is for leaders and deputies only.");
+            return true;
+        }
+
+        runAsync(() -> {
+            try {
+                var panelClient = new dev.clancapes.panel.PanelClient(plugin);
+                var resp = panelClient.issueLeaderToken(
+                        plugin.getPluginConfig().getPanelUrl(),
+                        plugin.getPluginConfig().getPanelApiKey(),
+                        p.getUniqueId(),
+                        0);
+                onMain(() -> {
+                    p.sendMessage("§7──────── §fClan panel §7────────");
+                    if (resp.url != null && !resp.url.isBlank()) {
+                        // Clickable URL via vanilla legacy JSON message would
+                        // require an Adventure component round-trip; for now
+                        // we ship the literal link so most clients underline +
+                        // open it on click.
+                        p.sendMessage("§fLink: §b" + resp.url);
+                    }
+                    p.sendMessage("§7Token (paste once): §f" + resp.token);
+                    p.sendMessage("§7Expires: §f" + (resp.expiresAt != null ? resp.expiresAt : "~10 min"));
+                });
+            } catch (dev.clancapes.panel.PanelClient.PanelException e) {
+                onMain(() -> p.sendMessage("§cPanel handshake failed: " + e.getMessage()));
+            }
+        });
         return true;
     }
 
@@ -649,7 +693,7 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
     }
 
     private static final List<String> SUBS = List.of(
-            "create", "disband", "info", "list", "ranks", "invite", "accept", "decline",
+            "create", "disband", "info", "list", "ranks", "panel", "invite", "accept", "decline",
             "leave", "kick", "promote", "demote", "transfer", "color"
     );
     /** Subcommands that take a player name as their second argument. */
