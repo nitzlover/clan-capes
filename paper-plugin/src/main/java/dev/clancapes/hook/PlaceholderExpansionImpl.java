@@ -112,6 +112,13 @@ public final class PlaceholderExpansionImpl extends PlaceholderExpansion {
                                 && m.role() == ClanMember.Role.DEPUTY)
                         ? "true" : "false";
             }
+            // Phase-5 stats stubs — return zero today so operator-facing
+            // displays (TAB suffix, scoreboard sidebars, chat hooks)
+            // can wire `%clancapes_kills%` / `%clancapes_deaths%` /
+            // `%clancapes_kd%` in now and pick up real PvP numbers
+            // automatically once the kill listener + panel rollup ship.
+            case "kills", "deaths" -> "0";
+            case "kd", "kdr" -> "0.00";
             default -> null;
         };
     }

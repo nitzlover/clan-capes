@@ -1,7 +1,9 @@
 package dev.clancapes.panel;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.clancapes.ClanCapesPlugin;
+import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.logging.Level;
@@ -70,7 +72,21 @@ public final class HeartbeatTask {
         JsonObject body = new JsonObject();
         body.addProperty("pluginVersion", plugin.getDescription().getVersion());
         body.addProperty("mcVersion", plugin.getServer().getBukkitVersion());
-        body.addProperty("onlinePlayers", plugin.getServer().getOnlinePlayers().size());
+        var online = plugin.getServer().getOnlinePlayers();
+        body.addProperty("onlinePlayers", online.size());
+        // Full UUID list so the panel can decorate the clan roster with
+        // a green-dot "online now" indicator without a second
+        // round-trip. Capped at 200 entries to keep payload bounded on
+        // pathological MMO-scale servers — the panel only needs them
+        // for the small set of clan members anyway.
+        JsonArray uuids = new JsonArray();
+        int capped = Math.min(online.size(), 200);
+        int i = 0;
+        for (Player op : online) {
+            if (i++ >= capped) break;
+            uuids.add(op.getUniqueId().toString());
+        }
+        body.add("onlinePlayerUuids", uuids);
 
         try {
             var client = new PanelClient(plugin);

@@ -17,10 +17,13 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 /**
@@ -48,9 +51,22 @@ import java.util.regex.Pattern;
 public final class ClanCommand implements CommandExecutor, TabCompleter {
     private static final Pattern TAG_RE = Pattern.compile("^[A-Z0-9]{2,6}$");
 
+    /** Anti-spam cooldown between successful {@code /clan create} calls. */
+    private static final long CREATE_COOLDOWN_MS = TimeUnit.HOURS.toMillis(1);
+
     private final ClanCapesPlugin plugin;
     private final ClanRepository repo;
     private final PendingInvites pending;
+
+    /**
+     * Per-player timestamp of the last successful {@code /clan create}.
+     * In-memory only — losing the map on plugin restart is fine since
+     * the cooldown window is short and the goal is just to slow down
+     * disband-and-recreate palette farming, not enforce a hard rate
+     * limit. Cleaned out lazily as entries expire (see
+     * {@link #remainingCreateCooldownMs}).
+     */
+    private final ConcurrentHashMap<UUID, Long> lastCreateAt = new ConcurrentHashMap<>();
 
     public ClanCommand(ClanCapesPlugin plugin, PendingInvites pending) {
         this.plugin = plugin;
@@ -76,6 +92,7 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
             case "disband" -> handleDisband(sender);
             case "info" -> handleInfo(sender, args);
             case "list" -> handleList(sender);
+            case "ranks", "leaderboard", "top" -> handleRanks(sender, args);
             case "invite" -> handleInvite(sender, args);
             case "accept" -> handleAccept(sender, args);
             case "decline" -> handleDecline(sender, args);
@@ -94,7 +111,7 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
 
     private void usage(CommandSender sender) {
         sender.sendMessage("§7/clan §fcreate §7<tag> <name> [#color]");
-        sender.sendMessage("§7/clan §fdisband §8| §finfo §7[tag] §8| §flist §8| §fleave");
+        sender.sendMessage("§7/clan §fdisband §8| §finfo §7[tag] §8| §flist §8| §franks §7[page] §8| §fleave");
         sender.sendMessage("§7/clan §finvite §7<player> §8| §faccept §7[tag] §8| §fdecline §7[tag]");
         sender.sendMessage("§7/clan §fkick §7<player> §8| §fpromote §7<player> §8| §fdemote §7<player>");
         sender.sendMessage("§7/clan §ftransfer §7<player> §8| §fcolor §7<#hex>");
@@ -134,17 +151,48 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("§cYou're already in a clan.");
             return true;
         }
+        // Anti-spam: enforce the 1-hour cooldown so a player can't
+        // disband-and-recreate to cycle through palette colours or
+        // flood the audit log. Bypass the gate for OP'd operators so
+        // staff can still rebuild a botched setup on demand.
+        if (!p.isOp()) {
+            long remaining = remainingCreateCooldownMs(p.getUniqueId());
+            if (remaining > 0) {
+                long remainMin = Math.max(1, remaining / 60_000L);
+                p.sendMessage("§cYou can create another clan in " + remainMin + " min.");
+                return true;
+            }
+        }
         final String fName = name;
         final String fColor = color;
+        final UUID uuid = p.getUniqueId();
         runAsync(() -> {
             try {
-                Clan c = repo.createClan(tag, fName, p.getUniqueId(), p.getName(), fColor);
+                Clan c = repo.createClan(tag, fName, uuid, p.getName(), fColor);
+                lastCreateAt.put(uuid, System.currentTimeMillis());
                 onMain(() -> p.sendMessage("§aClan §f" + c.tag() + " §acreated. Color " + c.colorHex() + "."));
             } catch (PanelClient.PanelException e) {
                 onMain(() -> p.sendMessage("§cCreate failed: " + e.getMessage()));
             }
         });
         return true;
+    }
+
+    /**
+     * Milliseconds remaining on this player's create cooldown. Returns
+     * 0 (or a negative number) when the player can create again — also
+     * lazily cleans up the map entry so the cache doesn't grow
+     * unbounded across long-running sessions.
+     */
+    private long remainingCreateCooldownMs(UUID uuid) {
+        Long last = lastCreateAt.get(uuid);
+        if (last == null) return 0L;
+        long elapsed = System.currentTimeMillis() - last;
+        if (elapsed >= CREATE_COOLDOWN_MS) {
+            lastCreateAt.remove(uuid, last);
+            return 0L;
+        }
+        return CREATE_COOLDOWN_MS - elapsed;
     }
 
     // ──────── disband ────────────────────────────────────────────────
@@ -206,6 +254,57 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage("§8─ §fClans (" + all.size() + ")");
         for (Clan c : all) {
             sender.sendMessage(" §7" + c.tag() + " §8— §f" + c.name() + " §8(" + c.members().size() + ")");
+        }
+        return true;
+    }
+
+    // ──────── ranks (global leaderboard) ─────────────────────────────
+
+    /** How many rows fit on one /clan ranks page. */
+    private static final int RANKS_PAGE_SIZE = 10;
+
+    private boolean handleRanks(CommandSender sender, String[] args) {
+        List<Clan> all = new ArrayList<>(repo.all());
+        if (all.isEmpty()) {
+            sender.sendMessage("§7No clans yet — be the first with §f/clan create §7.");
+            return true;
+        }
+        // Primary sort by roster size desc; secondary by tag asc so the
+        // ordering is stable when two clans have the same headcount.
+        all.sort(
+                Comparator.<Clan>comparingInt(c -> -c.members().size())
+                        .thenComparing(Clan::tag));
+
+        int page = 1;
+        if (args.length >= 2) {
+            try {
+                page = Math.max(1, Integer.parseInt(args[1]));
+            } catch (NumberFormatException ignored) {
+                sender.sendMessage("§cPage must be a positive number.");
+                return true;
+            }
+        }
+
+        int totalPages = Math.max(1, (all.size() + RANKS_PAGE_SIZE - 1) / RANKS_PAGE_SIZE);
+        if (page > totalPages) page = totalPages;
+        int start = (page - 1) * RANKS_PAGE_SIZE;
+        int end = Math.min(all.size(), start + RANKS_PAGE_SIZE);
+
+        sender.sendMessage(
+                "§8─ §fClan ranks §8(page §f" + page + "§8/§f" + totalPages + "§8, sorted by members)");
+        for (int i = start; i < end; i++) {
+            Clan c = all.get(i);
+            String leaderName = c.members().stream()
+                    .filter(m -> m.role() == ClanMember.Role.LEADER)
+                    .map(ClanMember::playerName)
+                    .findFirst()
+                    .orElse("?");
+            sender.sendMessage(
+                    " §8#" + (i + 1) + " §f[" + c.tag() + "] §7" + c.members().size()
+                            + " members §8· §7Leader §f" + leaderName);
+        }
+        if (totalPages > 1) {
+            sender.sendMessage("§7Use §f/clan ranks " + Math.min(totalPages, page + 1) + " §7for the next page.");
         }
         return true;
     }
@@ -550,7 +649,7 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
     }
 
     private static final List<String> SUBS = List.of(
-            "create", "disband", "info", "list", "invite", "accept", "decline",
+            "create", "disband", "info", "list", "ranks", "invite", "accept", "decline",
             "leave", "kick", "promote", "demote", "transfer", "color"
     );
     /** Subcommands that take a player name as their second argument. */
