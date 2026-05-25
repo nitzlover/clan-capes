@@ -1,28 +1,62 @@
+/**
+ * Upload + delete cape PNGs for a clan.
+ *
+ * Gate: clan must exist (active row in `clans`) on the resolved
+ * server. The legacy PowerClans-list gate was removed once that
+ * plugin was taken out of the in-game stack — DB is now the only
+ * source of truth for "is this a real clan tag".
+ *
+ * Steps on POST:
+ *   1. JWT auth
+ *   2. Multipart body parse
+ *   3. Size pre-check via Web File.size (refuse before buffering MB-scale uploads into memory)
+ *   4. Tag must match the panel's clan roster (DB)
+ *   5. Validate + re-encode PNG (64x32 / 128x64, MAX_UPLOAD_KB cap)
+ *   6. Write to UPLOAD_DIR/<TAG>.png
+ *   7. Forward to plugin so the Fabric mod sees the new URL
+ *   8. Audit row (DB-backed)
+ */
+
 import fs from 'node:fs/promises';
 import { NextResponse } from 'next/server';
+import { desc } from 'drizzle-orm';
 import { requireAuth } from '@/lib/server/auth';
 import { validateAndNormalizePng } from '@/lib/server/capeValidate';
+import { getClanByTag } from '@/lib/server/clan-repo';
+import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import { CDN_PUBLIC_URL, MAX_UPLOAD_KB } from '@/lib/server/env';
 import * as mc from '@/lib/server/minecraft';
-import { appendAudit, capeFilePath, ensureDirs } from '@/lib/server/storage';
+import { capeFilePath, ensureDirs } from '@/lib/server/storage';
+import { getRequestId } from '@/lib/server/request-id';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/**
- * Upload a cape PNG for a clan. Steps:
- *   1) JWT auth check
- *   2) Pull PowerClans list — refuse uploads for unknown clan tags
- *   3) Validate + re-encode PNG (64x32 / 128x64, max KB cap)
- *   4) Write to UPLOAD_DIR/<TAG>.png
- *   5) Tell the Paper plugin to remember the URL (so Fabric mod can fetch it)
- *   6) Append audit log line
- */
+const TAG_RE = /^[A-Z0-9]{2,6}$/;
+
+async function resolveServerId(): Promise<number | null> {
+  if (!dbEnabled()) return null;
+  const db = getDb();
+  const [first] = await db
+    .select({ id: schema.servers.id })
+    .from(schema.servers)
+    .orderBy(desc(schema.servers.createdAt))
+    .limit(1);
+  return first?.id ?? null;
+}
+
 export async function POST(req: Request, ctx: { params: Promise<{ tag: string }> }) {
   const user = requireAuth(req);
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
   const { tag: rawTag } = await ctx.params;
   const tag = rawTag.toUpperCase();
+  if (!TAG_RE.test(tag)) {
+    return NextResponse.json(
+      { error: 'tag must be 2-6 uppercase alphanumeric characters' },
+      { status: 400 },
+    );
+  }
 
   let file: File | null = null;
   try {
@@ -34,28 +68,34 @@ export async function POST(req: Request, ctx: { params: Promise<{ tag: string }>
   }
   if (!file) return NextResponse.json({ error: 'cape file required' }, { status: 400 });
 
-  try {
-    let powerClans: Awaited<ReturnType<typeof mc.fetchPowerClans>> | null = null;
-    try {
-      powerClans = await mc.fetchPowerClans();
-    } catch (e) {
-      return NextResponse.json(
-        {
-          error:
-            'PowerClans list unavailable from Paper API — refusing upload. ' +
-            (e instanceof Error ? e.message : ''),
-        },
-        { status: 502 }
-      );
-    }
-    const known = powerClans.some((c) => c.tag.toUpperCase() === tag);
-    if (!known) {
-      return NextResponse.json(
-        { error: `Clan tag "${tag}" is not in PowerClans. Choose a clan from the list.` },
-        { status: 400 }
-      );
-    }
+  // Pre-buffer size guard — refuse anything over the cap before we
+  // load the whole arrayBuffer into memory. Stops MB-scale uploads
+  // from pinning a Railway dyno's RAM.
+  const sizeCap = MAX_UPLOAD_KB * 1024;
+  if (file.size > sizeCap) {
+    return NextResponse.json(
+      { error: `cape too large (${file.size} bytes > ${sizeCap} cap)` },
+      { status: 413 },
+    );
+  }
 
+  // Gate against the DB clan roster — replaces the legacy PowerClans
+  // list lookup that no longer exists.
+  const serverId = await resolveServerId();
+  if (!serverId) {
+    return NextResponse.json({ error: 'no servers registered' }, { status: 409 });
+  }
+  const clan = await getClanByTag(serverId, tag);
+  if (!clan) {
+    return NextResponse.json(
+      { error: `clan tag "${tag}" not found on this server — create it first` },
+      { status: 404 },
+    );
+  }
+
+  const rid = getRequestId(req);
+
+  try {
     const buf = Buffer.from(await file.arrayBuffer());
     const normalized = await validateAndNormalizePng(buf, MAX_UPLOAD_KB);
 
@@ -63,26 +103,34 @@ export async function POST(req: Request, ctx: { params: Promise<{ tag: string }>
     const outPath = capeFilePath(tag);
     await fs.writeFile(outPath, normalized);
 
-    // Append a version query string based on the file's fresh mtime so
-    // the URL we hand to (a) the Paper plugin (which forwards it to
-    // every Fabric client) and (b) the panel UI changes on every
-    // re-upload. Same URL forever was the cause of stale-cape rendering
-    // for users who had loaded the previous file once — see the
-    // matching version logic in /api/panel/clans.
-    const stat = await fs.stat(outPath);
-    const v = Math.floor(stat.mtimeMs);
+    // Use the file's known mtime via `Date.now()` instead of an extra
+    // `fs.stat` round-trip; the writeFile completed synchronously, so
+    // Date.now() is within a few ms of the real mtime and not subject
+    // to a concurrent-write race that two fs syscalls would have.
+    const v = Date.now();
     const publicUrl = `${CDN_PUBLIC_URL}/${tag}.png?v=${v}`;
     const actor = user.sub;
     await mc.setClanCape(tag, publicUrl, actor);
-    await appendAudit(`${actor}\tUPLOAD\t${tag}\t${publicUrl}`);
+
+    const db = getDb();
+    await db.insert(schema.audit).values({
+      serverId,
+      actor: `admin:${actor}`,
+      action: 'CAPE_UPLOAD',
+      target: tag,
+      payload: { capeUrl: publicUrl, bytes: normalized.length, _rid: rid },
+    });
 
     console.log(`[upload] tag=${tag} actor=${actor} bytes=${normalized.length} url=${publicUrl}`);
-    return NextResponse.json({ ok: true, tag, capeUrl: publicUrl });
+    return NextResponse.json(
+      { ok: true, tag, capeUrl: publicUrl, _rid: rid },
+      { headers: { 'x-request-id': rid } },
+    );
   } catch (e) {
     console.warn(`[upload] tag=${tag} FAILED: ${e instanceof Error ? e.message : e}`);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'upload failed' },
-      { status: 400 }
+      { status: 400 },
     );
   }
 }
@@ -92,17 +140,34 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ tag: string 
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   const { tag: rawTag } = await ctx.params;
   const tag = rawTag.toUpperCase();
+  if (!TAG_RE.test(tag)) {
+    return NextResponse.json({ error: 'invalid tag' }, { status: 400 });
+  }
+  const serverId = await resolveServerId();
+  const rid = getRequestId(req);
   try {
     await mc.deleteClanCape(tag);
     await fs.unlink(capeFilePath(tag)).catch(() => undefined);
-    await appendAudit(`${user.sub}\tDELETE\t${tag}`);
+    if (serverId) {
+      const db = getDb();
+      await db.insert(schema.audit).values({
+        serverId,
+        actor: `admin:${user.sub}`,
+        action: 'CAPE_DELETE',
+        target: tag,
+        payload: { _rid: rid },
+      });
+    }
     console.log(`[delete] tag=${tag} actor=${user.sub}`);
-    return NextResponse.json({ ok: true, tag });
+    return NextResponse.json(
+      { ok: true, tag, _rid: rid },
+      { headers: { 'x-request-id': rid } },
+    );
   } catch (e) {
     console.warn(`[delete] tag=${tag} FAILED: ${e instanceof Error ? e.message : e}`);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'delete failed' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

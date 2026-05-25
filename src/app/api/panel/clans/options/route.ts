@@ -1,14 +1,13 @@
 /**
  * Clan dropdown source for the Cape upload + Banner editor pages.
  *
- * Prefers the DB-backed roster when both DATABASE_URL is set AND at
- * least one clan exists in `clans`. Falls back to PowerClans via the
- * plugin REST so deploys mid-migration (no DB yet, or DB empty)
- * still see the legacy roster on the Banner / Upload pages.
+ * DB-backed only. The legacy PowerClans fallback was removed once
+ * PowerClans was retired from the in-game stack — the DB roster is
+ * the single source of truth for clan tags.
  *
- * Always reads the cape directory off the local disk to mark each
- * clan with `hasCape` — cape ownership is file-based regardless of
- * which roster source is winning.
+ * Each clan is decorated with `hasCape` from a quick scan of the
+ * upload directory so the dropdown can render a checkmark next to
+ * tags that already have a cape file on disk.
  */
 
 import fs from 'node:fs/promises';
@@ -18,7 +17,6 @@ import { requireAuth } from '@/lib/server/auth';
 import { listClansForServer } from '@/lib/server/clan-repo';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import { UPLOAD_DIR } from '@/lib/server/env';
-import * as mc from '@/lib/server/minecraft';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -26,6 +24,10 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
   const user = requireAuth(req);
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  if (!dbEnabled()) {
+    return NextResponse.json({ source: 'db', clans: [] });
+  }
 
   let capeTags = new Set<string>();
   try {
@@ -37,60 +39,25 @@ export async function GET(req: Request) {
     capeTags = new Set();
   }
 
-  // Preferred path: DB-backed roster. Picks the most-recently-registered
-  // server when there are several (matches /dashboard/clans default).
-  if (dbEnabled()) {
-    try {
-      const db = getDb();
-      const [first] = await db
-        .select({ id: schema.servers.id })
-        .from(schema.servers)
-        .orderBy(desc(schema.servers.createdAt))
-        .limit(1);
-      if (first) {
-        const clans = await listClansForServer(first.id);
-        if (clans.length > 0) {
-          return NextResponse.json({
-            source: 'db',
-            clans: clans.map((c) => ({
-              id: String(c.id),
-              tag: c.tag,
-              leader: c.leaderUuid,
-              level: 0,
-              hasCape: capeTags.has(c.tag.toUpperCase()),
-            })),
-          });
-        }
-      }
-    } catch (e) {
-      // Fall through to PowerClans fallback so a transient DB blip
-      // doesn't blank the dropdown.
-      console.warn('[clans/options] db read failed, falling back to PowerClans:', e);
-    }
+  const db = getDb();
+  const [first] = await db
+    .select({ id: schema.servers.id })
+    .from(schema.servers)
+    .orderBy(desc(schema.servers.createdAt))
+    .limit(1);
+  if (!first) {
+    return NextResponse.json({ source: 'db', clans: [] });
   }
 
-  // Fallback: legacy PowerClans via the plugin REST.
-  try {
-    const powerClans = await mc.fetchPowerClans();
-    return NextResponse.json({
-      source: 'powerclans',
-      clans: powerClans.map((c) => ({
-        id: c.id,
-        tag: c.tag,
-        leader: c.leader,
-        level: c.level,
-        hasCape: capeTags.has(c.tag.toUpperCase()),
-      })),
-    });
-  } catch (e) {
-    return NextResponse.json(
-      {
-        error:
-          e instanceof Error
-            ? e.message
-            : 'Failed to load PowerClans (is Paper API running?)',
-      },
-      { status: 502 },
-    );
-  }
+  const clans = await listClansForServer(first.id);
+  return NextResponse.json({
+    source: 'db',
+    clans: clans.map((c) => ({
+      id: String(c.id),
+      tag: c.tag,
+      leader: c.leaderUuid,
+      level: 0,
+      hasCape: capeTags.has(c.tag.toUpperCase()),
+    })),
+  });
 }

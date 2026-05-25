@@ -46,12 +46,25 @@ export const PANEL_PUBLIC_URL = (process.env.PANEL_PUBLIC_URL ?? '').replace(/\/
  */
 export const DATABASE_URL = process.env.DATABASE_URL ?? '';
 
-if (process.env.NODE_ENV === 'production') {
+// In production we refuse to start with insecure defaults rather than
+// log a warning — anyone reading the public repo would otherwise be
+// able to forge admin + leader JWTs against a freshly deployed panel
+// that hadn't set the secret yet. The build itself stays passing
+// (these checks fire at runtime via the API routes that import this
+// module), so static prerender during `next build` still works.
+if (process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE !== 'phase-production-build') {
   if (JWT_SECRET === 'dev-secret-change-me') {
-    console.warn('[env] JWT_SECRET is using a dev default in production');
+    throw new Error(
+      '[env] FATAL: JWT_SECRET is using the dev default in production. ' +
+        'Set JWT_SECRET to a 32+ character random string before deploying.',
+    );
   }
   if (ADMIN_PASSWORD === 'admin' && !ADMIN_PASSWORD_HASH) {
-    console.warn('[env] ADMIN_PASSWORD is the default "admin" — set ADMIN_PASSWORD_HASH');
+    throw new Error(
+      '[env] FATAL: ADMIN_PASSWORD is the default "admin" with no hash set. ' +
+        'Set ADMIN_PASSWORD_HASH (bcrypt) before deploying — anyone with the ' +
+        'public repo can log in otherwise.',
+    );
   }
   if (!DATABASE_URL) {
     console.warn(

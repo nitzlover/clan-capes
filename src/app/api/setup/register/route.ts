@@ -21,6 +21,7 @@
 import { NextResponse } from 'next/server';
 import { getDb, dbEnabled, schema } from '@/lib/server/db';
 import { hashSecret, isSetupToken } from '@/lib/server/api-key';
+import { limit } from '@/lib/server/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,6 +29,15 @@ export const dynamic = 'force-dynamic';
 const TOKEN_TTL_MS = 15 * 60 * 1000;
 
 export async function POST(req: Request) {
+  // Cap per IP — bcrypt-hashing every request is a CPU-amplification
+  // vector, so refuse anything past 5/min/IP. Legitimate plugin setup
+  // fires at most once per server install.
+  if (!limit(req, 'setup:register', 5, 60_000)) {
+    return NextResponse.json(
+      { error: 'too many setup attempts; try again in a minute' },
+      { status: 429, headers: { 'Retry-After': '60' } },
+    );
+  }
   if (!dbEnabled()) {
     return NextResponse.json(
       { error: 'panel not configured for multi-server (DATABASE_URL unset)' },

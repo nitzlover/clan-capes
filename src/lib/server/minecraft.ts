@@ -96,13 +96,6 @@ export async function deleteClanCape(tag: string) {
   return res.json();
 }
 
-export type PowerClanRow = {
-  id: string;
-  tag: string;
-  leader: string;
-  level: number;
-};
-
 // ----- Clan banner (shield NBT) -----------------------------------------------
 
 export type BannerPatternSpec = {
@@ -166,14 +159,3 @@ export async function deleteClanBanner(tag: string, rid?: string) {
   return res.json();
 }
 
-export async function fetchPowerClans(): Promise<PowerClanRow[]> {
-  const res = await fetchPlugin('/api/powerclans/clans', {
-    headers: { 'X-ClanCapes-Token': TOKEN() },
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(body || `PowerClans API error ${res.status}`);
-  }
-  const data = (await res.json()) as { clans: PowerClanRow[] };
-  return data.clans ?? [];
-}

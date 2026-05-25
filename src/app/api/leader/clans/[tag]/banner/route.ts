@@ -44,8 +44,10 @@ export async function POST(
     return NextResponse.json({ error: 'baseColor must be 0..15' }, { status: 400 });
   }
   const patterns = Array.isArray(body.patterns) ? body.patterns : [];
+  // Use ?? not || — an operator-set bannerMaxLayers=1 is a legitimate
+  // tighter limit, not a falsy value that should fall back to 6.
   const cap = (await getServerSettings(session.serverId)).bannerMaxLayers
-    || FALLBACK_MAX_LAYERS;
+    ?? FALLBACK_MAX_LAYERS;
   if (patterns.length > cap) {
     return NextResponse.json(
       { error: `too many layers (max ${cap})` },

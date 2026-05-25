@@ -29,6 +29,7 @@ import {
   signLeader,
   type LeaderJwtPayload,
 } from '@/lib/server/leader-auth';
+import { limit } from '@/lib/server/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -36,6 +37,15 @@ export const dynamic = 'force-dynamic';
 const TTL_SEC = 60 * 60 * 12;
 
 export async function POST(req: Request) {
+  // 10 attempts per IP per minute — legitimate exchange happens once
+  // per `/clan panel` invocation, so anything more than that is either
+  // a buggy retry loop or a token-guessing attack.
+  if (!limit(req, 'leader:exchange', 10, 60_000)) {
+    return NextResponse.json(
+      { error: 'too many exchange attempts; try again in a minute' },
+      { status: 429, headers: { 'Retry-After': '60' } },
+    );
+  }
   if (!dbEnabled()) {
     return NextResponse.json({ error: 'db disabled' }, { status: 503 });
   }

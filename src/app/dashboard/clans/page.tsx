@@ -129,40 +129,6 @@ export default function ClansPage() {
     }
   }
 
-  async function importFromPowerClans() {
-    if (!serverId) return;
-    if (
-      !confirm(
-        'Pull every clan PowerClans currently knows about into the DB? Existing tags are skipped — safe to re-run.',
-      )
-    ) {
-      return;
-    }
-    try {
-      const res = await api<{
-        imported: number;
-        skipped: number;
-        report: Array<{ tag: string; status: string; reason?: string }>;
-      }>('/panel/clans/import-powerclans', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serverId }),
-      });
-      alert(
-        `Imported ${res.imported}, skipped ${res.skipped}.\n\n` +
-          res.report
-            .map((r) =>
-              `${r.tag}: ${r.status}${r.reason ? ' (' + r.reason + ')' : ''}`,
-            )
-            .join('\n'),
-      );
-      load(serverId);
-    } catch (e) {
-      if (e instanceof UnauthorizedError) return;
-      alert(e instanceof Error ? e.message : 'Import failed');
-    }
-  }
-
   return (
     <div>
       <div className="page-band">
@@ -174,22 +140,13 @@ export default function ClansPage() {
         </div>
         <div className="flex items-center gap-3">
           {serverId && (
-            <>
-              <button
-                onClick={refreshNames}
-                className="btn-ghost"
-                title='Re-resolve "Leader" placeholder names via Mojang'
-              >
-                ⟳ Refresh names
-              </button>
-              <button
-                onClick={importFromPowerClans}
-                className="btn-ghost"
-                title="Pull PowerClans data via the plugin REST"
-              >
-                + Import PowerClans
-              </button>
-            </>
+            <button
+              onClick={refreshNames}
+              className="btn-ghost"
+              title='Re-resolve "Leader" placeholder names via Mojang'
+            >
+              ⟳ Refresh names
+            </button>
           )}
           {servers.length > 0 && (
             <select
