@@ -1,6 +1,7 @@
 package dev.clancapes;
 
 import dev.clancapes.api.RestApiServer;
+import dev.clancapes.clan.BannerRepository;
 import dev.clancapes.clan.ClanRepository;
 import dev.clancapes.clan.ClanTeamManager;
 import dev.clancapes.clan.PendingInvites;
@@ -32,9 +33,11 @@ public final class ClanCapesPlugin extends JavaPlugin {
     private PlaceholderHook placeholderHook;
     private HeartbeatTask heartbeatTask;
     private ClanRepository clanRepository;
+    private BannerRepository bannerRepository;
     private ClanTeamManager clanTeamManager;
     private PendingInvites pendingInvites;
     private BukkitTask clanRefreshTask;
+    private BukkitTask bannerRefreshTask;
 
     @Override
     public void onEnable() {
@@ -87,6 +90,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
         // TAB prefixes paint themselves without packet magic. Both
         // no-op while the panel block is empty.
         clanRepository = new ClanRepository(this);
+        bannerRepository = new BannerRepository(this);
         clanTeamManager = new ClanTeamManager(this);
         pendingInvites = new PendingInvites();
 
@@ -98,6 +102,17 @@ public final class ClanCapesPlugin extends JavaPlugin {
                 () -> clanRepository.refreshAsync(syncTeamsOnMain),
                 20L * 60 * 5,  // first periodic refresh: +5 min after enable
                 20L * 60 * 5); // every 5 min thereafter
+
+        // Banner cache — same cadence so Phase-3 auto-paint sees panel
+        // edits within five minutes even without the explicit ping from
+        // the panel's BannerSync endpoint (which can lose packets across
+        // a flaky network).
+        bannerRepository.refreshAsync(null);
+        bannerRefreshTask = getServer().getScheduler().runTaskTimerAsynchronously(
+                this,
+                () -> bannerRepository.refreshAsync(null),
+                20L * 60 * 5,
+                20L * 60 * 5);
 
         // /clans command — uses `clans` as primary name to coexist
         // with PowerClans's /clan during the migration window. Once
@@ -121,6 +136,10 @@ public final class ClanCapesPlugin extends JavaPlugin {
         if (clanRefreshTask != null) {
             clanRefreshTask.cancel();
             clanRefreshTask = null;
+        }
+        if (bannerRefreshTask != null) {
+            bannerRefreshTask.cancel();
+            bannerRefreshTask = null;
         }
         if (clanTeamManager != null) {
             try {
@@ -169,6 +188,16 @@ public final class ClanCapesPlugin extends JavaPlugin {
      */
     public ClanRepository getClanRepository() {
         return clanRepository;
+    }
+
+    /**
+     * Panel-backed banner cache. Feeds {@link BannerService#applyToHeldShields}
+     * so Phase-3 auto-paint reads the same DB the admin UI writes to,
+     * instead of the legacy local SQLite store. May be null on a
+     * pre-Phase-3 deploy — callers should guard accordingly.
+     */
+    public BannerRepository getBannerRepository() {
+        return bannerRepository;
     }
 
     /**

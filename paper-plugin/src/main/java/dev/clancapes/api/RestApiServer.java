@@ -287,6 +287,15 @@ public final class RestApiServer {
                     patterns,
                     body.actor() != null ? body.actor() : "api"
             );
+            // Phase 3: panel saved the canonical row. Trigger a single-tag
+            // refresh of the in-memory BannerRepository so subsequent
+            // shield-equip events read the new spec without waiting up
+            // to 5 min for the periodic poll. The cache hit picks up
+            // immediately because the plugin is now the consumer, not
+            // the source of truth.
+            var bannerRepo = plugin.getBannerRepository();
+            if (bannerRepo != null) bannerRepo.refreshTagAsync(tag);
+
             reapplyForOnlineClanMembers(tag);
             ctx.json(toBannerJson(record));
         } catch (Exception e) {
@@ -301,6 +310,10 @@ public final class RestApiServer {
         }
         String tag = ctx.pathParam("tag").toUpperCase();
         bannerService.removeBanner(tag, "api");
+        // Same invalidation hint for the delete path.
+        var bannerRepo = plugin.getBannerRepository();
+        if (bannerRepo != null) bannerRepo.refreshTagAsync(tag);
+
         ctx.json(Map.of("ok", true, "clan", tag));
     }
 
@@ -308,15 +321,30 @@ public final class RestApiServer {
      * After the panel updates a banner, push the new design out to every
      * online clan member's held shield immediately — they don't have to
      * re-equip the shield to see the change.
+     *
+     * Phase 3 — resolve the clan via {@link dev.clancapes.clan.ClanRepository}
+     * (panel-backed) so we reach the same membership the BannerService
+     * uses for paint decisions. Falls back to PowerClansHook only when
+     * ClanRepository hasn't loaded yet (cold boot), matching the
+     * BannerService.applyToHeldShields fallback chain.
      */
     private void reapplyForOnlineClanMembers(String clanTag) {
         Bukkit.getScheduler().runTask(plugin, () -> {
+            var clanRepo = plugin.getClanRepository();
             for (Player online : Bukkit.getOnlinePlayers()) {
-                powerClansHook.getClanTag(online).ifPresent(tag -> {
-                    if (tag.equalsIgnoreCase(clanTag)) {
-                        bannerService.applyToHeldShields(online);
-                    }
-                });
+                boolean inThisClan = false;
+                if (clanRepo != null) {
+                    inThisClan = clanRepo.byPlayer(online.getUniqueId())
+                            .map(c -> c.tag().equalsIgnoreCase(clanTag))
+                            .orElse(false);
+                } else {
+                    inThisClan = powerClansHook.getClanTag(online)
+                            .map(t -> t.equalsIgnoreCase(clanTag))
+                            .orElse(false);
+                }
+                if (inThisClan) {
+                    bannerService.applyToHeldShields(online);
+                }
             }
         });
     }

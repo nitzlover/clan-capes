@@ -377,6 +377,87 @@ public final class PanelClient {
         dev.clancapes.clan.Clan clan;
     }
 
+    // ──────── Banner reads (Phase 3 — auto-paint) ─────────────────────
+
+    /**
+     * GET /api/plugin/banners — bulk list of every active clan's
+     * banner spec on this server. Used to prime the in-memory
+     * BannerRepository cache.
+     */
+    public java.util.List<dev.clancapes.model.ClanBannerRecord> fetchBanners(
+            String panelUrl, String apiKey) throws PanelException {
+        String url = panelUrl.replaceAll("/+$", "") + "/api/plugin/banners";
+        HttpResponse<String> res = sendAuthed(url, apiKey, "GET", null);
+        if (res.statusCode() / 100 != 2) {
+            throw new PanelException(errorMessage(res.body(), "HTTP " + res.statusCode()));
+        }
+        try {
+            BannerListResponse parsed = gson.fromJson(res.body(), BannerListResponse.class);
+            if (parsed == null || parsed.banners == null) return java.util.List.of();
+            java.util.List<dev.clancapes.model.ClanBannerRecord> out =
+                    new java.util.ArrayList<>(parsed.banners.size());
+            for (BannerJson b : parsed.banners) {
+                out.add(b.toRecord());
+            }
+            return out;
+        } catch (Exception e) {
+            throw new PanelException("malformed banners response: " + res.body(), e);
+        }
+    }
+
+    /**
+     * GET /api/plugin/clans/{tag}/banner — single-tag lookup. Returns
+     * null on 404 so the caller can treat "clan has no banner" as a
+     * non-error.
+     */
+    public dev.clancapes.model.ClanBannerRecord fetchBannerByTag(
+            String panelUrl, String apiKey, String tag) throws PanelException {
+        String url = panelUrl.replaceAll("/+$", "")
+                + "/api/plugin/clans/" + urlEnc(tag) + "/banner";
+        HttpResponse<String> res = sendAuthed(url, apiKey, "GET", null);
+        if (res.statusCode() == 404) return null;
+        if (res.statusCode() / 100 != 2) {
+            throw new PanelException(errorMessage(res.body(), "HTTP " + res.statusCode()));
+        }
+        try {
+            BannerJson parsed = gson.fromJson(res.body(), BannerJson.class);
+            return parsed == null ? null : parsed.toRecord();
+        } catch (Exception e) {
+            throw new PanelException("malformed banner response: " + res.body(), e);
+        }
+    }
+
+    /** Wire shape of a single banner row in panel responses. */
+    private static final class BannerJson {
+        String clan;
+        int baseColor;
+        java.util.List<dev.clancapes.model.BannerPatternSpec> patterns;
+        String updatedAt;
+        String updatedBy;
+
+        dev.clancapes.model.ClanBannerRecord toRecord() {
+            long ts = 0L;
+            try {
+                if (updatedAt != null) {
+                    ts = java.time.Instant.parse(updatedAt).toEpochMilli();
+                }
+            } catch (Exception ignored) {
+                // Leave ts = 0 — the field is only audit-informational.
+            }
+            return new dev.clancapes.model.ClanBannerRecord(
+                    clan == null ? "" : clan.toUpperCase(),
+                    baseColor,
+                    patterns == null ? java.util.List.of() : patterns,
+                    ts,
+                    updatedBy == null ? "panel" : updatedBy
+            );
+        }
+    }
+
+    private static final class BannerListResponse {
+        java.util.List<BannerJson> banners;
+    }
+
     /** Raised on any non-2xx response or transport failure. */
     public static final class PanelException extends Exception {
         public PanelException(String message) {

@@ -1,6 +1,9 @@
 package dev.clancapes.service;
 
 import dev.clancapes.ClanCapesPlugin;
+import dev.clancapes.clan.BannerRepository;
+import dev.clancapes.clan.Clan;
+import dev.clancapes.clan.ClanRepository;
 import dev.clancapes.hook.PowerClansHook;
 import dev.clancapes.model.BannerPatternSpec;
 import dev.clancapes.model.ClanBannerRecord;
@@ -80,13 +83,16 @@ public final class BannerService {
      * Safe to call from any event handler — we read player state synchronously
      * and only mutate the held ItemStack via the Bukkit ItemMeta API, which
      * preserves enchantments, custom names and durability.
+     *
+     * Phase 3 — the lookup chain is panel-driven:
+     * {@link ClanRepository#byPlayer(java.util.UUID)} for tag resolution,
+     * {@link BannerRepository#byTag(String)} for the spec. Falls back to
+     * the legacy PowerClans+SQLite path only if no ClanRepository is
+     * wired (which only happens on a pre-migration deploy and is
+     * impossible after the Phase-2 cut-over).
      */
     public void applyToHeldShields(Player player) {
-        Optional<String> clan = powerClansHook.getClanTag(player);
-        if (clan.isEmpty()) {
-            return;
-        }
-        Optional<ClanBannerRecord> spec = getBanner(clan.get());
+        Optional<ClanBannerRecord> spec = resolveBannerFor(player);
         if (spec.isEmpty()) {
             return;
         }
@@ -99,6 +105,28 @@ public final class BannerService {
         if (applyToShield(off, spec.get())) {
             inv.setItemInOffHand(off);
         }
+    }
+
+    /**
+     * Look up the player's current clan via the panel-driven cache and
+     * return the matching banner spec. Returns an empty Optional when
+     * the player is unclanned, the panel cache is cold, or the clan
+     * has no banner registered.
+     */
+    private Optional<ClanBannerRecord> resolveBannerFor(Player player) {
+        ClanRepository clanRepo = plugin.getClanRepository();
+        BannerRepository bannerRepo = plugin.getBannerRepository();
+        if (clanRepo != null && bannerRepo != null) {
+            Optional<Clan> clan = clanRepo.byPlayer(player.getUniqueId());
+            if (clan.isEmpty()) return Optional.empty();
+            return bannerRepo.byTag(clan.get().tag());
+        }
+        // Pre-Phase-2 fallback. Kept so a half-migrated deploy still
+        // paints shields against whatever PowerClans + local SQLite
+        // happens to hold.
+        Optional<String> tag = powerClansHook.getClanTag(player);
+        if (tag.isEmpty()) return Optional.empty();
+        return getBanner(tag.get());
     }
 
     /**
