@@ -14,7 +14,7 @@
  * try again.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 type ExchangeResponse = {
@@ -25,7 +25,28 @@ type ExchangeResponse = {
   playerName: string;
 };
 
+/**
+ * Wrap the inner client component in a Suspense boundary — Next.js 15
+ * fails the production build (`useSearchParams() should be wrapped in
+ * a suspense boundary`) without it because the hook bails out of
+ * static prerender. The fallback only shows during the React tree
+ * hydration window so users effectively never see it.
+ */
 export default function ClanPanelEntry() {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
+          <p className="text-sm text-[var(--text-mute)]">Loading…</p>
+        </main>
+      }
+    >
+      <ClanPanelEntryInner />
+    </Suspense>
+  );
+}
+
+function ClanPanelEntryInner() {
   const router = useRouter();
   const search = useSearchParams();
   const presetToken = search?.get('t') ?? '';
