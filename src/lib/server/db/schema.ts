@@ -74,6 +74,11 @@ export const servers = pgTable(
     // by the admin "reset season" button. Empty = "no season started
     // yet" — the ingest endpoint fills it lazily.
     currentSeasonKey: text('current_season_key').notNull().default(''),
+    // Phase-6 per-server operator settings (palette, cooldowns, max
+    // layers). Stored as a free-form JSON blob — the application
+    // layer mergeWithDefaults pass fills missing keys, so adding new
+    // keys never needs another migration.
+    settings: jsonb('settings').notNull().default({}),
   },
   (t) => ({
     nameIdx: uniqueIndex('servers_name_idx').on(t.name),

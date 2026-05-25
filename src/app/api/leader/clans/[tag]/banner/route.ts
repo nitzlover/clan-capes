@@ -15,11 +15,14 @@ import { getDb, schema } from '@/lib/server/db';
 import { requireLeaderScope } from '@/lib/server/leader-scope';
 import * as mc from '@/lib/server/minecraft';
 import { getRequestId } from '@/lib/server/request-id';
+import { getServerSettings } from '@/lib/server/settings-repo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const MAX_LAYERS = 6;
+// Fallback when settings haven't been written yet; real ceiling
+// pulled per-request from `settings.bannerMaxLayers`.
+const FALLBACK_MAX_LAYERS = 6;
 
 export async function POST(
   req: Request,
@@ -41,9 +44,11 @@ export async function POST(
     return NextResponse.json({ error: 'baseColor must be 0..15' }, { status: 400 });
   }
   const patterns = Array.isArray(body.patterns) ? body.patterns : [];
-  if (patterns.length > MAX_LAYERS) {
+  const cap = (await getServerSettings(session.serverId)).bannerMaxLayers
+    || FALLBACK_MAX_LAYERS;
+  if (patterns.length > cap) {
     return NextResponse.json(
-      { error: `too many layers (max ${MAX_LAYERS})` },
+      { error: `too many layers (max ${cap})` },
       { status: 400 },
     );
   }

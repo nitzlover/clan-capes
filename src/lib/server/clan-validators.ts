@@ -82,17 +82,20 @@ export function normaliseTag(raw: string): string {
 }
 
 /**
- * Pick the first {@link DEFAULT_PALETTE} entry that isn't currently
- * in use by an active clan on this server. Returns null only if every
- * palette slot is taken — at which point a 32-slot palette is too
- * small and the operator should rotate disbanded clans or extend
- * the palette via config (TODO future).
+ * Pick the first palette entry that isn't currently in use by an
+ * active clan on this server. Returns null only when every slot is
+ * taken — at which point the operator should rotate disbanded clans
+ * or extend the palette through /dashboard/settings.
  *
- * Shuffles a copy of the palette so two simultaneous creates on a
- * fresh server don't both grab slot 0.
+ * `palette` defaults to {@link DEFAULT_PALETTE} but accepts an
+ * operator-set list so /dashboard/settings can override the colour
+ * set without touching this helper. A Fisher–Yates shuffle on a local
+ * copy keeps two simultaneous creates on a fresh server from racing
+ * for slot 0.
  */
 export async function allocateUnusedColor(
   serverId: number,
+  palette: ReadonlyArray<string> = DEFAULT_PALETTE,
 ): Promise<string | null> {
   const db = getDb();
   const taken = await db
@@ -103,9 +106,7 @@ export async function allocateUnusedColor(
     );
   const takenSet = new Set(taken.map((r) => r.colorHex.toUpperCase()));
 
-  // Fisher–Yates shuffle into a local copy so concurrent allocations
-  // don't always race for the same first-fit slot.
-  const candidates = [...DEFAULT_PALETTE];
+  const candidates = [...palette];
   for (let i = candidates.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [candidates[i], candidates[j]] = [candidates[j], candidates[i]];

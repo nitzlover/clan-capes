@@ -26,6 +26,7 @@ import * as mc from '@/lib/server/minecraft';
 import { resolveMojangName } from '@/lib/server/mojang';
 import { isUniqueViolation } from '@/lib/server/pg-errors';
 import { getRequestId } from '@/lib/server/request-id';
+import { getServerSettings } from '@/lib/server/settings-repo';
 import { desc } from 'drizzle-orm';
 
 export const runtime = 'nodejs';
@@ -111,7 +112,8 @@ export async function POST(req: Request) {
       continue;
     }
 
-    const colorHex = await allocateUnusedColor(serverId);
+    const settings = await getServerSettings(serverId);
+    const colorHex = await allocateUnusedColor(serverId, settings.palette);
     if (!colorHex) {
       report.push({ tag, status: 'skipped', reason: 'palette exhausted' });
       skipped++;

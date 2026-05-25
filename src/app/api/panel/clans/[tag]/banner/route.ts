@@ -24,11 +24,15 @@ import {
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import * as mc from '@/lib/server/minecraft';
 import { getRequestId } from '@/lib/server/request-id';
+import { getServerSettings } from '@/lib/server/settings-repo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const MAX_LAYERS = 6;
+// Default cap when the operator hasn't set one via /dashboard/settings;
+// real ceiling is pulled per-request from `settings.bannerMaxLayers`
+// so an operator can extend (or tighten) without redeploying.
+const FALLBACK_MAX_LAYERS = 6;
 
 async function resolveServerId(req: Request): Promise<number | null> {
   const url = new URL(req.url);
@@ -107,9 +111,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ tag: string }>
     return NextResponse.json({ error: 'baseColor must be 0..15' }, { status: 400 });
   }
   const patterns = Array.isArray(body.patterns) ? body.patterns : [];
-  if (patterns.length > MAX_LAYERS) {
+  const serverIdForCap = await resolveServerId(req);
+  const cap = serverIdForCap
+    ? (await getServerSettings(serverIdForCap)).bannerMaxLayers
+    : FALLBACK_MAX_LAYERS;
+  if (patterns.length > cap) {
     return NextResponse.json(
-      { error: `too many layers (max ${MAX_LAYERS})` },
+      { error: `too many layers (max ${cap})` },
       { status: 400 },
     );
   }

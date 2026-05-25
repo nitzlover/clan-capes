@@ -28,6 +28,7 @@ import {
   uniqueConstraintHint,
 } from '@/lib/server/pg-errors';
 import { getRequestId } from '@/lib/server/request-id';
+import { getServerSettings } from '@/lib/server/settings-repo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -150,7 +151,10 @@ export async function POST(req: Request) {
     }
     colorHex = body.colorHex.toUpperCase();
   } else {
-    const allocated = await allocateUnusedColor(ctx.id);
+    // Pull the operator-set palette so /dashboard/settings can curate
+    // the colour pool without code changes.
+    const settings = await getServerSettings(ctx.id);
+    const allocated = await allocateUnusedColor(ctx.id, settings.palette);
     if (!allocated) {
       return NextResponse.json(
         { error: 'palette exhausted; pass colorHex explicitly' },
