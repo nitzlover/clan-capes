@@ -107,9 +107,28 @@ public final class PanelClient {
                 return obj.get("error").getAsString();
             }
         } catch (Exception ignored) {
-            // Not JSON — fall through.
+            // Not JSON — fall through to the truncated raw body so a Next.js
+            // 404 HTML page or a Cloudflare interstitial doesn't dump
+            // thousands of characters into the player's chat.
         }
-        return fallback + ": " + body;
+        return fallback + ": " + summariseBody(body);
+    }
+
+    /**
+     * Collapse a non-JSON response body into a one-line summary. Strips
+     * HTML tags so a Next.js 404 page reads as `404: This page could
+     * not be found.` instead of a 50-kilobyte React payload dumped
+     * straight into the in-game chat. Hard-caps at 120 chars to stay
+     * within a single Bukkit chat line on default font.
+     */
+    private static String summariseBody(String body) {
+        if (body == null) return "";
+        String stripped = body.replaceAll("(?s)<[^>]+>", " ");
+        stripped = stripped.replaceAll("\\s+", " ").trim();
+        if (stripped.length() > 120) {
+            stripped = stripped.substring(0, 117) + "...";
+        }
+        return stripped;
     }
 
     public static final class RegisterResponse {
