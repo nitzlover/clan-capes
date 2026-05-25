@@ -112,13 +112,28 @@ public final class PlaceholderExpansionImpl extends PlaceholderExpansion {
                                 && m.role() == ClanMember.Role.DEPUTY)
                         ? "true" : "false";
             }
-            // Phase-5 stats stubs — return zero today so operator-facing
-            // displays (TAB suffix, scoreboard sidebars, chat hooks)
-            // can wire `%clancapes_kills%` / `%clancapes_deaths%` /
-            // `%clancapes_kd%` in now and pick up real PvP numbers
-            // automatically once the kill listener + panel rollup ship.
-            case "kills", "deaths" -> "0";
-            case "kd", "kdr" -> "0.00";
+            // Phase-5 — live K/D from the in-memory StatsCache backed
+            // by the panel. Cache miss schedules an async refetch and
+            // returns 0 / 0 / 0.00 until the next render window, so
+            // the first render after server boot is a placeholder but
+            // every subsequent render is fresh.
+            case "kills", "deaths", "kd", "kdr",
+                    "lifetime_kills", "lifetime_deaths", "lifetime_kd" -> {
+                var cache = plugin.getStatsCache();
+                if (cache == null) yield "0";
+                var entry = cache.get(player.getUniqueId());
+                yield switch (key) {
+                    case "kills" -> String.valueOf(entry.seasonKills);
+                    case "deaths" -> String.valueOf(entry.seasonDeaths);
+                    case "kd", "kdr" -> String.format(java.util.Locale.ROOT,
+                            "%.2f", entry.seasonKd());
+                    case "lifetime_kills" -> String.valueOf(entry.lifetimeKills);
+                    case "lifetime_deaths" -> String.valueOf(entry.lifetimeDeaths);
+                    case "lifetime_kd" -> String.format(java.util.Locale.ROOT,
+                            "%.2f", entry.lifetimeKd());
+                    default -> "0";
+                };
+            }
             default -> null;
         };
     }

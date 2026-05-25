@@ -5,11 +5,13 @@ import dev.clancapes.clan.BannerRepository;
 import dev.clancapes.clan.ClanRepository;
 import dev.clancapes.clan.ClanTeamManager;
 import dev.clancapes.clan.PendingInvites;
+import dev.clancapes.clan.StatsCache;
 import dev.clancapes.command.ClanCapeCommand;
 import dev.clancapes.command.ClanCommand;
 import dev.clancapes.config.PluginConfig;
 import dev.clancapes.hook.PowerClansHook;
 import dev.clancapes.hook.PlaceholderHook;
+import dev.clancapes.listener.PvpKillListener;
 import dev.clancapes.listener.ShieldBannerListener;
 import dev.clancapes.panel.HeartbeatTask;
 import dev.clancapes.service.BannerService;
@@ -36,6 +38,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
     private BannerRepository bannerRepository;
     private ClanTeamManager clanTeamManager;
     private PendingInvites pendingInvites;
+    private StatsCache statsCache;
     private BukkitTask clanRefreshTask;
     private BukkitTask bannerRefreshTask;
 
@@ -62,6 +65,12 @@ public final class ClanCapesPlugin extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(
                 new ShieldBannerListener(this, bannerService), this);
+
+        // Phase 5 — PvP kill ingest. Stats cache is created up front so
+        // the placeholder hook can read from it on the first render.
+        statsCache = new StatsCache(this);
+        getServer().getPluginManager().registerEvents(
+                new PvpKillListener(this), this);
 
         var command = new ClanCapeCommand(this, capeService, powerClansHook);
         var pluginCommand = getCommand("clancape");
@@ -198,6 +207,16 @@ public final class ClanCapesPlugin extends JavaPlugin {
      */
     public BannerRepository getBannerRepository() {
         return bannerRepository;
+    }
+
+    /**
+     * Per-player stats cache feeding the K/D placeholders. Refreshed
+     * lazily on miss + invalidated by the PvP listener after every
+     * kill so subsequent placeholder reads pick up the new totals
+     * without waiting for the cache TTL.
+     */
+    public StatsCache getStatsCache() {
+        return statsCache;
     }
 
     /**

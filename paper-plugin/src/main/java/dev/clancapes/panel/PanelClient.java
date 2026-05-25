@@ -491,6 +491,47 @@ public final class PanelClient {
         public String url;
     }
 
+    // ──────── Stats (Phase 5) ─────────────────────────────────────────
+
+    /**
+     * POST /api/plugin/kills — ship a single PvP kill to the panel.
+     * The body is built by the caller so future fields (occurredAt,
+     * weapon, …) don't require a signature change.
+     */
+    public void recordKill(String panelUrl, String apiKey, JsonObject body)
+            throws PanelException {
+        String url = panelUrl.replaceAll("/+$", "") + "/api/plugin/kills";
+        HttpResponse<String> res = sendAuthed(url, apiKey, "POST",
+                gson.toJson(body == null ? new JsonObject() : body));
+        if (res.statusCode() / 100 != 2) {
+            throw new PanelException(errorMessage(res.body(), "HTTP " + res.statusCode()));
+        }
+    }
+
+    /**
+     * GET /api/plugin/stats/player/{uuid} — season + lifetime counters
+     * for the placeholder cache. Returned as a loose-typed map so the
+     * caller picks the fields it needs without dragging a DTO class
+     * across modules.
+     */
+    public java.util.Map<String, Object> fetchPlayerStats(
+            String panelUrl, String apiKey, java.util.UUID uuid) throws PanelException {
+        String url = panelUrl.replaceAll("/+$", "")
+                + "/api/plugin/stats/player/" + uuid;
+        HttpResponse<String> res = sendAuthed(url, apiKey, "GET", null);
+        if (res.statusCode() / 100 != 2) {
+            throw new PanelException(errorMessage(res.body(), "HTTP " + res.statusCode()));
+        }
+        try {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> parsed =
+                    gson.fromJson(res.body(), java.util.Map.class);
+            return parsed != null ? parsed : java.util.Map.of();
+        } catch (Exception e) {
+            throw new PanelException("malformed stats response: " + res.body(), e);
+        }
+    }
+
     /** Raised on any non-2xx response or transport failure. */
     public static final class PanelException extends Exception {
         public PanelException(String message) {
