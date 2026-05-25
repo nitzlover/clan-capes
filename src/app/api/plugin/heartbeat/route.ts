@@ -17,6 +17,7 @@
 
 import { NextResponse } from 'next/server';
 import { getDb, dbEnabled, schema } from '@/lib/server/db';
+import { setOnlineUuids } from '@/lib/server/online-store';
 import { requirePluginAuth } from '@/lib/server/plugin-auth';
 
 export const runtime = 'nodejs';
@@ -51,17 +52,31 @@ export async function POST(req: Request) {
   }
 
   if (payload) {
+    // Refresh the in-memory online-now cache so /dashboard/clans can
+    // paint the green-dot indicator without round-tripping back to the
+    // game server. We drop the UUID array from the audit payload to
+    // keep the audit log readable — the count + version stay.
+    const rawUuids = (payload as { onlinePlayerUuids?: unknown }).onlinePlayerUuids;
+    if (Array.isArray(rawUuids)) {
+      setOnlineUuids(
+        ctx.id,
+        rawUuids.filter((u): u is string => typeof u === 'string'),
+      );
+    }
+    const auditPayload: Record<string, unknown> = { ...payload };
+    delete auditPayload.onlinePlayerUuids;
+
     const db = getDb();
     // Only audit substantive heartbeats — silent pings would flood the
     // log. "Substantive" = the plugin sent a version string or some
     // other named field we'd care to grep for later.
-    if (Object.keys(payload).length > 0) {
+    if (Object.keys(auditPayload).length > 0) {
       await db.insert(schema.audit).values({
         serverId: ctx.id,
         actor: `plugin:${ctx.name}`,
         action: 'HEARTBEAT',
         target: null,
-        payload,
+        payload: auditPayload,
       });
     }
   }

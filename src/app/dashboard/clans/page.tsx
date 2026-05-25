@@ -36,6 +36,10 @@ export default function ClansPage() {
   const [clans, setClans] = useState<Clan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // Set of lowercased UUIDs currently online on the selected server.
+  // `null` = no fresh heartbeat (snapshot stale) → UI shows the
+  // "unknown" dot. Polled every 30s in lockstep with the panel cache.
+  const [onlineUuids, setOnlineUuids] = useState<Set<string> | null>(null);
 
   const load = useCallback(async (id: number | null) => {
     setLoading(true);
@@ -59,6 +63,38 @@ export default function ClansPage() {
   useEffect(() => {
     load(null);
   }, [load]);
+
+  // Poll the in-memory online cache so the green dots stay live without
+  // refreshing the whole clan list. Cheap (single endpoint, no DB hit
+  // on the panel side) — 30 s interval matches the heartbeat cadence
+  // tolerance without flooding the network.
+  useEffect(() => {
+    if (!serverId) return;
+    let cancelled = false;
+    async function poll() {
+      try {
+        const resp = await api<{
+          source: 'plugin' | 'stale';
+          uuids: string[];
+        }>(`/panel/online?serverId=${serverId}`);
+        if (cancelled) return;
+        if (resp.source === 'plugin') {
+          setOnlineUuids(new Set(resp.uuids.map((u) => u.toLowerCase())));
+        } else {
+          setOnlineUuids(null);
+        }
+      } catch {
+        // Don't surface to the user — stale dots are tolerable.
+        if (!cancelled) setOnlineUuids(null);
+      }
+    }
+    poll();
+    const handle = setInterval(poll, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(handle);
+    };
+  }, [serverId]);
 
   async function refreshNames() {
     if (!serverId) return;
@@ -216,6 +252,7 @@ export default function ClansPage() {
                 key={c.id}
                 clan={c}
                 serverId={serverId}
+                onlineUuids={onlineUuids}
                 onChange={() => load(serverId)}
               />
             ))}
@@ -229,14 +266,23 @@ export default function ClansPage() {
 function ClanRow({
   clan,
   serverId,
+  onlineUuids,
   onChange,
 }: {
   clan: Clan;
   serverId: number | null;
+  onlineUuids: Set<string> | null;
   onChange: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const leader = clan.members.find((m) => m.role === 'leader');
+  // How many members of this clan are currently online — feeds the
+  // header chip so the operator can see clan activity at a glance
+  // without expanding the row.
+  const onlineCount =
+    onlineUuids === null
+      ? null
+      : clan.members.filter((m) => onlineUuids.has(m.playerUuid.toLowerCase())).length;
 
   return (
     <li className="border-b border-[var(--rule)] last:border-b-0">
@@ -260,6 +306,20 @@ function ClanRow({
         </span>
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-mute)]">
           {clan.members.length} member{clan.members.length === 1 ? '' : 's'}
+          {onlineCount !== null && (
+            <span
+              className="ml-2 inline-flex items-center gap-1 text-[var(--text-soft)]"
+              title={`${onlineCount} online now`}
+            >
+              <span
+                aria-hidden
+                className={`inline-block h-2 w-2 rounded-full ${
+                  onlineCount > 0 ? 'bg-[#5fd068]' : 'bg-[var(--rule-strong)]'
+                }`}
+              />
+              {onlineCount} online
+            </span>
+          )}
         </span>
         <span className="hidden font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)] sm:inline">
           {leader?.playerName ?? '—'}
@@ -269,7 +329,12 @@ function ClanRow({
         </span>
       </button>
       {open && (
-        <ClanEditor clan={clan} serverId={serverId} onChange={onChange} />
+        <ClanEditor
+          clan={clan}
+          serverId={serverId}
+          onlineUuids={onlineUuids}
+          onChange={onChange}
+        />
       )}
     </li>
   );
@@ -278,10 +343,12 @@ function ClanRow({
 function ClanEditor({
   clan,
   serverId,
+  onlineUuids,
   onChange,
 }: {
   clan: Clan;
   serverId: number | null;
+  onlineUuids: Set<string> | null;
   onChange: () => void;
 }) {
   const qs = serverId ? `?serverId=${serverId}` : '';
@@ -435,6 +502,11 @@ function ClanEditor({
           <MemberRow
             key={m.playerUuid}
             m={m}
+            online={
+              onlineUuids === null
+                ? null
+                : onlineUuids.has(m.playerUuid.toLowerCase())
+            }
             onRoleChange={(role) => memberEdit(m.playerUuid, { role })}
             onRename={(playerName) => memberEdit(m.playerUuid, { playerName })}
             onKick={() => memberKick(m.playerUuid, m.playerName)}
@@ -442,18 +514,23 @@ function ClanEditor({
           />
         ))}
       </ul>
+
+      <AddMemberForm clanTag={clan.tag} qs={qs} onAdded={onChange} />
     </div>
   );
 }
 
 function MemberRow({
   m,
+  online,
   onRoleChange,
   onRename,
   onKick,
   onTransfer,
 }: {
   m: Member;
+  /** `true` online, `false` offline, `null` snapshot stale → unknown. */
+  online: boolean | null;
   onRoleChange: (role: 'member' | 'deputy') => void;
   onRename: (name: string) => void;
   onKick: () => void;
@@ -461,9 +538,22 @@ function MemberRow({
 }) {
   const [name, setName] = useState(m.playerName);
   const dirty = name !== m.playerName;
+  const dotClass =
+    online === null
+      ? 'bg-[var(--rule-strong)]'
+      : online
+        ? 'bg-[#5fd068]'
+        : 'bg-[var(--rule)]';
+  const dotTitle =
+    online === null ? 'No fresh heartbeat' : online ? 'Online now' : 'Offline';
   return (
     <li className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 border-b border-[var(--rule)] py-3 last:border-b-0">
       <span className="flex items-center gap-3">
+        <span
+          aria-label={dotTitle}
+          title={dotTitle}
+          className={`inline-block h-2 w-2 shrink-0 rounded-full ${dotClass}`}
+        />
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -512,6 +602,122 @@ function Field({ label, value, wide }: { label: string; value: string; wide?: bo
     <div className={wide ? 'col-span-2' : ''}>
       <p className="text-[var(--text-faint)]">{label}</p>
       <p className="mt-1 break-all text-[var(--text-soft)]">{value}</p>
+    </div>
+  );
+}
+
+/**
+ * Inline "add member" form for the expanded clan editor. Admins use
+ * this to roster a player without bouncing through the in-game
+ * /clan invite + accept flow — handy when on-boarding a new operator
+ * or repairing a botched import. The endpoint enforces the single-
+ * clan-per-player rule and surfaces a friendly 409 if the player is
+ * already rostered somewhere.
+ */
+function AddMemberForm({
+  clanTag,
+  qs,
+  onAdded,
+}: {
+  clanTag: string;
+  qs: string;
+  onAdded: () => void;
+}) {
+  const [uuid, setUuid] = useState('');
+  const [playerName, setPlayerName] = useState('');
+  const [role, setRole] = useState<'member' | 'deputy'>('member');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const uuidLooksOk =
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+      uuid,
+    );
+  const nameOk = playerName.trim().length > 0 && playerName.trim().length <= 32;
+  const canSubmit = uuidLooksOk && nameOk && !busy;
+
+  async function submit() {
+    if (!canSubmit) return;
+    setBusy(true);
+    setErr('');
+    try {
+      await api(`/panel/clans/${clanTag}/members${qs}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playerUuid: uuid,
+          playerName: playerName.trim(),
+          role,
+        }),
+      });
+      setUuid('');
+      setPlayerName('');
+      setRole('member');
+      onAdded();
+    } catch (e) {
+      if (e instanceof UnauthorizedError) return;
+      setErr(e instanceof Error ? e.message : 'Add failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-6 border-t-2 border-[var(--rule-strong)] pt-5">
+      <p className="label-mono mb-3">Add member</p>
+      <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto_auto]">
+        <label className="block">
+          <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+            Player UUID
+          </span>
+          <input
+            value={uuid}
+            onChange={(e) => setUuid(e.target.value.trim())}
+            placeholder="00000000-0000-0000-0000-000000000000"
+            className="input mt-1 font-mono"
+            spellCheck={false}
+          />
+        </label>
+        <label className="block">
+          <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+            Display name
+          </span>
+          <input
+            value={playerName}
+            onChange={(e) => setPlayerName(e.target.value)}
+            placeholder="Mojang name"
+            className="input mt-1"
+            maxLength={32}
+          />
+        </label>
+        <label className="block">
+          <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+            Role
+          </span>
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value as 'member' | 'deputy')}
+            className="input mt-1 font-mono text-[11px] uppercase tracking-[0.22em]"
+          >
+            <option value="member">member</option>
+            <option value="deputy">deputy</option>
+          </select>
+        </label>
+        <div className="flex items-end">
+          <button
+            onClick={submit}
+            disabled={!canSubmit}
+            className="btn-primary w-full disabled:opacity-40"
+          >
+            {busy ? 'Adding…' : 'Add'}
+          </button>
+        </div>
+      </div>
+      {err && (
+        <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.22em] text-white">
+          ! {err}
+        </p>
+      )}
     </div>
   );
 }
