@@ -9,7 +9,7 @@
  * without a second join.
  */
 
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { getDb, schema } from './db';
 
 /** Sentinel season key used for the all-time aggregate row. */
@@ -251,6 +251,12 @@ export async function getClanLeaderboard(
   limit: number,
 ): Promise<LeaderboardClanRow[]> {
   const db = getDb();
+  // Push ORDER BY + LIMIT into the database. Approximating K/D as
+  // `kills / GREATEST(deaths, 1)` matches the in-memory formula and
+  // lets Postgres use the index on (server_id, season_key) without
+  // scanning every clan_stats row into Node memory. Final tie-break
+  // by kills desc happens at the SQL layer; a stable secondary
+  // sort by tag asc keeps the order deterministic across requests.
   const rows = await db
     .select({
       clanId: schema.clanStats.clanId,
@@ -268,15 +274,19 @@ export async function getClanLeaderboard(
         eq(schema.clanStats.seasonKey, seasonKey),
       ),
     )
-    .orderBy(desc(schema.clanStats.kills));
+    .orderBy(
+      desc(
+        sql<number>`${schema.clanStats.kills}::float / GREATEST(${schema.clanStats.deaths}, 1)`,
+      ),
+      desc(schema.clanStats.kills),
+      asc(schema.clans.tag),
+    )
+    .limit(limit);
 
-  return rows
-    .map((r) => ({
-      ...r,
-      kd: r.deaths > 0 ? r.kills / r.deaths : r.kills,
-    }))
-    .sort((a, b) => b.kd - a.kd || b.kills - a.kills)
-    .slice(0, limit);
+  return rows.map((r) => ({
+    ...r,
+    kd: r.deaths > 0 ? r.kills / r.deaths : r.kills,
+  }));
 }
 
 export type LeaderboardPlayerRow = {
@@ -294,8 +304,11 @@ export async function getPlayerLeaderboard(
   limit: number,
 ): Promise<LeaderboardPlayerRow[]> {
   const db = getDb();
-  // LEFT JOIN against clan_members + clans so unclanned players still
-  // appear on the leaderboard — they just show a null tag.
+  // Push ORDER BY + LIMIT into the database; ordering by
+  // `kills / GREATEST(deaths, 1)` matches the application-layer
+  // K/D formula so the leaderboard tail isn't an unbounded scan.
+  // LEFT JOIN against clan_members + clans keeps unclanned players
+  // on the leaderboard with a null tag.
   const rows = await db
     .select({
       playerUuid: schema.playerStats.playerUuid,
@@ -318,13 +331,18 @@ export async function getPlayerLeaderboard(
         eq(schema.playerStats.serverId, serverId),
         eq(schema.playerStats.seasonKey, seasonKey),
       ),
-    );
+    )
+    .orderBy(
+      desc(
+        sql<number>`${schema.playerStats.kills}::float / GREATEST(${schema.playerStats.deaths}, 1)`,
+      ),
+      desc(schema.playerStats.kills),
+      asc(schema.playerStats.playerUuid),
+    )
+    .limit(limit);
 
-  return rows
-    .map((r) => ({
-      ...r,
-      kd: r.deaths > 0 ? r.kills / r.deaths : r.kills,
-    }))
-    .sort((a, b) => b.kd - a.kd || b.kills - a.kills)
-    .slice(0, limit);
+  return rows.map((r) => ({
+    ...r,
+    kd: r.deaths > 0 ? r.kills / r.deaths : r.kills,
+  }));
 }

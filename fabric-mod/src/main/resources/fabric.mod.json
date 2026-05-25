@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "clancapes",
+  "version": "${version}",
+  "name": "Clan Capes",
+  "description": "Custom clan capes rendered as native Minecraft cape layers (client-side).",
+  "authors": ["Clan Capes Team"],
+  "contact": {
+    "homepage": "https://github.com/clancapes/clan-capes",
+    "sources": "https://github.com/clancapes/clan-capes"
+  },
+  "license": "MIT",
+  "icon": "assets/clancapes/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.clancapes.ClanCapesClient"]
+  },
+  "mixins": ["clancapes.client.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.19.0",
+    "minecraft": "26.1",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
