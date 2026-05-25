@@ -57,7 +57,7 @@ public final class SettingsCache {
                 return;
             }
             try {
-                Map<String, Object> raw = new PanelClient(plugin)
+                Map<String, Object> raw = plugin.getPanelClient()
                         .fetchSettings(panelUrl, apiKey);
                 Object settingsObj = raw.get("settings");
                 if (!(settingsObj instanceof Map<?, ?> settings)) {

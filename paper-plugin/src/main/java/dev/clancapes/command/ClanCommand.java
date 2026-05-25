@@ -341,7 +341,7 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
 
         runAsync(() -> {
             try {
-                var panelClient = new dev.clancapes.panel.PanelClient(plugin);
+                var panelClient = plugin.getPanelClient();
                 var resp = panelClient.issueLeaderToken(
                         plugin.getPluginConfig().getPanelUrl(),
                         plugin.getPluginConfig().getPanelApiKey(),

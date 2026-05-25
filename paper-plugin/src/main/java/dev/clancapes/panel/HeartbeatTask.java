@@ -89,8 +89,7 @@ public final class HeartbeatTask {
         body.add("onlinePlayerUuids", uuids);
 
         try {
-            var client = new PanelClient(plugin);
-            client.heartbeat(panelUrl, apiKey, body);
+            plugin.getPanelClient().heartbeat(panelUrl, apiKey, body);
             if (warnedAuth) {
                 plugin.getLogger().info("Panel API key accepted again — heartbeats resumed.");
                 warnedAuth = false;

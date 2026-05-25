@@ -65,7 +65,7 @@ public final class StatsCache {
                 return;
             }
             try {
-                Map<String, Object> raw = new PanelClient(plugin)
+                Map<String, Object> raw = plugin.getPanelClient()
                         .fetchPlayerStats(panelUrl, apiKey, uuid);
                 Map<?, ?> season = (Map<?, ?>) raw.get("season");
                 Map<?, ?> lifetime = (Map<?, ?>) raw.get("lifetime");

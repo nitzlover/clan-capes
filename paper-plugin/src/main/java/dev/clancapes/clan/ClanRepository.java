@@ -43,7 +43,7 @@ public final class ClanRepository {
 
     public ClanRepository(ClanCapesPlugin plugin) {
         this.plugin = plugin;
-        this.panelClient = new PanelClient(plugin);
+        this.panelClient = plugin.getPanelClient();
     }
 
     /** Snapshot of every active clan (immutable). Empty list before the first refresh. */

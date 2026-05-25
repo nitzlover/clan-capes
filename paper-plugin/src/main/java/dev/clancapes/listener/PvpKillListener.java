@@ -61,7 +61,7 @@ public final class PvpKillListener implements Listener {
                 JsonObject body = new JsonObject();
                 body.addProperty("killerUuid", killerUuid.toString());
                 body.addProperty("victimUuid", victimUuid.toString());
-                new PanelClient(plugin).recordKill(panelUrl, apiKey, body);
+                plugin.getPanelClient().recordKill(panelUrl, apiKey, body);
                 // Refresh the involved players' stats cache so the
                 // placeholder picks the new number up on the next read
                 // instead of waiting for the cache TTL to expire.

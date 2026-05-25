@@ -85,7 +85,7 @@ public final class ClanCapeCommand implements CommandExecutor, TabCompleter {
         // server isn't blocked on the panel's HTTP round-trip.
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                var client = new PanelClient(plugin);
+                var client = plugin.getPanelClient();
                 var res = client.registerSetupToken(panelUrl, token, serverName);
                 long minutes = Math.max(1, res.ttlSeconds / 60);
                 // Back on the main thread for chat output.
@@ -140,7 +140,7 @@ public final class ClanCapeCommand implements CommandExecutor, TabCompleter {
         }
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                var client = new PanelClient(plugin);
+                var client = plugin.getPanelClient();
                 var res = client.heartbeat(panelUrl, apiKey, null);
                 plugin.getServer().getScheduler().runTask(plugin, () ->
                         sender.sendMessage(config.prefix() + "§a✓ Connected to panel "
@@ -254,7 +254,7 @@ public final class ClanCapeCommand implements CommandExecutor, TabCompleter {
         if (panelUrl != null && !panelUrl.isBlank() && apiKey != null && !apiKey.isBlank()) {
             plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
                 try {
-                    var client = new PanelClient(plugin);
+                    var client = plugin.getPanelClient();
                     var res = client.heartbeat(panelUrl, apiKey, null);
                     plugin.getServer().getScheduler().runTask(plugin, () ->
                             sender.sendMessage(config.prefix() + "§a✓ Panel reachable"

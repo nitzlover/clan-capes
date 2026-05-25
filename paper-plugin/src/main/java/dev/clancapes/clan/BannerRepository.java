@@ -41,7 +41,7 @@ public final class BannerRepository {
 
     public BannerRepository(ClanCapesPlugin plugin) {
         this.plugin = plugin;
-        this.panelClient = new PanelClient(plugin);
+        this.panelClient = plugin.getPanelClient();
     }
 
     /** Empty Optional before the first successful refresh, or for clans with no spec. */

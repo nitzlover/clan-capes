@@ -15,6 +15,7 @@ import dev.clancapes.hook.PlaceholderHook;
 import dev.clancapes.listener.PvpKillListener;
 import dev.clancapes.listener.ShieldBannerListener;
 import dev.clancapes.panel.HeartbeatTask;
+import dev.clancapes.panel.PanelClient;
 import dev.clancapes.service.BannerService;
 import dev.clancapes.service.CapeService;
 import dev.clancapes.sync.CapeSyncChannel;
@@ -41,6 +42,15 @@ public final class ClanCapesPlugin extends JavaPlugin {
     private PendingInvites pendingInvites;
     private StatsCache statsCache;
     private SettingsCache settingsCache;
+    /**
+     * Shared HTTP client for every panel REST call. Previously each
+     * call site (HeartbeatTask, StatsCache, SettingsCache, PvpKillListener,
+     * /clan panel handler, ClanRepository / BannerRepository …) allocated
+     * a fresh PanelClient with its own java.net.http.HttpClient, which
+     * meant a fresh selector thread + TLS context cache per kill, per
+     * heartbeat, per placeholder fetch. Now there's one.
+     */
+    private PanelClient panelClient;
     private BukkitTask clanRefreshTask;
     private BukkitTask bannerRefreshTask;
     private BukkitTask settingsRefreshTask;
@@ -61,6 +71,11 @@ public final class ClanCapesPlugin extends JavaPlugin {
         // them so the later `gson.fromJson(..., SomeClass.class)`
         // call never has to re-resolve through PluginClassLoader.
         preloadPanelInnerClasses();
+
+        // Shared panel HTTP client (one HttpClient for the whole plugin
+        // lifetime, see field comment for why per-call allocation was
+        // a measurable resource leak).
+        panelClient = new PanelClient(this);
 
         storage = StorageFactory.create(this, pluginConfig);
         storage.init();
@@ -262,6 +277,11 @@ public final class ClanCapesPlugin extends JavaPlugin {
      */
     public SettingsCache getSettingsCache() {
         return settingsCache;
+    }
+
+    /** Shared panel HTTP client — every call site should use this rather than allocating. */
+    public PanelClient getPanelClient() {
+        return panelClient;
     }
 
     /**
