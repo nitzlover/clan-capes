@@ -29,6 +29,14 @@ export const MAX_UPLOAD_KB = Number(process.env.MAX_UPLOAD_KB) || 256;
 export const CDN_PUBLIC_URL = (process.env.CDN_PUBLIC_URL ?? 'http://localhost:3000/api/static/capes').replace(/\/$/, '');
 
 /**
+ * Public origin of the panel itself — used to build clickable URLs
+ * the plugin sends to players (e.g. /clan panel hand-off link). Empty
+ * string disables URL embedding and the client just shows the token
+ * plaintext for the operator to paste manually.
+ */
+export const PANEL_PUBLIC_URL = (process.env.PANEL_PUBLIC_URL ?? '').replace(/\/$/, '');
+
+/**
  * Postgres connection string. Railway injects `DATABASE_URL` automatically
  * when a Postgres service is attached to the deployment. Locally you can
  * point it at any reachable Postgres instance (Docker, native install,

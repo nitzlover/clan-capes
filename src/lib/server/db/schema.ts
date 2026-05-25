@@ -222,6 +222,41 @@ export const clanBanners = pgTable(
   },
 );
 
+// ─── Leader-panel tokens (Phase 4) ────────────────────────────────────
+
+/**
+ * Short-lived single-use tokens minted by the plugin so a clan
+ * leader (or deputy) can exchange their in-game identity for a
+ * leader JWT on the web panel. Token plaintext lives only in the
+ * player's chat output until they paste it into /clan-panel — what's
+ * stored is the hash.
+ *
+ * Issued by `POST /api/leader/issue-token` (plugin Bearer auth),
+ * consumed by `POST /api/leader/exchange-token` (no auth — the
+ * token IS the auth). Rows are kept after consumption so the audit
+ * log can answer "who exchanged when" without joining live state.
+ */
+export const leaderTokens = pgTable(
+  'leader_tokens',
+  {
+    id: serial('id').primaryKey(),
+    tokenHash: text('token_hash').notNull(),
+    serverId: integer('server_id')
+      .notNull()
+      .references(() => servers.id, { onDelete: 'cascade' }),
+    playerUuid: uuid('player_uuid').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    hashIdx: uniqueIndex('leader_tokens_hash_idx').on(t.tokenHash),
+    playerIdx: index('leader_tokens_player_idx').on(t.serverId, t.playerUuid),
+  }),
+);
+
 // ─── Audit ────────────────────────────────────────────────────────────
 
 /**
