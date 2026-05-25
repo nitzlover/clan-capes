@@ -509,6 +509,29 @@ public final class PanelClient {
     }
 
     /**
+     * GET /api/plugin/settings — fetch live operator-set knobs
+     * (palette, cooldown, banner max layers). Returned as a loose
+     * map so SettingsCache can read just the fields it needs without
+     * a per-field DTO.
+     */
+    public java.util.Map<String, Object> fetchSettings(String panelUrl, String apiKey)
+            throws PanelException {
+        String url = panelUrl.replaceAll("/+$", "") + "/api/plugin/settings";
+        HttpResponse<String> res = sendAuthed(url, apiKey, "GET", null);
+        if (res.statusCode() / 100 != 2) {
+            throw new PanelException(errorMessage(res.body(), "HTTP " + res.statusCode()));
+        }
+        try {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> parsed =
+                    gson.fromJson(res.body(), java.util.Map.class);
+            return parsed != null ? parsed : java.util.Map.of();
+        } catch (Exception e) {
+            throw new PanelException("malformed settings response: " + res.body(), e);
+        }
+    }
+
+    /**
      * GET /api/plugin/stats/player/{uuid} — season + lifetime counters
      * for the placeholder cache. Returned as a loose-typed map so the
      * caller picks the fields it needs without dragging a DTO class

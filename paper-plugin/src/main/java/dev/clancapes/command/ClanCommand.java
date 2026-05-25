@@ -51,8 +51,12 @@ import java.util.regex.Pattern;
 public final class ClanCommand implements CommandExecutor, TabCompleter {
     private static final Pattern TAG_RE = Pattern.compile("^[A-Z0-9]{2,6}$");
 
-    /** Anti-spam cooldown between successful {@code /clan create} calls. */
-    private static final long CREATE_COOLDOWN_MS = TimeUnit.HOURS.toMillis(1);
+    /**
+     * Fallback cooldown when the panel-driven {@link dev.clancapes.clan.SettingsCache}
+     * snapshot hasn't loaded yet (cold boot or panel unreachable).
+     * Real value comes from settings.createCooldownMs.
+     */
+    private static final long FALLBACK_CREATE_COOLDOWN_MS = TimeUnit.HOURS.toMillis(1);
 
     private final ClanCapesPlugin plugin;
     private final ClanRepository repo;
@@ -189,12 +193,21 @@ public final class ClanCommand implements CommandExecutor, TabCompleter {
     private long remainingCreateCooldownMs(UUID uuid) {
         Long last = lastCreateAt.get(uuid);
         if (last == null) return 0L;
-        long elapsed = System.currentTimeMillis() - last;
-        if (elapsed >= CREATE_COOLDOWN_MS) {
+        var settings = plugin.getSettingsCache();
+        long cooldown = settings != null
+                ? settings.getCreateCooldownMs()
+                : FALLBACK_CREATE_COOLDOWN_MS;
+        if (cooldown <= 0L) {
+            // Operator disabled the cooldown entirely via /dashboard/settings.
             lastCreateAt.remove(uuid, last);
             return 0L;
         }
-        return CREATE_COOLDOWN_MS - elapsed;
+        long elapsed = System.currentTimeMillis() - last;
+        if (elapsed >= cooldown) {
+            lastCreateAt.remove(uuid, last);
+            return 0L;
+        }
+        return cooldown - elapsed;
     }
 
     // ──────── disband ────────────────────────────────────────────────

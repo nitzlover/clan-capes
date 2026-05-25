@@ -5,6 +5,7 @@ import dev.clancapes.clan.BannerRepository;
 import dev.clancapes.clan.ClanRepository;
 import dev.clancapes.clan.ClanTeamManager;
 import dev.clancapes.clan.PendingInvites;
+import dev.clancapes.clan.SettingsCache;
 import dev.clancapes.clan.StatsCache;
 import dev.clancapes.command.ClanCapeCommand;
 import dev.clancapes.command.ClanCommand;
@@ -39,8 +40,10 @@ public final class ClanCapesPlugin extends JavaPlugin {
     private ClanTeamManager clanTeamManager;
     private PendingInvites pendingInvites;
     private StatsCache statsCache;
+    private SettingsCache settingsCache;
     private BukkitTask clanRefreshTask;
     private BukkitTask bannerRefreshTask;
+    private BukkitTask settingsRefreshTask;
 
     @Override
     public void onEnable() {
@@ -71,6 +74,17 @@ public final class ClanCapesPlugin extends JavaPlugin {
         statsCache = new StatsCache(this);
         getServer().getPluginManager().registerEvents(
                 new PvpKillListener(this), this);
+
+        // Phase 6 — live operator settings (palette / cooldowns / max
+        // layers). Initial refresh fires immediately; periodic poll
+        // matches the 5-min cadence used by clan + banner caches.
+        settingsCache = new SettingsCache(this);
+        settingsCache.refreshAsync(null);
+        settingsRefreshTask = getServer().getScheduler().runTaskTimerAsynchronously(
+                this,
+                () -> settingsCache.refreshAsync(null),
+                20L * 60 * 5,
+                20L * 60 * 5);
 
         var command = new ClanCapeCommand(this, capeService, powerClansHook);
         var pluginCommand = getCommand("clancape");
@@ -150,6 +164,10 @@ public final class ClanCapesPlugin extends JavaPlugin {
             bannerRefreshTask.cancel();
             bannerRefreshTask = null;
         }
+        if (settingsRefreshTask != null) {
+            settingsRefreshTask.cancel();
+            settingsRefreshTask = null;
+        }
         if (clanTeamManager != null) {
             try {
                 clanTeamManager.shutdown();
@@ -217,6 +235,14 @@ public final class ClanCapesPlugin extends JavaPlugin {
      */
     public StatsCache getStatsCache() {
         return statsCache;
+    }
+
+    /**
+     * Operator-set settings (palette / cooldowns / max layers).
+     * Refreshed every 5 min from {@code /api/plugin/settings}.
+     */
+    public SettingsCache getSettingsCache() {
+        return settingsCache;
     }
 
     /**
