@@ -51,6 +51,17 @@ public final class ClanCapesPlugin extends JavaPlugin {
         saveDefaultConfig();
         pluginConfig = new PluginConfig(getConfig());
 
+        // Warm-load every inner/anonymous class referenced from a
+        // panel-facing code path. Paper 26.x's PluginClassLoader has
+        // a recurring bug where lazy resolution of nested classes
+        // fails once the plugin has been running for a while
+        // (Jetty's ManagedSelector$Accept, our PowerClanEntry, the
+        // PanelClient response DTOs). Touching each one here while
+        // the classloader context is fresh forces the JVM to cache
+        // them so the later `gson.fromJson(..., SomeClass.class)`
+        // call never has to re-resolve through PluginClassLoader.
+        preloadPanelInnerClasses();
+
         storage = StorageFactory.create(this, pluginConfig);
         storage.init();
 
@@ -268,5 +279,55 @@ public final class ClanCapesPlugin extends JavaPlugin {
     public void refreshPluginConfig() {
         reloadConfig();
         pluginConfig = new PluginConfig(getConfig());
+    }
+
+    /**
+     * Force-resolve every PanelClient inner DTO + the model classes
+     * that get loaded lazily by gson.fromJson(...). Without this,
+     * Paper 26.x's PluginClassLoader has been observed to throw
+     * NoClassDefFoundError on the FIRST in-game use of features like
+     * {@code /clan panel} (LeaderTokenResponse) or the legacy
+     * PowerClans path (PowerClanEntry) even though the classes are
+     * physically present in the shaded jar.
+     *
+     * Each entry is wrapped in its own try/catch so one missing class
+     * (during a partial-migration deploy) doesn't abort the rest of
+     * the warm-up. Failures are logged at FINE — operators only need
+     * to see them when debugging classloader pathology.
+     */
+    private void preloadPanelInnerClasses() {
+        String[] classes = {
+                // PanelClient response DTOs (every inner class on the
+                // PanelClient surface that gson.fromJson can hit).
+                "dev.clancapes.panel.PanelClient$RegisterResponse",
+                "dev.clancapes.panel.PanelClient$HeartbeatResponse",
+                "dev.clancapes.panel.PanelClient$ServerStub",
+                "dev.clancapes.panel.PanelClient$ClanListResponse",
+                "dev.clancapes.panel.PanelClient$ClanResponse",
+                "dev.clancapes.panel.PanelClient$BannerJson",
+                "dev.clancapes.panel.PanelClient$BannerListResponse",
+                "dev.clancapes.panel.PanelClient$LeaderTokenResponse",
+                "dev.clancapes.panel.PanelClient$PanelException",
+                // Model records referenced from late-bound code paths.
+                "dev.clancapes.model.BannerPatternSpec",
+                "dev.clancapes.model.ClanBannerRecord",
+                "dev.clancapes.model.ClanCapeRecord",
+                "dev.clancapes.model.PlayerCapeDto",
+                "dev.clancapes.model.PowerClanEntry",
+                // SettingsCache + StatsCache inner snapshots.
+                "dev.clancapes.clan.SettingsCache$Snapshot",
+                "dev.clancapes.clan.StatsCache$Entry",
+                "dev.clancapes.clan.Clan",
+                "dev.clancapes.clan.ClanMember",
+                "dev.clancapes.clan.ClanMember$Role",
+        };
+        ClassLoader cl = ClanCapesPlugin.class.getClassLoader();
+        for (String name : classes) {
+            try {
+                Class.forName(name, true, cl);
+            } catch (Throwable ignored) {
+                getLogger().fine("[preload] skipped " + name);
+            }
+        }
     }
 }
