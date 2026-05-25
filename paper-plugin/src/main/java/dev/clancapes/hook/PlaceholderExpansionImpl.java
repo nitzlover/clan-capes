@@ -88,6 +88,19 @@ public final class PlaceholderExpansionImpl extends PlaceholderExpansion {
                     clan != null
                             ? "§x" + hexLegacy(clan.colorHex()) + "[" + clan.tag() + "]§r "
                             : "";
+            case "tag_bracketed" ->
+                    // Minimessage-pre-formatted "[TAG] " chunk for chat
+                    // plugins that need a single placeholder collapsing
+                    // to "" for unclanned players so an empty "[]"
+                    // doesn't appear before the player name. Uses the
+                    // panel's B&W brutalist style (dark-grey brackets,
+                    // white tag) instead of the clan color, matching
+                    // the LPC chat-format default.
+                    clan != null
+                            ? "<dark_gray>[</dark_gray><white>"
+                                    + clan.tag()
+                                    + "</white><dark_gray>]</dark_gray> "
+                            : "";
             case "role" -> roleFor(clan, player);
             case "members" -> clan != null ? String.valueOf(clan.members().size()) : "0";
             case "is_leader" -> String.valueOf(
