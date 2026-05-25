@@ -171,6 +171,16 @@ public final class RestApiServer {
                 "dev.clancapes.lib.jetty.io.SelectorManager$SelectorManagerListener",
                 "dev.clancapes.lib.jetty.util.thread.QueuedThreadPool$Runner",
                 "dev.clancapes.lib.jetty.server.AbstractConnector$Acceptor",
+                // ServletHandler.doStop walks FilterMapping/ServletMapping
+                // out of the registry on shutdown — Paper's PluginClassLoader
+                // had been losing both of them during onDisable, leaving an
+                // ugly NoClassDefFoundError trace on every restart.
+                "dev.clancapes.lib.jetty.servlet.FilterMapping",
+                "dev.clancapes.lib.jetty.servlet.ServletMapping",
+                "dev.clancapes.lib.jetty.servlet.FilterHolder",
+                "dev.clancapes.lib.jetty.servlet.ServletHolder",
+                "dev.clancapes.lib.jetty.servlet.Holder",
+                "dev.clancapes.lib.jetty.servlet.BaseHolder",
         };
         ClassLoader cl = RestApiServer.class.getClassLoader();
         for (String name : inner) {
