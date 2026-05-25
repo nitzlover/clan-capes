@@ -19,6 +19,10 @@ commands:
     # `clan` alias is the friendly form shown in usage hints — Bukkit
     # routes it to us automatically once PowerClans is unloaded.
     aliases: [clan, cl, myclan]
+  clanc:
+    description: Send a message to your clan only
+    usage: /clanc <message>
+    aliases: [cc, clanchat]
 permissions:
   clan.cape:
     description: Manage your clan cape

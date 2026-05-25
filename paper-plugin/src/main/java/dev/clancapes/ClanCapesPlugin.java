@@ -150,6 +150,14 @@ public final class ClanCapesPlugin extends JavaPlugin {
             getLogger().warning("Command 'clans' missing from plugin.yml; /clans disabled");
         }
 
+        // /clanc — clan-only chat broadcast.
+        var clancBukkit = getCommand("clanc");
+        if (clancBukkit != null) {
+            clancBukkit.setExecutor(new dev.clancapes.command.ClanChatCommand(this));
+        } else {
+            getLogger().warning("Command 'clanc' missing from plugin.yml; /clanc disabled");
+        }
+
         getLogger().info("ClanCapes enabled (storage=" + pluginConfig.getStorageType()
                 + ", api=" + pluginConfig.isApiEnabled() + ")");
     }
