@@ -4,6 +4,7 @@ import dev.clancapes.ClanCapesPlugin;
 import dev.clancapes.clan.Clan;
 import dev.clancapes.clan.ClanMember;
 import dev.clancapes.clan.ClanRepository;
+import dev.clancapes.util.VanillaColor;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -66,7 +67,11 @@ public final class ClanChatCommand implements CommandExecutor {
             return true;
         }
 
-        String line = "§8[§7CC§8] §8[§f" + clan.tag() + "§8] §f"
+        // Clan tag rendered in the clan's snapped-vanilla §-code so
+        // every client + chat plugin (LPC, DeluxeChat, TAB) renders it
+        // identically. Hardcoded §f used to ignore clan colour entirely.
+        String tagColor = VanillaColor.legacyPrefix(clan.colorHex());
+        String line = "§8[§7CC§8] §8[" + tagColor + clan.tag() + "§8] §f"
                 + player.getName() + " §8» §7" + message;
 
         int delivered = 0;

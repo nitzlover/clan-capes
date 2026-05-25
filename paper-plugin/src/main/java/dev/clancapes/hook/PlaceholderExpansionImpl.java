@@ -81,25 +81,25 @@ public final class PlaceholderExpansionImpl extends PlaceholderExpansion {
             case "color", "colour", "color_hex" ->
                     clan != null ? clan.colorHex() : "";
             case "color_prefix" ->
-                    // Convenience: "[TAG] " in the clan's color, formatted
-                    // for legacy &-codes so chat plugins that don't speak
-                    // Adventure still render it. Falls back to plain "[TAG] "
-                    // when no color is set.
+                    // Vanilla §-code prefix snapped from the clan's
+                    // operator-set 24-bit hex to the nearest of the 16
+                    // built-in chat colours. §x hex codes survive only
+                    // the vanilla legacy serialiser — they get stripped
+                    // when chat plugins (LPC, DeluxeChat, TAB) round-trip
+                    // through MiniMessage, so we never emit them.
                     clan != null
-                            ? "§x" + hexLegacy(clan.colorHex()) + "[" + clan.tag() + "]§r "
+                            ? dev.clancapes.util.VanillaColor.legacyPrefix(clan.colorHex())
+                                    + "[" + clan.tag() + "]§r "
                             : "";
             case "tag_bracketed" ->
-                    // Minimessage-pre-formatted "[TAG] " chunk for chat
-                    // plugins that need a single placeholder collapsing
-                    // to "" for unclanned players so an empty "[]"
-                    // doesn't appear before the player name. Uses the
-                    // panel's B&W brutalist style (dark-grey brackets,
-                    // white tag) instead of the clan color, matching
-                    // the LPC chat-format default.
+                    // Plain §-coded "[TAG] " chunk in dark-grey/white +
+                    // clan colour on the tag itself. Same legacy-§ form
+                    // as color_prefix so chat plugins running MiniMessage
+                    // don't strip it. Empty string for unclanned players
+                    // so no orphan "[]" leaks into the chat format.
                     clan != null
-                            ? "<dark_gray>[</dark_gray><white>"
-                                    + clan.tag()
-                                    + "</white><dark_gray>]</dark_gray> "
+                            ? "§8[" + dev.clancapes.util.VanillaColor.legacyPrefix(clan.colorHex())
+                                    + clan.tag() + "§8]§r "
                             : "";
             case "role" -> roleFor(clan, player);
             case "members" -> clan != null ? String.valueOf(clan.members().size()) : "0";

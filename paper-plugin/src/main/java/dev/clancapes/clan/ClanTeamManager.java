@@ -1,9 +1,9 @@
 package dev.clancapes.clan;
 
 import dev.clancapes.ClanCapesPlugin;
+import dev.clancapes.util.VanillaColor;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
@@ -53,12 +53,16 @@ public final class ClanTeamManager {
             Team team = board.getTeam(teamName);
             if (team == null) team = board.registerNewTeam(teamName);
 
-            // Prefix: "[TAG] " in the clan's color. Adventure handles
-            // the legacy serialiser so chat plugins that don't know
-            // about modern components still see something sensible.
-            TextColor color = parseColor(c.colorHex());
-            team.prefix(Component.text("[" + c.tag() + "] ", color));
-            team.color(color != null && color instanceof NamedTextColor named ? named : null);
+            // Prefix + team colour: snap the operator-set 24-bit hex to
+            // the nearest of the 16 vanilla NamedTextColor values so
+            // both above-head prefix AND the TAB sort colour render in
+            // every client + chat-format combination. Arbitrary RGB
+            // built via TextColor.color(r,g,b) used to fail the
+            // instanceof check below and leave team.color() null,
+            // which silently disabled the TAB-sort tint.
+            NamedTextColor named = VanillaColor.nearest(c.colorHex());
+            team.prefix(Component.text("[" + c.tag() + "] ", named));
+            team.color(named);
 
             // Diff the entries — Bukkit's Team accepts string entries
             // (player names for online + offline). Remove anyone who
@@ -89,15 +93,4 @@ public final class ClanTeamManager {
         }
     }
 
-    private static TextColor parseColor(String hex) {
-        if (hex == null || hex.length() != 7) return NamedTextColor.WHITE;
-        try {
-            return TextColor.color(
-                    Integer.parseInt(hex.substring(1, 3), 16),
-                    Integer.parseInt(hex.substring(3, 5), 16),
-                    Integer.parseInt(hex.substring(5, 7), 16));
-        } catch (NumberFormatException e) {
-            return NamedTextColor.WHITE;
-        }
-    }
 }
