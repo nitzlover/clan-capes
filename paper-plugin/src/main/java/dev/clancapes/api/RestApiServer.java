@@ -143,9 +143,32 @@ public final class RestApiServer {
         String[] inner = {
                 "dev.clancapes.lib.jetty.servlet.BaseHolder$Wrapped",
                 "dev.clancapes.lib.jetty.util.thread.ReservedThreadExecutor$ReservedThread",
-                "dev.clancapes.lib.jetty.io.ManagedSelector$CloseConnections",
-                "dev.clancapes.lib.jetty.io.ManagedSelector$StopSelector",
+                // Every nested SelectorUpdate / inner subclass of
+                // ManagedSelector — Paper's PluginClassLoader can't
+                // resolve them lazily from the shaded jar once Jetty
+                // is mid-flight, so we touch them all here while the
+                // classloader context is fresh. Adding `$Accept`,
+                // `$Connect`, `$CreateEndPoint`, `$DestroyEndPoint`,
+                // `$DumpKeys`, `$Selectable`, `$SelectorProducer`,
+                // `$SelectorUpdate`, `$Start` to the existing list
+                // (previously only the shutdown-path inner classes
+                // were preloaded, which left every accept() call
+                // crashing with NoClassDefFoundError once a real
+                // connection arrived).
+                "dev.clancapes.lib.jetty.io.ManagedSelector$Accept",
                 "dev.clancapes.lib.jetty.io.ManagedSelector$Acceptor",
+                "dev.clancapes.lib.jetty.io.ManagedSelector$CloseConnections",
+                "dev.clancapes.lib.jetty.io.ManagedSelector$Connect",
+                "dev.clancapes.lib.jetty.io.ManagedSelector$CreateEndPoint",
+                "dev.clancapes.lib.jetty.io.ManagedSelector$DestroyEndPoint",
+                "dev.clancapes.lib.jetty.io.ManagedSelector$DumpKeys",
+                "dev.clancapes.lib.jetty.io.ManagedSelector$Selectable",
+                "dev.clancapes.lib.jetty.io.ManagedSelector$SelectorProducer",
+                "dev.clancapes.lib.jetty.io.ManagedSelector$SelectorUpdate",
+                "dev.clancapes.lib.jetty.io.ManagedSelector$Start",
+                "dev.clancapes.lib.jetty.io.ManagedSelector$StopSelector",
+                "dev.clancapes.lib.jetty.io.SelectorManager$AcceptListener",
+                "dev.clancapes.lib.jetty.io.SelectorManager$SelectorManagerListener",
                 "dev.clancapes.lib.jetty.util.thread.QueuedThreadPool$Runner",
                 "dev.clancapes.lib.jetty.server.AbstractConnector$Acceptor",
         };
