@@ -23,6 +23,11 @@ import {
   isValidColor,
   normaliseTag,
 } from '@/lib/server/clan-validators';
+import {
+  isUniqueViolation,
+  uniqueConstraintHint,
+} from '@/lib/server/pg-errors';
+import { getRequestId } from '@/lib/server/request-id';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -126,20 +131,38 @@ export async function PATCH(
     );
   }
 
-  await db.update(schema.clans).set(updates).where(eq(schema.clans.id, existing.id));
-
-  await db.insert(schema.audit).values({
-    serverId: auth.id,
-    actor: body.actorUuid
-      ? `plugin:${auth.name}:${body.actorUuid}`
-      : `plugin:${auth.name}`,
-    action: 'CLAN_EDIT',
-    target: tag,
-    payload: updates,
-  });
+  const rid = getRequestId(req);
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(schema.clans)
+        .set(updates)
+        .where(eq(schema.clans.id, existing.id));
+      await tx.insert(schema.audit).values({
+        serverId: auth.id,
+        actor: body.actorUuid
+          ? `plugin:${auth.name}:${body.actorUuid}`
+          : `plugin:${auth.name}`,
+        action: 'CLAN_EDIT',
+        target: tag,
+        payload: { ...updates, _rid: rid },
+      });
+    });
+  } catch (e) {
+    if (isUniqueViolation(e)) {
+      return NextResponse.json(
+        { error: uniqueConstraintHint(e), _rid: rid },
+        { status: 409, headers: { 'x-request-id': rid } },
+      );
+    }
+    throw e;
+  }
 
   const dto = await getClanByTag(auth.id, tag);
-  return NextResponse.json({ ok: true, clan: dto });
+  return NextResponse.json(
+    { ok: true, clan: dto, _rid: rid },
+    { headers: { 'x-request-id': rid } },
+  );
 }
 
 export async function DELETE(
@@ -185,30 +208,37 @@ export async function DELETE(
   }
 
   const now = new Date();
-  // Stamp the clan disbanded first so any racing read sees the
-  // change and treats the clan as gone; then mark every active
-  // membership as left.
-  await db
-    .update(schema.clans)
-    .set({ disbandedAt: now })
-    .where(eq(schema.clans.id, existing.id));
-  await db
-    .update(schema.clanMembers)
-    .set({ leftAt: now })
-    .where(
-      and(
-        eq(schema.clanMembers.clanId, existing.id),
-        isNull(schema.clanMembers.leftAt),
-      ),
-    );
+  const rid = getRequestId(req);
 
-  await db.insert(schema.audit).values({
-    serverId: auth.id,
-    actor: actorUuid ? `plugin:${auth.name}:${actorUuid}` : `plugin:${auth.name}`,
-    action: 'CLAN_DISBAND',
-    target: tag,
-    payload: { members: existing.members.length },
+  // Stamp disband + drain memberships + audit in one tx so a crash
+  // can't leave members "active" inside a disbanded clan (which the
+  // partial-unique membership index would then block from rejoining
+  // anywhere else).
+  await db.transaction(async (tx) => {
+    await tx
+      .update(schema.clans)
+      .set({ disbandedAt: now })
+      .where(eq(schema.clans.id, existing.id));
+    await tx
+      .update(schema.clanMembers)
+      .set({ leftAt: now })
+      .where(
+        and(
+          eq(schema.clanMembers.clanId, existing.id),
+          isNull(schema.clanMembers.leftAt),
+        ),
+      );
+    await tx.insert(schema.audit).values({
+      serverId: auth.id,
+      actor: actorUuid ? `plugin:${auth.name}:${actorUuid}` : `plugin:${auth.name}`,
+      action: 'CLAN_DISBAND',
+      target: tag,
+      payload: { members: existing.members.length, _rid: rid },
+    });
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json(
+    { ok: true, _rid: rid },
+    { headers: { 'x-request-id': rid } },
+  );
 }

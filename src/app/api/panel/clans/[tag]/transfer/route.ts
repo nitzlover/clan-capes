@@ -14,6 +14,7 @@ import { requireAuth } from '@/lib/server/auth';
 import { getClanByTag } from '@/lib/server/clan-repo';
 import { normaliseTag } from '@/lib/server/clan-validators';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
+import { getRequestId } from '@/lib/server/request-id';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -101,42 +102,54 @@ export async function POST(
   }
 
   const db = getDb();
-  await db
-    .update(schema.clanMembers)
-    .set({ role: 'deputy' })
-    .where(
-      and(
-        eq(schema.clanMembers.clanId, clan.id),
-        eq(schema.clanMembers.playerUuid, currentLeader.playerUuid),
-        isNull(schema.clanMembers.leftAt),
-      ),
-    );
-  await db
-    .update(schema.clanMembers)
-    .set({ role: 'leader' })
-    .where(
-      and(
-        eq(schema.clanMembers.clanId, clan.id),
-        eq(schema.clanMembers.playerUuid, body.newLeaderUuid),
-        isNull(schema.clanMembers.leftAt),
-      ),
-    );
-  await db
-    .update(schema.clans)
-    .set({ leaderUuid: body.newLeaderUuid })
-    .where(eq(schema.clans.id, clan.id));
+  const rid = getRequestId(req);
+  const newLeaderUuid = body.newLeaderUuid!;
 
-  await db.insert(schema.audit).values({
-    serverId,
-    actor: `admin:${user.sub}`,
-    action: 'CLAN_TRANSFER',
-    target: tag,
-    payload: {
-      oldLeaderUuid: currentLeader.playerUuid,
-      newLeaderUuid: body.newLeaderUuid,
-    },
+  // All three writes + audit in a single transaction. Without the tx
+  // a crash between the demote and promote left the clan with no
+  // leader; now Postgres rolls everything back atomically.
+  await db.transaction(async (tx) => {
+    await tx
+      .update(schema.clanMembers)
+      .set({ role: 'deputy' })
+      .where(
+        and(
+          eq(schema.clanMembers.clanId, clan.id),
+          eq(schema.clanMembers.playerUuid, currentLeader.playerUuid),
+          isNull(schema.clanMembers.leftAt),
+        ),
+      );
+    await tx
+      .update(schema.clanMembers)
+      .set({ role: 'leader' })
+      .where(
+        and(
+          eq(schema.clanMembers.clanId, clan.id),
+          eq(schema.clanMembers.playerUuid, newLeaderUuid),
+          isNull(schema.clanMembers.leftAt),
+        ),
+      );
+    await tx
+      .update(schema.clans)
+      .set({ leaderUuid: newLeaderUuid })
+      .where(eq(schema.clans.id, clan.id));
+
+    await tx.insert(schema.audit).values({
+      serverId,
+      actor: `admin:${user.sub}`,
+      action: 'CLAN_TRANSFER',
+      target: tag,
+      payload: {
+        oldLeaderUuid: currentLeader.playerUuid,
+        newLeaderUuid,
+        _rid: rid,
+      },
+    });
   });
 
   const dto = await getClanByTag(serverId, tag);
-  return NextResponse.json({ ok: true, clan: dto });
+  return NextResponse.json(
+    { ok: true, clan: dto, _rid: rid },
+    { headers: { 'x-request-id': rid } },
+  );
 }

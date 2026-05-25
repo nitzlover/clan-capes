@@ -134,14 +134,18 @@ export async function setClanBanner(
   tag: string,
   baseColor: number,
   patterns: BannerPatternSpec[],
-  actor: string
+  actor: string,
+  rid?: string
 ): Promise<ClanBannerDto> {
+  // Forward the panel's request id so the plugin can log-correlate.
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-ClanCapes-Token': TOKEN(),
+  };
+  if (rid) headers['x-request-id'] = rid;
   const res = await fetchPlugin(`/api/clan/${encodeURIComponent(tag)}/banner`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-ClanCapes-Token': TOKEN(),
-    },
+    headers,
     body: JSON.stringify({ baseColor, patterns, actor }),
   });
   if (!res.ok) {
@@ -151,10 +155,12 @@ export async function setClanBanner(
   return res.json() as Promise<ClanBannerDto>;
 }
 
-export async function deleteClanBanner(tag: string) {
+export async function deleteClanBanner(tag: string, rid?: string) {
+  const headers: Record<string, string> = { 'X-ClanCapes-Token': TOKEN() };
+  if (rid) headers['x-request-id'] = rid;
   const res = await fetchPlugin(`/api/clan/${encodeURIComponent(tag)}/banner`, {
     method: 'DELETE',
-    headers: { 'X-ClanCapes-Token': TOKEN() },
+    headers,
   });
   if (!res.ok) throw new Error(`Banner delete failed ${res.status}`);
   return res.json();

@@ -257,6 +257,7 @@ async function main() {
       raw.members.find((m) => m.uuid === raw.leaderUuid)?.name ?? 'Leader';
     await db.insert(schema.clanMembers).values({
       clanId: clan.id,
+      serverId,
       playerUuid: raw.leaderUuid,
       playerName: leaderName,
       role: 'leader',
@@ -265,6 +266,7 @@ async function main() {
       if (m.uuid === raw.leaderUuid) continue;
       await db.insert(schema.clanMembers).values({
         clanId: clan.id,
+        serverId,
         playerUuid: m.uuid,
         playerName: m.name ?? 'Member',
         role: 'member',

@@ -16,6 +16,7 @@ import { desc, eq, isNull } from 'drizzle-orm';
 import { requireAuth } from '@/lib/server/auth';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import { resolveMojangName } from '@/lib/server/mojang';
+import { getRequestId } from '@/lib/server/request-id';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -95,13 +96,17 @@ export async function POST(req: Request) {
     refreshed++;
   }
 
+  const rid = getRequestId(req);
   await db.insert(schema.audit).values({
     serverId,
     actor: `admin:${user.sub}`,
     action: 'MEMBER_NAMES_BACKFILL',
     target: null,
-    payload: { refreshed, skipped },
+    payload: { refreshed, skipped, _rid: rid },
   });
 
-  return NextResponse.json({ ok: true, serverId, refreshed, skipped, report });
+  return NextResponse.json(
+    { ok: true, serverId, refreshed, skipped, report, _rid: rid },
+    { headers: { 'x-request-id': rid } },
+  );
 }

@@ -23,6 +23,11 @@ import {
 } from '@/lib/server/clan-validators';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import * as mc from '@/lib/server/minecraft';
+import {
+  isUniqueViolation,
+  uniqueConstraintHint,
+} from '@/lib/server/pg-errors';
+import { getRequestId } from '@/lib/server/request-id';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -135,17 +140,37 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ tag: string }
   }
 
   const db = getDb();
-  await db.update(schema.clans).set(updates).where(eq(schema.clans.id, existing.id));
-  await db.insert(schema.audit).values({
-    serverId,
-    actor: `admin:${user.sub}`,
-    action: 'CLAN_EDIT',
-    target: tag,
-    payload: updates,
-  });
+  const rid = getRequestId(req);
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(schema.clans)
+        .set(updates)
+        .where(eq(schema.clans.id, existing.id));
+      await tx.insert(schema.audit).values({
+        serverId,
+        actor: `admin:${user.sub}`,
+        action: 'CLAN_EDIT',
+        target: tag,
+        payload: { ...updates, _rid: rid },
+      });
+    });
+  } catch (e) {
+    if (isUniqueViolation(e)) {
+      return NextResponse.json(
+        { error: uniqueConstraintHint(e), _rid: rid },
+        { status: 409, headers: { 'x-request-id': rid } },
+      );
+    }
+    throw e;
+  }
 
   const dto = await getClanByTag(serverId, tag);
-  return NextResponse.json({ ok: true, clan: dto });
+  return NextResponse.json(
+    { ok: true, clan: dto, _rid: rid },
+    { headers: { 'x-request-id': rid } },
+  );
 }
 
 export async function DELETE(req: Request, ctx: { params: Promise<{ tag: string }> }) {
@@ -177,25 +202,37 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ tag: string 
 
   const db = getDb();
   const now = new Date();
-  await db
-    .update(schema.clans)
-    .set({ disbandedAt: now })
-    .where(eq(schema.clans.id, existing.id));
-  await db
-    .update(schema.clanMembers)
-    .set({ leftAt: now })
-    .where(
-      and(
-        eq(schema.clanMembers.clanId, existing.id),
-        isNull(schema.clanMembers.leftAt),
-      ),
-    );
-  await db.insert(schema.audit).values({
-    serverId,
-    actor: `admin:${user.sub}`,
-    action: 'CLAN_DISBAND',
-    target: tag,
-    payload: { members: existing.members.length },
+  const rid = getRequestId(req);
+
+  // Tx: stamp disband + drain all active memberships atomically.
+  // Without the tx an interrupted disband leaves members "active" in
+  // a disbanded clan, which the partial-unique membership index would
+  // then block from re-joining a new one.
+  await db.transaction(async (tx) => {
+    await tx
+      .update(schema.clans)
+      .set({ disbandedAt: now })
+      .where(eq(schema.clans.id, existing.id));
+    await tx
+      .update(schema.clanMembers)
+      .set({ leftAt: now })
+      .where(
+        and(
+          eq(schema.clanMembers.clanId, existing.id),
+          isNull(schema.clanMembers.leftAt),
+        ),
+      );
+    await tx.insert(schema.audit).values({
+      serverId,
+      actor: `admin:${user.sub}`,
+      action: 'CLAN_DISBAND',
+      target: tag,
+      payload: { members: existing.members.length, _rid: rid },
+    });
   });
-  return NextResponse.json({ ok: true });
+
+  return NextResponse.json(
+    { ok: true, _rid: rid },
+    { headers: { 'x-request-id': rid } },
+  );
 }

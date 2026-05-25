@@ -17,6 +17,11 @@ import { getClanByTag } from '@/lib/server/clan-repo';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import { requirePluginAuth } from '@/lib/server/plugin-auth';
 import { normaliseTag } from '@/lib/server/clan-validators';
+import {
+  isUniqueViolation,
+  uniqueConstraintHint,
+} from '@/lib/server/pg-errors';
+import { getRequestId } from '@/lib/server/request-id';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -110,23 +115,56 @@ export async function POST(
     );
   }
 
-  await db.insert(schema.clanMembers).values({
-    clanId: clan.id,
-    playerUuid: body.playerUuid,
-    playerName: body.playerName,
-    role: role as 'leader' | 'deputy' | 'member',
-  });
+  const rid = getRequestId(req);
+  // Hoist narrowed locals — TS loses the `if (!body.playerUuid)`
+  // narrowing across the tx callback.
+  const playerUuid: string = body.playerUuid;
+  const playerName: string = body.playerName;
 
-  await db.insert(schema.audit).values({
-    serverId: auth.id,
-    actor: body.actorUuid
-      ? `plugin:${auth.name}:${body.actorUuid}`
-      : `plugin:${auth.name}`,
-    action: 'CLAN_MEMBER_ADD',
-    target: tag,
-    payload: { playerUuid: body.playerUuid, playerName: body.playerName, role },
-  });
+  // Wrap insert + audit in tx so the partial-unique index can't admit
+  // the member row while the audit insert later fails for an unrelated
+  // reason and leaves the row visible. The 23505 catch maps the race
+  // outcome to a clean 409.
+  let dto;
+  try {
+    dto = await db.transaction(async (tx) => {
+      await tx.insert(schema.clanMembers).values({
+        clanId: clan.id,
+        serverId: auth.id,
+        playerUuid,
+        playerName,
+        role: role as 'leader' | 'deputy' | 'member',
+      });
 
-  const dto = await getClanByTag(auth.id, tag);
-  return NextResponse.json({ ok: true, clan: dto }, { status: 201 });
+      await tx.insert(schema.audit).values({
+        serverId: auth.id,
+        actor: body.actorUuid
+          ? `plugin:${auth.name}:${body.actorUuid}`
+          : `plugin:${auth.name}`,
+        action: 'CLAN_MEMBER_ADD',
+        target: tag,
+        payload: {
+          playerUuid,
+          playerName,
+          role,
+          _rid: rid,
+        },
+      });
+
+      return await getClanByTag(auth.id, tag);
+    });
+  } catch (e) {
+    if (isUniqueViolation(e)) {
+      return NextResponse.json(
+        { error: uniqueConstraintHint(e), _rid: rid },
+        { status: 409, headers: { 'x-request-id': rid } },
+      );
+    }
+    throw e;
+  }
+
+  return NextResponse.json(
+    { ok: true, clan: dto, _rid: rid },
+    { status: 201, headers: { 'x-request-id': rid } },
+  );
 }

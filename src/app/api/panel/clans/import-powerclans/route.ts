@@ -24,6 +24,8 @@ import {
 } from '@/lib/server/clan-validators';
 import * as mc from '@/lib/server/minecraft';
 import { resolveMojangName } from '@/lib/server/mojang';
+import { isUniqueViolation } from '@/lib/server/pg-errors';
+import { getRequestId } from '@/lib/server/request-id';
 import { desc } from 'drizzle-orm';
 
 export const runtime = 'nodejs';
@@ -124,32 +126,61 @@ export async function POST(req: Request) {
     const resolved = await resolveMojangName(pc.leader);
     const leaderName = resolved ?? `Leader of ${tag}`;
 
-    const [clan] = await db
-      .insert(schema.clans)
-      .values({
-        serverId,
-        tag,
-        name: tag,
-        colorHex,
-        leaderUuid: pc.leader,
-      })
-      .returning();
-    await db.insert(schema.clanMembers).values({
-      clanId: clan.id,
-      playerUuid: pc.leader,
-      playerName: leaderName,
-      role: 'leader',
-    });
-    await db.insert(schema.audit).values({
-      serverId,
-      actor: user.sub,
-      action: 'CLAN_IMPORT',
-      target: tag,
-      payload: { source: 'powerclans', colorHex, leaderUuid: pc.leader },
-    });
+    const rid = getRequestId(req);
 
-    report.push({ tag, status: 'imported' });
-    imported++;
+    // Tx-wrap each import row independently — one bad clan shouldn't
+    // poison the rest of the batch.
+    try {
+      await db.transaction(async (tx) => {
+        const [clan] = await tx
+          .insert(schema.clans)
+          .values({
+            serverId: serverId!,
+            tag,
+            name: tag,
+            colorHex,
+            leaderUuid: pc.leader,
+          })
+          .returning();
+        await tx.insert(schema.clanMembers).values({
+          clanId: clan.id,
+          serverId: serverId!,
+          playerUuid: pc.leader,
+          playerName: leaderName,
+          role: 'leader',
+        });
+        await tx.insert(schema.audit).values({
+          serverId,
+          actor: user.sub,
+          action: 'CLAN_IMPORT',
+          target: tag,
+          payload: {
+            source: 'powerclans',
+            colorHex,
+            leaderUuid: pc.leader,
+            _rid: rid,
+          },
+        });
+      });
+      report.push({ tag, status: 'imported' });
+      imported++;
+    } catch (e) {
+      if (isUniqueViolation(e)) {
+        report.push({
+          tag,
+          status: 'skipped',
+          reason: 'unique violation (color or membership taken)',
+        });
+        skipped++;
+      } else {
+        report.push({
+          tag,
+          status: 'skipped',
+          reason: e instanceof Error ? e.message : 'unknown db error',
+        });
+        skipped++;
+      }
+    }
   }
 
   return NextResponse.json({

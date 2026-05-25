@@ -23,6 +23,7 @@ import {
 } from '@/lib/server/banner-repo';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import * as mc from '@/lib/server/minecraft';
+import { getRequestId } from '@/lib/server/request-id';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -134,13 +135,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ tag: string }>
     return NextResponse.json({ error: 'clan not found' }, { status: 404 });
   }
 
+  const rid = getRequestId(req);
+
   // 1) Durable write
   const record = await upsertBanner(clan.id, baseColor, patterns, user.sub);
-  // 2) Best-effort plugin mirror so held shields re-paint immediately
+  // 2) Best-effort plugin mirror so held shields re-paint immediately.
+  //    Forward our request id so the plugin can log-correlate.
   let pluginMirrored = true;
   let pluginErr: string | null = null;
   try {
-    await mc.setClanBanner(tag, baseColor, patterns, user.sub);
+    await mc.setClanBanner(tag, baseColor, patterns, user.sub, rid);
   } catch (e) {
     pluginMirrored = false;
     pluginErr = e instanceof Error ? e.message : String(e);
@@ -152,17 +156,27 @@ export async function POST(req: Request, ctx: { params: Promise<{ tag: string }>
     actor: `admin:${user.sub}`,
     action: 'BANNER_SET',
     target: tag,
-    payload: { baseColor, layers: patterns.length, pluginMirrored, pluginErr },
+    payload: {
+      baseColor,
+      layers: patterns.length,
+      pluginMirrored,
+      pluginErr,
+      _rid: rid,
+    },
   });
 
-  return NextResponse.json({
-    clan: tag,
-    baseColor: record.baseColor,
-    patterns: record.patterns,
-    updatedAt: record.updatedAt,
-    updatedBy: record.updatedBy,
-    pluginMirrored,
-  });
+  return NextResponse.json(
+    {
+      clan: tag,
+      baseColor: record.baseColor,
+      patterns: record.patterns,
+      updatedAt: record.updatedAt,
+      updatedBy: record.updatedBy,
+      pluginMirrored,
+      _rid: rid,
+    },
+    { headers: { 'x-request-id': rid } },
+  );
 }
 
 export async function DELETE(req: Request, ctx: { params: Promise<{ tag: string }> }) {
@@ -183,9 +197,10 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ tag: string 
     return NextResponse.json({ error: 'clan not found' }, { status: 404 });
   }
 
+  const rid = getRequestId(req);
   await deleteBanner(clan.id);
   try {
-    await mc.deleteClanBanner(tag);
+    await mc.deleteClanBanner(tag, rid);
   } catch {
     // Plugin mirror failure is logged via audit payload, not fatal.
   }
@@ -195,7 +210,10 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ tag: string 
     actor: `admin:${user.sub}`,
     action: 'BANNER_DELETE',
     target: tag,
-    payload: null,
+    payload: { _rid: rid },
   });
-  return NextResponse.json({ ok: true, tag });
+  return NextResponse.json(
+    { ok: true, tag, _rid: rid },
+    { headers: { 'x-request-id': rid } },
+  );
 }

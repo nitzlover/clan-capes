@@ -16,6 +16,7 @@ import { getClanByTag } from '@/lib/server/clan-repo';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import { requirePluginAuth } from '@/lib/server/plugin-auth';
 import { normaliseTag } from '@/lib/server/clan-validators';
+import { getRequestId } from '@/lib/server/request-id';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -86,29 +87,34 @@ export async function PATCH(
     );
   }
 
-  await db
-    .update(schema.clanMembers)
-    .set({ role })
-    .where(
-      and(
-        eq(schema.clanMembers.clanId, clan.id),
-        eq(schema.clanMembers.playerUuid, uuid),
-        isNull(schema.clanMembers.leftAt),
-      ),
-    );
-
-  await db.insert(schema.audit).values({
-    serverId: auth.id,
-    actor: body.actorUuid
-      ? `plugin:${auth.name}:${body.actorUuid}`
-      : `plugin:${auth.name}`,
-    action: 'CLAN_MEMBER_ROLE',
-    target: tag,
-    payload: { playerUuid: uuid, oldRole: target.role, newRole: role },
+  const rid = getRequestId(req);
+  await db.transaction(async (tx) => {
+    await tx
+      .update(schema.clanMembers)
+      .set({ role })
+      .where(
+        and(
+          eq(schema.clanMembers.clanId, clan.id),
+          eq(schema.clanMembers.playerUuid, uuid),
+          isNull(schema.clanMembers.leftAt),
+        ),
+      );
+    await tx.insert(schema.audit).values({
+      serverId: auth.id,
+      actor: body.actorUuid
+        ? `plugin:${auth.name}:${body.actorUuid}`
+        : `plugin:${auth.name}`,
+      action: 'CLAN_MEMBER_ROLE',
+      target: tag,
+      payload: { playerUuid: uuid, oldRole: target.role, newRole: role, _rid: rid },
+    });
   });
 
   const dto = await getClanByTag(auth.id, tag);
-  return NextResponse.json({ ok: true, clan: dto });
+  return NextResponse.json(
+    { ok: true, clan: dto, _rid: rid },
+    { headers: { 'x-request-id': rid } },
+  );
 }
 
 export async function DELETE(
@@ -167,24 +173,34 @@ export async function DELETE(
     );
   }
 
-  await db
-    .update(schema.clanMembers)
-    .set({ leftAt: new Date() })
-    .where(
-      and(
-        eq(schema.clanMembers.clanId, clan.id),
-        eq(schema.clanMembers.playerUuid, uuid),
-        isNull(schema.clanMembers.leftAt),
-      ),
-    );
-
-  await db.insert(schema.audit).values({
-    serverId: auth.id,
-    actor: actorUuid ? `plugin:${auth.name}:${actorUuid}` : `plugin:${auth.name}`,
-    action: 'CLAN_MEMBER_REMOVE',
-    target: tag,
-    payload: { playerUuid: uuid, playerName: target.playerName, role: target.role },
+  const rid = getRequestId(req);
+  await db.transaction(async (tx) => {
+    await tx
+      .update(schema.clanMembers)
+      .set({ leftAt: new Date() })
+      .where(
+        and(
+          eq(schema.clanMembers.clanId, clan.id),
+          eq(schema.clanMembers.playerUuid, uuid),
+          isNull(schema.clanMembers.leftAt),
+        ),
+      );
+    await tx.insert(schema.audit).values({
+      serverId: auth.id,
+      actor: actorUuid ? `plugin:${auth.name}:${actorUuid}` : `plugin:${auth.name}`,
+      action: 'CLAN_MEMBER_REMOVE',
+      target: tag,
+      payload: {
+        playerUuid: uuid,
+        playerName: target.playerName,
+        role: target.role,
+        _rid: rid,
+      },
+    });
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json(
+    { ok: true, _rid: rid },
+    { headers: { 'x-request-id': rid } },
+  );
 }

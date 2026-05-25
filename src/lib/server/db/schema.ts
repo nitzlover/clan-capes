@@ -19,6 +19,7 @@
  * in later phases — see clans_plan.md.
  */
 
+import { sql } from 'drizzle-orm';
 import {
   pgTable,
   serial,
@@ -129,10 +130,12 @@ export const clans = pgTable(
       t.serverId,
       t.tag,
     ),
-    // Same for colours — one clan per colour per active server. The
-    // partial index can't be expressed in Drizzle's DSL today, so we
-    // enforce uniqueness at the allocator layer instead of via SQL.
-    serverColorIdx: index('clans_server_color_idx').on(t.serverId, t.colorHex),
+    // Partial unique on active clans only: one colour per server.
+    // Disbanded clans retain their old colour for audit history but
+    // don't block re-use.
+    activeColorIdx: uniqueIndex('clans_active_color_idx')
+      .on(t.serverId, t.colorHex)
+      .where(sql`${t.disbandedAt} IS NULL`),
   }),
 );
 
@@ -149,6 +152,12 @@ export const clanMembers = pgTable(
     clanId: integer('clan_id')
       .notNull()
       .references(() => clans.id, { onDelete: 'cascade' }),
+    // Denormalised from `clans.server_id` so the partial-unique index
+    // below can enforce "one active clan per player per server" without
+    // a cross-table trigger. Backfilled by migration 0002.
+    serverId: integer('server_id')
+      .notNull()
+      .references(() => servers.id, { onDelete: 'cascade' }),
     playerUuid: uuid('player_uuid').notNull(),
     playerName: text('player_name').notNull(),
     role: memberRole('role').notNull().default('member'),
@@ -160,6 +169,11 @@ export const clanMembers = pgTable(
   (t) => ({
     clanIdx: index('clan_members_clan_idx').on(t.clanId),
     playerIdx: index('clan_members_player_idx').on(t.playerUuid),
+    // Partial unique: a player may have at most one active membership
+    // per server. Past memberships (leftAt IS NOT NULL) stay for stats.
+    activePlayerIdx: uniqueIndex('clan_members_active_player_idx')
+      .on(t.serverId, t.playerUuid)
+      .where(sql`${t.leftAt} IS NULL`),
   }),
 );
 

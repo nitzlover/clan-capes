@@ -23,6 +23,11 @@ import {
   isValidColor,
   normaliseTag,
 } from '@/lib/server/clan-validators';
+import {
+  isUniqueViolation,
+  uniqueConstraintHint,
+} from '@/lib/server/pg-errors';
+import { getRequestId } from '@/lib/server/request-id';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -93,6 +98,10 @@ export async function POST(req: Request) {
   if (!body.leaderName || body.leaderName.length < 1) {
     return NextResponse.json({ error: 'leaderName required' }, { status: 400 });
   }
+  // Narrowed locals — TS loses the body.* narrowing across the tx
+  // closure boundary, so capture them in plain consts up front.
+  const leaderUuid: string = body.leaderUuid;
+  const leaderName: string = body.leaderName;
   if (body.colorHex && !isValidColor(body.colorHex)) {
     return NextResponse.json(
       { error: 'colorHex must look like #RRGGBB' },
@@ -151,32 +160,56 @@ export async function POST(req: Request) {
     colorHex = allocated;
   }
 
-  const [clan] = await db
-    .insert(schema.clans)
-    .values({
-      serverId: ctx.id,
-      tag,
-      name,
-      colorHex,
-      leaderUuid: body.leaderUuid,
-    })
-    .returning();
+  const rid = getRequestId(req);
 
-  await db.insert(schema.clanMembers).values({
-    clanId: clan.id,
-    playerUuid: body.leaderUuid,
-    playerName: body.leaderName,
-    role: 'leader',
-  });
+  // Atomic: clan row + leader membership + audit live or die together.
+  // A 23505 unique_violation here means our pre-checks lost a race —
+  // map it to 409 with a friendly hint instead of leaking the raw
+  // Postgres error.
+  let dto;
+  try {
+    dto = await db.transaction(async (tx) => {
+      const [clan] = await tx
+        .insert(schema.clans)
+        .values({
+          serverId: ctx.id,
+          tag,
+          name,
+          colorHex,
+          leaderUuid,
+        })
+        .returning();
 
-  await db.insert(schema.audit).values({
-    serverId: ctx.id,
-    actor: `plugin:${ctx.name}`,
-    action: 'CLAN_CREATE',
-    target: tag,
-    payload: { name, colorHex, leaderUuid: body.leaderUuid },
-  });
+      await tx.insert(schema.clanMembers).values({
+        clanId: clan.id,
+        serverId: ctx.id,
+        playerUuid: leaderUuid,
+        playerName: leaderName,
+        role: 'leader',
+      });
 
-  const dto = await getClanByTag(ctx.id, tag);
-  return NextResponse.json({ ok: true, clan: dto }, { status: 201 });
+      await tx.insert(schema.audit).values({
+        serverId: ctx.id,
+        actor: `plugin:${ctx.name}`,
+        action: 'CLAN_CREATE',
+        target: tag,
+        payload: { name, colorHex, leaderUuid, _rid: rid },
+      });
+
+      return await getClanByTag(ctx.id, tag);
+    });
+  } catch (e) {
+    if (isUniqueViolation(e)) {
+      return NextResponse.json(
+        { error: uniqueConstraintHint(e), _rid: rid },
+        { status: 409, headers: { 'x-request-id': rid } },
+      );
+    }
+    throw e;
+  }
+
+  return NextResponse.json(
+    { ok: true, clan: dto, _rid: rid },
+    { status: 201, headers: { 'x-request-id': rid } },
+  );
 }
