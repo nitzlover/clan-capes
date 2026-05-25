@@ -46,11 +46,38 @@ public final class CapeService {
     }
 
     public PlayerCapeDto resolvePlayer(UUID uuid) {
-        Optional<String> clan = powerClansHook.getClanTag(uuid);
+        Optional<String> clan = resolvePlayerClan(uuid);
         if (clan.isEmpty()) {
             return PlayerCapeDto.none();
         }
         return resolveClan(clan.get());
+    }
+
+    /**
+     * Player → clan tag resolution. Prefers the panel-backed
+     * {@link dev.clancapes.clan.ClanRepository} once it's wired; falls
+     * back to {@link PowerClansHook} only if the repo hasn't been
+     * created yet (pre-Phase-2 / pre-link deploy). PowerClansHook
+     * itself short-circuits when the PowerClans plugin isn't loaded,
+     * so the fallback is a no-op on post-migration servers and never
+     * touches the legacy data.yml bytecode.
+     */
+    private Optional<String> resolvePlayerClan(UUID uuid) {
+        if (uuid == null) {
+            return Optional.empty();
+        }
+        var repo = plugin.getClanRepository();
+        if (repo != null) {
+            var clan = repo.byPlayer(uuid);
+            if (clan.isPresent()) {
+                return Optional.of(clan.get().tag());
+            }
+            // ClanRepository wired but player unclanned — don't fall
+            // back to PowerClans; the repository IS the source of
+            // truth now.
+            return Optional.empty();
+        }
+        return powerClansHook.getClanTag(uuid);
     }
 
     public PlayerCapeDto resolveClan(String clanTag) {

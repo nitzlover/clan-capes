@@ -36,6 +36,18 @@ public final class PowerClansHook {
     private Method listClansMethod;
     private Method getNameMethod;
 
+    /**
+     * Set true once {@link #register} confirms PowerClans is present. Every
+     * subsequent read path bails early when this is false so we never
+     * touch the {@code refreshDataFileCache} bytecode (which references
+     * {@link PowerClanEntry}) on a post-migration deploy where the
+     * PowerClans plugin has been removed. Paper's PluginClassLoader on
+     * 26.x has been seen to fail lazy class resolution of certain
+     * model classes once the plugin's been running for a while, and
+     * gating that whole code path eliminates the surface entirely.
+     */
+    private boolean available = false;
+
     // data.yml cache (rebuilt when mtime changes)
     private long cachedDataFileMtime = -1L;
     private Map<UUID, String> uuidToTag = Map.of();
@@ -51,6 +63,7 @@ public final class PowerClansHook {
             plugin.getLogger().info("PowerClans not found — clan detection disabled");
             return;
         }
+        available = true;
         try {
             Class<?> apiClass = Class.forName("me.clip.powerclans.api.PowerClansAPI");
             Method getApi = apiClass.getMethod("getInstance");
@@ -89,6 +102,12 @@ public final class PowerClansHook {
         if (uuid == null) {
             return Optional.empty();
         }
+        if (!available) {
+            // PowerClans plugin not installed — never touch the data.yml
+            // cache (its bytecode references PowerClanEntry which Paper's
+            // PluginClassLoader has been seen to lose track of post-init).
+            return Optional.empty();
+        }
         Player player = Bukkit.getPlayer(uuid);
         if (player != null) {
             Optional<String> viaApi = resolveViaApi(player);
@@ -110,6 +129,9 @@ public final class PowerClansHook {
 
     public Optional<String> getClanTag(Player player) {
         if (player == null) {
+            return Optional.empty();
+        }
+        if (!available) {
             return Optional.empty();
         }
         Optional<String> viaApi = resolveViaApi(player);
@@ -158,6 +180,9 @@ public final class PowerClansHook {
      * All clans from PowerClans API (if available) or {@code plugins/PowerClans/data.yml}.
      */
     public List<PowerClanEntry> listClans() {
+        if (!available) {
+            return List.of();
+        }
         List<PowerClanEntry> fromApi = listClansFromApi();
         if (!fromApi.isEmpty()) {
             return fromApi;
