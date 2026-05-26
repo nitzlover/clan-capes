@@ -79,9 +79,18 @@ export const servers = pgTable(
     // layer mergeWithDefaults pass fills missing keys, so adding new
     // keys never needs another migration.
     settings: jsonb('settings').notNull().default({}),
+    // First 16 chars of the API-key plaintext ("ck_live_<8 url-safe>").
+    // Indexed so requirePluginAuth narrows the bcrypt-compare to a
+    // single row. Empty string for rows issued before migration 0006;
+    // those fall back to the legacy linear-scan path until the
+    // operator rotates the key.
+    apiKeyPrefix: text('api_key_prefix').notNull().default(''),
   },
   (t) => ({
     nameIdx: uniqueIndex('servers_name_idx').on(t.name),
+    apiKeyPrefixIdx: index('servers_api_key_prefix_idx')
+      .on(t.apiKeyPrefix)
+      .where(sql`${t.apiKeyPrefix} <> ''`),
   }),
 );
 

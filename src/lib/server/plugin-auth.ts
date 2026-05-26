@@ -1,38 +1,32 @@
 /**
  * Bearer-API-key auth for plugin → panel requests.
  *
- * Every endpoint that the Paper plugin hits — heartbeat, kill events,
- * clan CRUD sync — calls {@link requirePluginAuth} first. The function
- * pulls the `Authorization: Bearer ck_live_<…>` header off the request,
- * scans every registered server row, bcrypt-compares the plaintext key
- * against each stored hash, and on a hit refreshes the row's
- * `last_seen_at` so the admin UI can show a live-status indicator
- * without polling each plugin separately.
+ * Hot path: every heartbeat, kill, banner mirror, clan CRUD round-trip
+ * is gated through {@link requirePluginAuth}. We need the lookup to
+ * be O(1) — at 100+ registered servers a linear bcrypt scan was
+ * burning a CPU core just answering routine plugin traffic.
  *
- * Linear scan over `servers` is fine for the foreseeable future — even
- * an active panel hosting a hundred game servers fits in a single
- * round trip and ~100 bcrypt compares (~30 ms total). When this stops
- * being cheap, the right answer is to store a fast prefix index of the
- * api-key's first 12 chars on the row and narrow the scan to that
- * prefix.
+ * Strategy: the API key's first 16 chars ("ck_live_<8 url-safe>")
+ * land in the indexed `servers.api_key_prefix` column on consume. On
+ * request we extract the same prefix from the incoming Bearer header,
+ * filter to the single row that matches, then bcrypt-verify against
+ * that row's hash.
+ *
+ * Legacy fallback: rows registered before migration 0006 carry an
+ * empty `api_key_prefix`. If the prefix index miss matches no rows
+ * we fall back to the full linear scan so existing deploys keep
+ * working until the operator rotates the key.
  */
 
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import { getDb, dbEnabled, schema } from '@/lib/server/db';
-import { isApiKey, verifySecret } from '@/lib/server/api-key';
+import { extractApiKeyPrefix, isApiKey, verifySecret } from '@/lib/server/api-key';
 
 export type ServerContext = {
   id: number;
   name: string;
 };
 
-/**
- * Verify the Bearer key in `req` against every server's stored hash.
- * Returns the matched ServerContext on success, null otherwise. Refreshes
- * `servers.last_seen_at` as a side effect when a match is found.
- *
- * Callers do `const ctx = await requirePluginAuth(req); if (!ctx) return 401`.
- */
 export async function requirePluginAuth(req: Request): Promise<ServerContext | null> {
   if (!dbEnabled()) return null;
 
@@ -42,20 +36,33 @@ export async function requirePluginAuth(req: Request): Promise<ServerContext | n
   const key = header.slice(7).trim();
   if (!isApiKey(key)) return null;
 
+  const prefix = extractApiKeyPrefix(key);
+  if (!prefix) return null;
+
   const db = getDb();
-  const rows = await db
+
+  // Indexed fast path: hit only the rows whose prefix matches the
+  // incoming key, plus the legacy '' bucket where pre-0006 servers
+  // sit until their next key rotation.
+  const candidates = await db
     .select({
       id: schema.servers.id,
       name: schema.servers.name,
       apiKeyHash: schema.servers.apiKeyHash,
     })
-    .from(schema.servers);
+    .from(schema.servers)
+    .where(
+      or(
+        eq(schema.servers.apiKeyPrefix, prefix),
+        eq(schema.servers.apiKeyPrefix, ''),
+      ),
+    );
 
-  for (const row of rows) {
+  for (const row of candidates) {
     if (await verifySecret(key, row.apiKeyHash)) {
-      // Fire-and-forget lastSeenAt refresh. Failures here are non-fatal
-      // (the caller has the actual auth answer they need); we don't
-      // want a transient DB blip to 401 the plugin.
+      // Fire-and-forget lastSeenAt refresh — auth answer is already
+      // determined, a transient DB blip on the timestamp update
+      // shouldn't 401 the plugin.
       db.update(schema.servers)
         .set({ lastSeenAt: new Date() })
         .where(eq(schema.servers.id, row.id))

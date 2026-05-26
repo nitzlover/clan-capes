@@ -23,6 +23,7 @@ import { and, eq, isNull, gt } from 'drizzle-orm';
 import { requireAuth } from '@/lib/server/auth';
 import { getDb, dbEnabled, schema } from '@/lib/server/db';
 import {
+  extractApiKeyPrefix,
   generateApiKey,
   hashSecret,
   isSetupToken,
@@ -91,6 +92,7 @@ export async function POST(req: Request) {
 
   const apiKey = generateApiKey();
   const apiKeyHash = await hashSecret(apiKey);
+  const apiKeyPrefix = extractApiKeyPrefix(apiKey);
 
   // Mark consumed first so a concurrent consume request can't double-
   // mint. The two writes are sequential; under contention the second
@@ -118,6 +120,7 @@ export async function POST(req: Request) {
     .values({
       name: match.serverName,
       apiKeyHash,
+      apiKeyPrefix,
     })
     .returning();
 

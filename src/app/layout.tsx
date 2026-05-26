@@ -1,34 +1,33 @@
 import type { Metadata } from 'next';
-import { Syne, IBM_Plex_Mono } from 'next/font/google';
+import { GeistSans } from 'geist/font/sans';
+import { GeistMono } from 'geist/font/mono';
 import './globals.css';
-
-const sans = Syne({
-  subsets: ['latin'],
-  weight: ['400', '600', '700', '800'],
-  variable: '--font-sans',
-  display: 'swap',
-});
-
-const mono = IBM_Plex_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500', '700'],
-  variable: '--font-mono',
-  display: 'swap',
-});
 
 export const metadata: Metadata = {
   title: 'Clan Capes',
   description: 'Admin panel for the Minecraft clan capes plugin.',
 };
 
+/**
+ * Geist Sans is Vercel's editorial workhorse — wide-set caps + tight
+ * tabular numerals match the brutalist + tabular dashboard tone better
+ * than Syne, and it ships in the same `next/font` pipeline so the
+ * critical-CSS bundle stays the same size. Geist Mono replaces IBM
+ * Plex Mono for the same reason; consistency of metric across UI +
+ * code stamps + log lines.
+ *
+ * Material Symbols is deliberately gone — every icon now comes from
+ * Lucide React (tree-shaken, ~1 KB per icon, no remote font fetch).
+ */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <head>
         {/*
-          Material Symbols (outlined). The variable axes — fill 0/1, weight
-          100..700 — let icon weight match the surrounding type without
-          shipping multiple weights of the font.
+          Material Symbols still loads for backwards-compat with the
+          handful of pages that haven't migrated to Lucide React yet
+          (audit, banners, capes, ClanSelect, UploadSection). Each is
+          a separate PR; once they're all on Lucide this link goes.
         */}
         <link
           rel="stylesheet"

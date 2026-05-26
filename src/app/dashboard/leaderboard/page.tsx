@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api, UnauthorizedError } from '@/lib/api';
+import { LeaderboardPodium } from '@/components/LeaderboardPodium';
 
 type ClanRow = {
   clanId: number;
@@ -115,6 +116,8 @@ export default function LeaderboardPage() {
         </p>
       ) : data ? (
         <>
+          <LeaderboardPodium rows={data.clans} />
+
           <section className="brutal-card mb-6 p-0">
             <div className="border-b-2 border-[var(--rule-strong)] bg-[var(--bg-sink)] px-5 py-3">
               <span className="label-mono">Clans ({data.clans.length})</span>

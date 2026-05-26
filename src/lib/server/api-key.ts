@@ -51,6 +51,23 @@ export function isApiKey(token: string): boolean {
   return token.startsWith(API_KEY_PREFIX) && token.length === API_KEY_PREFIX.length + 43;
 }
 
+/**
+ * Stable lookup prefix for an API-key plaintext. Concatenates the
+ * literal {@code ck_live_} marker with the first 8 url-safe chars of
+ * the random tail (16 chars total). Stored alongside the bcrypt hash
+ * so plugin-auth can resolve the matching row with a single indexed
+ * SELECT instead of scanning every server.
+ *
+ * 8 random base64url chars = 48 bits ≈ 2.8e14 — far more than enough
+ * to keep collisions below 1 in a billion at panel scale, and short
+ * enough that the prefix itself doesn't leak any usable secret if
+ * the index becomes public.
+ */
+export function extractApiKeyPrefix(token: string): string {
+  if (!isApiKey(token)) return '';
+  return token.slice(0, API_KEY_PREFIX.length + 8);
+}
+
 /** Bcrypt hash for storage. */
 export async function hashSecret(plain: string): Promise<string> {
   return bcrypt.hash(plain, BCRYPT_ROUNDS);

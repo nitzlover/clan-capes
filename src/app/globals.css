@@ -37,6 +37,18 @@
   --rule: rgba(255, 255, 255, 0.09);
   --rule-strong: rgba(255, 255, 255, 0.18);
   --focus: rgba(255, 255, 255, 0.5);
+
+  /*
+   * Accent tokens. Used sparingly — chrome stays B&W per the
+   * clan-capes design memo. `--signal` lights up live state (online
+   * dot, K/D delta positive, current-season pill); `--danger` flags
+   * irreversible / destructive ops (disband, season reset). Never
+   * used for decoration.
+   */
+  --signal: #d4ff3a;
+  --signal-ink: #1a2200;
+  --danger: #ff4d4d;
+  --danger-ink: #2a0000;
 }
 
 html,
