@@ -327,6 +327,11 @@ function ClanEditor({
   const [color, setColor] = useState(clan.colorHex);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  // Armour-trim section is opt-in — keeps the row compact when the
+  // operator is just renaming or kicking members, and avoids paying
+  // the WebGL + texture fetch cost until they actually want to edit
+  // trims.
+  const [showTrims, setShowTrims] = useState(false);
 
   async function saveMeta() {
     if (busy) return;
@@ -468,27 +473,39 @@ function ClanEditor({
         </div>
       </div>
 
-      <p className="label-mono mt-6 mb-2">Armour trims</p>
-      <ArmorTrimEditor
-        loadTrims={async () => {
-          const r = await api<{ trims: ArmorTrimRecord[] }>(
-            `/panel/clans/${clan.tag}/armor-trim${qs}`,
-          );
-          return r.trims;
-        }}
-        saveSlot={async (slot, material, pattern) => {
-          await api(`/panel/clans/${clan.tag}/armor-trim/${slot}${qs}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ material, pattern }),
-          });
-        }}
-        clearSlot={async (slot) => {
-          await api(`/panel/clans/${clan.tag}/armor-trim/${slot}${qs}`, {
-            method: 'DELETE',
-          });
-        }}
-      />
+      <button
+        type="button"
+        onClick={() => setShowTrims((s) => !s)}
+        className="mt-6 mb-2 flex w-full items-center justify-between border-b border-[var(--rule)] pb-2 text-left transition-colors hover:border-[var(--rule-strong)]"
+        aria-expanded={showTrims}
+      >
+        <span className="label-mono">Armour trims</span>
+        <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-mute)]">
+          {showTrims ? '▾ hide' : '▸ show'}
+        </span>
+      </button>
+      {showTrims && (
+        <ArmorTrimEditor
+          loadTrims={async () => {
+            const r = await api<{ trims: ArmorTrimRecord[] }>(
+              `/panel/clans/${clan.tag}/armor-trim${qs}`,
+            );
+            return r.trims;
+          }}
+          saveSlot={async (slot, material, pattern) => {
+            await api(`/panel/clans/${clan.tag}/armor-trim/${slot}${qs}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ material, pattern }),
+            });
+          }}
+          clearSlot={async (slot) => {
+            await api(`/panel/clans/${clan.tag}/armor-trim/${slot}${qs}`, {
+              method: 'DELETE',
+            });
+          }}
+        />
+      )}
 
       <p className="label-mono mt-6 mb-2">Members</p>
       <ul className="border-t border-[var(--rule)]">
