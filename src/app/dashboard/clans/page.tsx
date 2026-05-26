@@ -7,6 +7,7 @@ import {
   ArmorTrimEditor,
   type ArmorTrimRecord,
 } from '@/components/ArmorTrimEditor';
+import { MemberCard3D } from '@/components/MemberCard3D';
 
 type Member = {
   playerUuid: string;
@@ -332,6 +333,10 @@ function ClanEditor({
   // the WebGL + texture fetch cost until they actually want to edit
   // trims.
   const [showTrims, setShowTrims] = useState(false);
+  // 3D roster row is also opt-in — each card is its own WebGL
+  // context (skinview3d) and a 20-member clan would otherwise blow
+  // past the browser's context cap the moment the row expands.
+  const [show3D, setShow3D] = useState(false);
 
   async function saveMeta() {
     if (busy) return;
@@ -505,6 +510,41 @@ function ClanEditor({
             });
           }}
         />
+      )}
+
+      <button
+        type="button"
+        onClick={() => setShow3D((s) => !s)}
+        className="mt-6 mb-2 flex w-full items-center justify-between border-b border-[var(--rule)] pb-2 text-left transition-colors hover:border-[var(--rule-strong)]"
+        aria-expanded={show3D}
+      >
+        <span className="label-mono">3D roster</span>
+        <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-mute)]">
+          {show3D ? '▾ hide' : '▸ show'}
+        </span>
+      </button>
+      {show3D && (
+        <div className="-mx-1 mb-4 flex gap-3 overflow-x-auto px-1 py-3">
+          {clan.members.map((m, i) => (
+            <MemberCard3D
+              key={m.playerUuid}
+              playerUuid={m.playerUuid}
+              playerName={m.playerName}
+              role={m.role}
+              subtitle={
+                onlineUuids === null
+                  ? undefined
+                  : onlineUuids.has(m.playerUuid.toLowerCase())
+                    ? '● online'
+                    : 'offline'
+              }
+              // Lazy-mount everyone past the first six so a clan
+              // with 30 members doesn't fire 30 WebGL contexts the
+              // moment 3D roster expands.
+              lazy={i >= 6}
+            />
+          ))}
+        </div>
       )}
 
       <p className="label-mono mt-6 mb-2">Members</p>
