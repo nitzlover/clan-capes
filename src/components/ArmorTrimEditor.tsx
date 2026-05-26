@@ -17,7 +17,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { TrimPreview } from '@/components/TrimPreview';
+import { ArmorPiece3D } from '@/components/ArmorPiece3D';
 
 export const ARMOR_SLOTS = ['head', 'chest', 'legs', 'feet'] as const;
 export type ArmorSlot = (typeof ARMOR_SLOTS)[number];
@@ -238,7 +238,7 @@ export function ArmorTrimEditor({ loadTrims, saveSlot, clearSlot }: ArmorTrimEdi
                 <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--text-soft)]">
                   {SLOT_LABELS[slot]}
                 </span>
-                <TrimPreview slot={slot} material={row.material} pattern={row.pattern} />
+                <ArmorPiece3D slot={slot} material={row.material} pattern={row.pattern} />
                 <label className="block">
                   <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
                     Material
