@@ -233,16 +233,11 @@ export function ArmorTrimEditor({ loadTrims, saveSlot, clearSlot }: ArmorTrimEdi
             return (
               <li
                 key={slot}
-                className="grid items-end gap-3 border border-[var(--rule)] bg-[var(--bg-sink)] px-4 py-3 md:grid-cols-[110px_auto_1fr_1fr_auto_auto]"
+                aria-label={SLOT_LABELS[slot]}
+                className="grid items-end gap-3 border border-[var(--rule)] bg-[var(--bg-sink)] px-4 py-3 md:grid-cols-[auto_1fr_1fr_auto_auto]"
               >
-                <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--text-soft)]">
-                  {SLOT_LABELS[slot]}
-                </span>
                 <ArmorPiece3D slot={slot} material={row.material} pattern={row.pattern} />
                 <label className="block">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
-                    Material
-                  </span>
                   <TrimSelect
                     value={row.material}
                     options={TRIM_MATERIALS as readonly string[] as string[]}
@@ -253,9 +248,6 @@ export function ArmorTrimEditor({ loadTrims, saveSlot, clearSlot }: ArmorTrimEdi
                   />
                 </label>
                 <label className="block">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
-                    Pattern
-                  </span>
                   <TrimSelect
                     value={row.pattern}
                     options={TRIM_PATTERNS as readonly string[] as string[]}
@@ -283,7 +275,7 @@ export function ArmorTrimEditor({ loadTrims, saveSlot, clearSlot }: ArmorTrimEdi
                 </button>
                 {row.msg && (
                   <p
-                    className={`md:col-span-6 font-mono text-[10px] uppercase tracking-[0.22em] ${
+                    className={`md:col-span-5 font-mono text-[10px] uppercase tracking-[0.22em] ${
                       row.msg.kind === 'ok' ? 'text-[var(--text-soft)]' : 'text-white'
                     }`}
                   >

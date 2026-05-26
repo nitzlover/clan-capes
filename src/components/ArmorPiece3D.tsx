@@ -413,11 +413,59 @@ export function ArmorPiece3D({ slot, material, pattern }: Props) {
         // Texture missing → leave the body filler showing.
       });
 
+    // Pointer-drag rotation. Auto-rotate runs whenever the user
+    // isn't actively dragging; pointerdown grabs control and feeds
+    // rotation deltas straight into the pivot. Pointer capture lets
+    // the drag survive the cursor leaving the canvas, which is the
+    // usual "I yanked it past the edge" UX expectation.
+    const drag = { active: false, lastX: 0, lastY: 0 };
+    let lastTickMs = performance.now();
+    const SENSITIVITY = 0.01;
+    const X_TILT_MAX = Math.PI / 2 - 0.05;
+
+    const onPointerDown = (e: PointerEvent) => {
+      drag.active = true;
+      drag.lastX = e.clientX;
+      drag.lastY = e.clientY;
+      renderer.domElement.setPointerCapture(e.pointerId);
+      renderer.domElement.style.cursor = 'grabbing';
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (!drag.active) return;
+      pivot.rotation.y += (e.clientX - drag.lastX) * SENSITIVITY;
+      pivot.rotation.x = Math.max(
+        -X_TILT_MAX,
+        Math.min(X_TILT_MAX, pivot.rotation.x + (e.clientY - drag.lastY) * SENSITIVITY),
+      );
+      drag.lastX = e.clientX;
+      drag.lastY = e.clientY;
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      if (!drag.active) return;
+      drag.active = false;
+      try {
+        renderer.domElement.releasePointerCapture(e.pointerId);
+      } catch {
+        // Pointer might already be released.
+      }
+      renderer.domElement.style.cursor = 'grab';
+    };
+    renderer.domElement.style.cursor = 'grab';
+    renderer.domElement.style.touchAction = 'none';
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
+    renderer.domElement.addEventListener('pointercancel', onPointerUp);
+
     let rafId = 0;
-    const start = performance.now();
+    const AUTO_RATE = 0.6;
     const tick = () => {
-      const t = (performance.now() - start) / 1000;
-      pivot.rotation.y = t * 0.6;
+      const now = performance.now();
+      const dt = (now - lastTickMs) / 1000;
+      lastTickMs = now;
+      if (!drag.active) {
+        pivot.rotation.y += dt * AUTO_RATE;
+      }
       renderer.render(scene, camera);
       rafId = requestAnimationFrame(tick);
     };
@@ -441,6 +489,10 @@ export function ArmorPiece3D({ slot, material, pattern }: Props) {
       cancelled = true;
       cancelAnimationFrame(rafId);
       ro.disconnect();
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      renderer.domElement.removeEventListener('pointermove', onPointerMove);
+      renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      renderer.domElement.removeEventListener('pointercancel', onPointerUp);
       renderer.dispose();
       // Three.js GC bookkeeping — drop each material+geometry+texture
       // we built so a row that swaps trim material 10 times doesn't
