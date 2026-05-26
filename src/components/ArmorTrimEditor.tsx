@@ -116,37 +116,56 @@ export function ArmorTrimEditor({ loadTrims, saveSlot, clearSlot }: ArmorTrimEdi
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setLoadError('');
-    try {
-      const list = await loadTrims();
-      const next: Record<ArmorSlot, RowState> = {
-        head: emptyRow(),
-        chest: emptyRow(),
-        legs: emptyRow(),
-        feet: emptyRow(),
-      };
-      for (const row of list) {
-        next[row.slot] = {
-          saved: { material: row.material, pattern: row.pattern },
-          material: row.material,
-          pattern: row.pattern,
-          busy: false,
-          msg: null,
-        };
-      }
-      setRows(next);
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Failed to load trims');
-    } finally {
-      setLoading(false);
-    }
-  }, [loadTrims]);
-
+  // Callers (pages) re-render constantly — online-poll loop, parent
+  // state churn — and pass fresh inline closures each pass. Without a
+  // ref bridge the initial useEffect would re-fire every render and
+  // hammer the panel with a fetch per re-render. Stash the latest
+  // closures here and consume them through the ref so the load /
+  // save / clear handlers stay stable across renders without forcing
+  // every caller to memoise.
+  const cbRef = useRef({ loadTrims, saveSlot, clearSlot });
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    cbRef.current = { loadTrims, saveSlot, clearSlot };
+  });
+
+  // Single mount-time fetch. Parent triggers re-fetches by remounting
+  // the component (e.g. after the clan list reload swaps the clan
+  // identity) — not by changing the prop functions.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setLoadError('');
+      try {
+        const list = await cbRef.current.loadTrims();
+        if (cancelled) return;
+        const next: Record<ArmorSlot, RowState> = {
+          head: emptyRow(),
+          chest: emptyRow(),
+          legs: emptyRow(),
+          feet: emptyRow(),
+        };
+        for (const row of list) {
+          next[row.slot] = {
+            saved: { material: row.material, pattern: row.pattern },
+            material: row.material,
+            pattern: row.pattern,
+            busy: false,
+            msg: null,
+          };
+        }
+        setRows(next);
+      } catch (e) {
+        if (cancelled) return;
+        setLoadError(e instanceof Error ? e.message : 'Failed to load trims');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const update = useCallback(<K extends keyof RowState>(
     slot: ArmorSlot,
@@ -160,7 +179,7 @@ export function ArmorTrimEditor({ loadTrims, saveSlot, clearSlot }: ArmorTrimEdi
     if (row.busy) return;
     update(slot, { busy: true, msg: null });
     try {
-      await saveSlot(slot, row.material, row.pattern);
+      await cbRef.current.saveSlot(slot, row.material, row.pattern);
       update(slot, {
         busy: false,
         saved: { material: row.material, pattern: row.pattern },
@@ -181,7 +200,7 @@ export function ArmorTrimEditor({ loadTrims, saveSlot, clearSlot }: ArmorTrimEdi
     if (!confirm(`Clear ${SLOT_LABELS[slot].toLowerCase()} trim?`)) return;
     update(slot, { busy: true, msg: null });
     try {
-      await clearSlot(slot);
+      await cbRef.current.clearSlot(slot);
       update(slot, {
         ...emptyRow(),
         msg: { kind: 'ok', text: 'Cleared.' },

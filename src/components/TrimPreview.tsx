@@ -146,24 +146,60 @@ export function TrimPreview({ slot, material, pattern }: Props) {
         if (cancelled || id !== generation.current) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
-        canvas.width = patternImg.width;
-        canvas.height = patternImg.height;
+        const w = patternImg.width;
+        const h = patternImg.height;
+        const src = patternImg.data;
+
+        // Pass 1 — find the bounding box of the actual trim pixels.
+        // Vanilla humanoid textures are 64x32 / 64x32 with most of
+        // the surface transparent (the trim is painted along armour
+        // hems + arm bands), so blitting the full sheet leaves the
+        // operator staring at empty space. Crop to the populated
+        // region first, then upscale that crop into the preview box.
+        let minX = w;
+        let minY = h;
+        let maxX = -1;
+        let maxY = -1;
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            if (src[(y * w + x) * 4 + 3] !== 0) {
+              if (x < minX) minX = x;
+              if (y < minY) minY = y;
+              if (x > maxX) maxX = x;
+              if (y > maxY) maxY = y;
+            }
+          }
+        }
+        if (maxX < 0) {
+          // All transparent — render a 1x1 transparent buffer rather
+          // than 0x0 (which createImageData rejects).
+          canvas.width = 1;
+          canvas.height = 1;
+          return;
+        }
+        const cw = maxX - minX + 1;
+        const ch = maxY - minY + 1;
+        canvas.width = cw;
+        canvas.height = ch;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-        const out = ctx.createImageData(patternImg.width, patternImg.height);
-        const src = patternImg.data;
+        const out = ctx.createImageData(cw, ch);
         const dst = out.data;
-        for (let i = 0; i < src.length; i += 4) {
-          const alpha = src[i + 3];
-          if (alpha === 0) {
-            dst[i + 3] = 0;
-            continue;
+        for (let y = 0; y < ch; y++) {
+          for (let x = 0; x < cw; x++) {
+            const si = ((y + minY) * w + (x + minX)) * 4;
+            const di = (y * cw + x) * 4;
+            const alpha = src[si + 3];
+            if (alpha === 0) {
+              dst[di + 3] = 0;
+              continue;
+            }
+            const idx = nearestIndex(src[si], reference);
+            dst[di + 0] = palette[idx * 3 + 0];
+            dst[di + 1] = palette[idx * 3 + 1];
+            dst[di + 2] = palette[idx * 3 + 2];
+            dst[di + 3] = alpha;
           }
-          const idx = nearestIndex(src[i], reference);
-          dst[i + 0] = palette[idx * 3 + 0];
-          dst[i + 1] = palette[idx * 3 + 1];
-          dst[i + 2] = palette[idx * 3 + 2];
-          dst[i + 3] = alpha;
         }
         ctx.putImageData(out, 0, 0);
       } catch {
@@ -177,13 +213,13 @@ export function TrimPreview({ slot, material, pattern }: Props) {
 
   return (
     <span
-      className="inline-flex h-12 w-24 shrink-0 items-center justify-center border-2 border-[var(--rule-strong)] bg-[#11110f]"
+      className="inline-flex h-14 w-28 shrink-0 items-center justify-center border-2 border-[var(--rule-strong)] bg-[#11110f] p-1"
       title={`${material} · ${pattern}`}
     >
       <canvas
         ref={canvasRef}
-        className="block h-full w-full"
-        style={{ imageRendering: 'pixelated' }}
+        className="block max-h-full max-w-full"
+        style={{ imageRendering: 'pixelated', width: '100%', height: 'auto' }}
       />
     </span>
   );
