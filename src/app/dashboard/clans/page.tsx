@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, UnauthorizedError } from '@/lib/api';
 import { nearestVanilla } from '@/lib/vanilla-color';
+import {
+  ArmorTrimEditor,
+  type ArmorTrimRecord,
+} from '@/components/ArmorTrimEditor';
 
 type Member = {
   playerUuid: string;
@@ -463,6 +467,28 @@ function ClanEditor({
           </div>
         </div>
       </div>
+
+      <p className="label-mono mt-6 mb-2">Armour trims</p>
+      <ArmorTrimEditor
+        loadTrims={async () => {
+          const r = await api<{ trims: ArmorTrimRecord[] }>(
+            `/panel/clans/${clan.tag}/armor-trim${qs}`,
+          );
+          return r.trims;
+        }}
+        saveSlot={async (slot, material, pattern) => {
+          await api(`/panel/clans/${clan.tag}/armor-trim/${slot}${qs}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ material, pattern }),
+          });
+        }}
+        clearSlot={async (slot) => {
+          await api(`/panel/clans/${clan.tag}/armor-trim/${slot}${qs}`, {
+            method: 'DELETE',
+          });
+        }}
+      />
 
       <p className="label-mono mt-6 mb-2">Members</p>
       <ul className="border-t border-[var(--rule)]">

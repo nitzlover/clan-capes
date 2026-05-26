@@ -22,6 +22,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import {
+  ArmorTrimEditor,
+  type ArmorTrimRecord,
+} from '@/components/ArmorTrimEditor';
 
 type Member = {
   playerUuid: string;
@@ -155,6 +159,7 @@ export default function ClanPanelTagPage() {
         onChange={reload}
       />
       <BannerSection clan={data.clan} banner={data.banner} onChange={reload} />
+      <ArmorTrimSection clan={data.clan} />
       {data.role === 'leader' && (
         <DangerZone clan={data.clan} onDisbanded={() => router.replace('/clan-panel')} />
       )}
@@ -481,6 +486,35 @@ function BannerSection({
           No banner yet. Ask an admin to design one in <code className="font-mono">/dashboard/banners</code>.
         </p>
       )}
+    </section>
+  );
+}
+
+function ArmorTrimSection({ clan }: { clan: Clan }) {
+  const base = `/api/leader/clans/${encodeURIComponent(clan.tag)}/armor-trim`;
+  return (
+    <section className="brutal-card mb-6 p-5">
+      <p className="label-mono mb-3">Armour trims</p>
+      <p className="mb-4 text-xs text-[var(--text-mute)]">
+        Pick a vanilla trim material + pattern per piece. Auto-stamped onto
+        armour your clan equips — enchantments and durability stay intact.
+      </p>
+      <ArmorTrimEditor
+        loadTrims={async () => {
+          const res = await leaderApi<{ trims: ArmorTrimRecord[] }>(base);
+          return res.trims;
+        }}
+        saveSlot={async (slot, material, pattern) => {
+          await leaderApi(`${base}/${slot}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ material, pattern }),
+          });
+        }}
+        clearSlot={async (slot) => {
+          await leaderApi(`${base}/${slot}`, { method: 'DELETE' });
+        }}
+      />
     </section>
   );
 }
