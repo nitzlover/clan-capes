@@ -1,6 +1,7 @@
 package dev.clancapes;
 
 import dev.clancapes.api.RestApiServer;
+import dev.clancapes.clan.ArmorTrimRepository;
 import dev.clancapes.clan.BannerRepository;
 import dev.clancapes.clan.ClanRepository;
 import dev.clancapes.clan.ClanTeamManager;
@@ -12,6 +13,7 @@ import dev.clancapes.command.ClanCommand;
 import dev.clancapes.config.PluginConfig;
 import dev.clancapes.hook.PowerClansHook;
 import dev.clancapes.hook.PlaceholderHook;
+import dev.clancapes.listener.ArmorTrimListener;
 import dev.clancapes.listener.ClanVillagerListener;
 import dev.clancapes.listener.PvpKillListener;
 import dev.clancapes.listener.ShieldBannerListener;
@@ -39,6 +41,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
     private HeartbeatTask heartbeatTask;
     private ClanRepository clanRepository;
     private BannerRepository bannerRepository;
+    private ArmorTrimRepository armorTrimRepository;
     private ClanTeamManager clanTeamManager;
     private PendingInvites pendingInvites;
     private StatsCache statsCache;
@@ -55,6 +58,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
     private BukkitTask clanRefreshTask;
     private BukkitTask bannerRefreshTask;
     private BukkitTask settingsRefreshTask;
+    private BukkitTask armorTrimRefreshTask;
 
     @Override
     public void onEnable() {
@@ -171,6 +175,19 @@ public final class ClanCapesPlugin extends JavaPlugin {
                 20L * 60 * 5,
                 20L * 60 * 5);
 
+        // Armour trim cache + listener — same cadence pattern as the
+        // banner cache. ArmorTrimListener stamps the spec onto the
+        // equipped piece the moment a clan member dons it.
+        armorTrimRepository = new ArmorTrimRepository(this);
+        armorTrimRepository.refreshAsync(null);
+        armorTrimRefreshTask = getServer().getScheduler().runTaskTimerAsynchronously(
+                this,
+                () -> armorTrimRepository.refreshAsync(null),
+                20L * 60 * 5,
+                20L * 60 * 5);
+        getServer().getPluginManager().registerEvents(
+                new ArmorTrimListener(this), this);
+
         // /clans command — uses `clans` as primary name to coexist
         // with PowerClans's /clan during the migration window. Once
         // PowerClans is removed, the `clan` alias in plugin.yml takes
@@ -209,6 +226,10 @@ public final class ClanCapesPlugin extends JavaPlugin {
         if (settingsRefreshTask != null) {
             settingsRefreshTask.cancel();
             settingsRefreshTask = null;
+        }
+        if (armorTrimRefreshTask != null) {
+            armorTrimRefreshTask.cancel();
+            armorTrimRefreshTask = null;
         }
         if (clanTeamManager != null) {
             try {
@@ -280,6 +301,15 @@ public final class ClanCapesPlugin extends JavaPlugin {
     }
 
     /**
+     * Panel-backed armour trim cache. Feeds {@link dev.clancapes.listener.ArmorTrimListener}
+     * so equipping a piece of armour stamps the clan's trim onto it
+     * without rewriting any other meta (enchants, lore, durability).
+     */
+    public ArmorTrimRepository getArmorTrimRepository() {
+        return armorTrimRepository;
+    }
+
+    /**
      * Operator-set settings (palette / cooldowns / max layers).
      * Refreshed every 5 min from {@code /api/plugin/settings}.
      */
@@ -348,6 +378,10 @@ public final class ClanCapesPlugin extends JavaPlugin {
                 "dev.clancapes.clan.Clan",
                 "dev.clancapes.clan.ClanMember",
                 "dev.clancapes.clan.ClanMember$Role",
+                // ArmorTrimRepository nested types — listener resolves
+                // these on every PlayerArmorChangeEvent.
+                "dev.clancapes.clan.ArmorTrimRepository$Slot",
+                "dev.clancapes.clan.ArmorTrimRepository$TrimSpec",
         };
         ClassLoader cl = ClanCapesPlugin.class.getClassLoader();
         for (String name : classes) {

@@ -528,6 +528,28 @@ public final class PanelClient {
     }
 
     /**
+     * GET /api/plugin/armor-trims — bulk list of every (clan, slot,
+     * material, pattern) row for active clans on this server. Plugin
+     * primes its in-memory ArmorTrimRepository cache via one call.
+     */
+    public java.util.Map<String, Object> fetchArmorTrims(String panelUrl, String apiKey)
+            throws PanelException {
+        String url = panelUrl.replaceAll("/+$", "") + "/api/plugin/armor-trims";
+        HttpResponse<String> res = sendAuthed(url, apiKey, "GET", null);
+        if (res.statusCode() / 100 != 2) {
+            throw new PanelException(errorMessage(res.body(), "HTTP " + res.statusCode()));
+        }
+        try {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> parsed =
+                    gson.fromJson(res.body(), java.util.Map.class);
+            return parsed != null ? parsed : java.util.Map.of();
+        } catch (Exception e) {
+            throw new PanelException("malformed armor-trims response: " + res.body(), e);
+        }
+    }
+
+    /**
      * GET /api/plugin/settings — fetch live operator-set knobs
      * (palette, cooldown, banner max layers). Returned as a loose
      * map so SettingsCache can read just the fields it needs without
