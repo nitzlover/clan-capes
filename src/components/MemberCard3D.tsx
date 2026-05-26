@@ -3,13 +3,18 @@
 /**
  * Rotating 3D Minecraft player figure for a clan member row.
  *
- * Pulls the player's skin from crafatar's UUID endpoint (which falls
- * back to the Steve template if the UUID has no skin associated —
- * unavoidable on an offline-mode server where most UUIDs are v3
- * hashes that Mojang doesn't recognise). We then drop the figure
- * into a {@link skinview3d.SkinViewer} pinned to a static "heroic
- * stance" pose so the silhouette reads like a clan member at rest,
- * not Steve mid-walk.
+ * Skin source: the server runs in offline mode, so player UUIDs are
+ * v3 hashes that Mojang doesn't recognise and crafatar / textures.
+ * minecraft.net returns 404. Until SkinsRestorer's resolved-skin
+ * cache gets surfaced through the panel API, we pick one of the
+ * nine vanilla default skins (Steve / Alex / Ari / Efe / Kai /
+ * Makena / Noor / Sunny / Zuri) deterministically from the UUID so
+ * each member gets a stable, distinct silhouette in the row.
+ *
+ * The figure stands in a static "heroic stance" pose via skinview3d's
+ * FunctionAnimation — arms slightly out, legs shoulder-wide, head
+ * straight. That replaces skinview3d's default IdleAnimation so the
+ * figure stops walking in place.
  *
  * Mount cost: ~1 WebGL context per card. Browsers cap that at
  * 8–16 — we let the caller pass a `lazy` flag that defers viewer
@@ -20,6 +25,31 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { SkinViewer as SkinViewerType } from 'skinview3d';
+
+const DEFAULT_SKINS = [
+  'steve',
+  'alex',
+  'ari',
+  'efe',
+  'kai',
+  'makena',
+  'noor',
+  'sunny',
+  'zuri',
+];
+
+/**
+ * Stable per-UUID skin pick. Hashes the UUID hex into an index 0-8
+ * so the same player always gets the same default skin across page
+ * reloads, but two members of the same clan don't all show as Steve.
+ */
+function defaultSkinFor(uuid: string): string {
+  let h = 0;
+  for (const ch of uuid.toLowerCase().replace(/-/g, '')) {
+    h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  }
+  return `/mc/skins/${DEFAULT_SKINS[h % DEFAULT_SKINS.length]}.png`;
+}
 
 type Props = {
   playerUuid: string;
@@ -99,7 +129,7 @@ export function MemberCard3D({
     let local: SkinViewerType | null = null;
     let raf = 0;
 
-    const skinUrl = `https://crafatar.com/skins/${playerUuid}?default=MHF_Steve`;
+    const skinUrl = defaultSkinFor(playerUuid);
 
     (async () => {
       const mod = await import('skinview3d');
