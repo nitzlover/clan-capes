@@ -18,12 +18,10 @@ import { getClanForPlayer } from '@/lib/server/clan-repo';
 import { dbEnabled } from '@/lib/server/db';
 import { requirePluginAuth } from '@/lib/server/plugin-auth';
 import { recordKill } from '@/lib/server/stats-repo';
+import { tryNormaliseUuid } from '@/lib/server/uuid';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const UUID_RE =
-  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 export async function POST(req: Request) {
   if (!dbEnabled()) {
@@ -43,10 +41,12 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 });
   }
-  if (!body.killerUuid || !UUID_RE.test(body.killerUuid)) {
+  const killerUuid = body.killerUuid ? tryNormaliseUuid(body.killerUuid) : null;
+  const victimUuid = body.victimUuid ? tryNormaliseUuid(body.victimUuid) : null;
+  if (!killerUuid) {
     return NextResponse.json({ error: 'invalid killerUuid' }, { status: 400 });
   }
-  if (!body.victimUuid || !UUID_RE.test(body.victimUuid)) {
+  if (!victimUuid) {
     return NextResponse.json({ error: 'invalid victimUuid' }, { status: 400 });
   }
   const occurredAt = body.occurredAt ? new Date(body.occurredAt) : new Date();
@@ -54,19 +54,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'invalid occurredAt' }, { status: 400 });
   }
 
-  // Resolve clans at ingest time (snapshot). If either player is
-  // unclanned we pass null; the recordKill helper handles both
-  // sides being null cleanly (player stats still update, clan
-  // stats just get skipped on that side).
+  // Resolve clans at ingest time (snapshot). UUIDs already normalised
+  // above; getClanForPlayer compares against the same canonical form
+  // the DB stores so a case-folded inbound payload never silently
+  // misses the membership row.
   const [killerClan, victimClan] = await Promise.all([
-    getClanForPlayer(ctx.id, body.killerUuid),
-    getClanForPlayer(ctx.id, body.victimUuid),
+    getClanForPlayer(ctx.id, killerUuid),
+    getClanForPlayer(ctx.id, victimUuid),
   ]);
 
   const result = await recordKill({
     serverId: ctx.id,
-    killerUuid: body.killerUuid.toLowerCase(),
-    victimUuid: body.victimUuid.toLowerCase(),
+    killerUuid,
+    victimUuid,
     killerClanId: killerClan?.id ?? null,
     victimClanId: victimClan?.id ?? null,
     occurredAt,

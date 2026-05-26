@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, UnauthorizedError } from '@/lib/api';
+import { nearestVanilla } from '@/lib/vanilla-color';
 
 type Member = {
   playerUuid: string;
@@ -432,6 +433,7 @@ function ClanEditor({
                   maxLength={7}
                 />
               </span>
+              <ColorSnapPreview hex={color} />
             </label>
             <div className="flex flex-wrap items-center gap-3">
               <button onClick={saveMeta} disabled={busy} className="btn-primary disabled:opacity-40">
@@ -685,5 +687,28 @@ function AddMemberForm({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Shows the operator exactly which vanilla §-code the picked 24-bit
+ * colour will snap to in chat + TAB + scoreboard team prefix. Pure
+ * preview — no inputs, no callbacks — so it can be dropped anywhere
+ * a clan colour is being edited.
+ */
+function ColorSnapPreview({ hex }: { hex: string }) {
+  const snap = useMemo(() => nearestVanilla(hex), [hex]);
+  return (
+    <span className="mt-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-mute)]">
+      <span aria-hidden>renders as</span>
+      <span
+        aria-hidden
+        className="inline-block h-4 w-4 border border-[var(--rule-strong)]"
+        style={{ backgroundColor: snap.hex }}
+      />
+      <span className="text-[var(--text-soft)]">
+        §{snap.code} · {snap.name}
+      </span>
+    </span>
   );
 }

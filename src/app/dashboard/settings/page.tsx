@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, UnauthorizedError } from '@/lib/api';
+import { nearestVanilla } from '@/lib/vanilla-color';
 
 type Settings = {
   palette: string[];
@@ -226,25 +227,38 @@ function PaletteSection({
         call so concurrent creates don't all grab slot 0.
       </p>
       <ul className="mb-4 grid grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-2">
-        {palette.map((hex) => (
-          <li
-            key={hex}
-            className="relative flex h-16 items-end justify-between border-2 border-[var(--rule-strong)] p-1"
-            style={{ backgroundColor: hex }}
-          >
-            <span className="rounded bg-[var(--bg-sink)]/85 px-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white">
-              {hex}
-            </span>
-            <button
-              type="button"
-              onClick={() => onRemove(hex)}
-              className="rounded bg-[var(--bg-sink)]/85 px-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white hover:bg-white hover:text-black"
-              aria-label={`Remove ${hex}`}
+        {palette.map((hex) => {
+          const snap = nearestVanilla(hex);
+          return (
+            <li
+              key={hex}
+              className="relative flex h-16 flex-col items-stretch justify-between border-2 border-[var(--rule-strong)] p-1"
+              style={{ backgroundColor: hex }}
             >
-              ×
-            </button>
-          </li>
-        ))}
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => onRemove(hex)}
+                  className="rounded bg-[var(--bg-sink)]/85 px-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white hover:bg-white hover:text-black"
+                  aria-label={`Remove ${hex}`}
+                >
+                  ×
+                </button>
+              </div>
+              <div className="flex items-end justify-between gap-1">
+                <span className="rounded bg-[var(--bg-sink)]/85 px-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white">
+                  {hex}
+                </span>
+                <span
+                  className="rounded bg-[var(--bg-sink)]/85 px-1 font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--text-soft)]"
+                  title={`Snaps to §${snap.code} ${snap.name} in chat / TAB`}
+                >
+                  §{snap.code}
+                </span>
+              </div>
+            </li>
+          );
+        })}
       </ul>
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex items-center gap-2">
