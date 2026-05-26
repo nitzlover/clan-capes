@@ -12,6 +12,7 @@ import dev.clancapes.command.ClanCommand;
 import dev.clancapes.config.PluginConfig;
 import dev.clancapes.hook.PowerClansHook;
 import dev.clancapes.hook.PlaceholderHook;
+import dev.clancapes.listener.ClanVillagerListener;
 import dev.clancapes.listener.PvpKillListener;
 import dev.clancapes.listener.ShieldBannerListener;
 import dev.clancapes.panel.HeartbeatTask;
@@ -100,6 +101,13 @@ public final class ClanCapesPlugin extends JavaPlugin {
         statsCache = new StatsCache(this);
         getServer().getPluginManager().registerEvents(
                 new PvpKillListener(this), this);
+
+        // Clan-scoped villager gossip sync: zombie-villager cure +
+        // Hero-of-the-Village now broadcasts the discount perk to
+        // every online clan member, not just the trigger player. See
+        // ClanVillagerListener for the trigger paths and radius.
+        getServer().getPluginManager().registerEvents(
+                new ClanVillagerListener(this), this);
 
         // Phase 6 — live operator settings (palette / cooldowns / max
         // layers). Initial refresh fires immediately; periodic poll
