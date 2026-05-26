@@ -9,15 +9,17 @@
  * uses a `leaderApi()` wrapper that bounces to the paste-token page
  * on 401.
  *
- * Layout: one row per slot (HEAD / CHEST / LEGS / FEET) with a
- * material select, a pattern select, a Save button per row, and a
- * Clear button when the row already has a row in the DB. We keep
- * per-slot dirty + busy state so saving leggings doesn't fight a
- * pending save on the helmet.
+ * Layout: smithing-table inspired three-pane row per slot —
+ *   [ material item grid | live 3D armour preview | pattern grid ]
+ * with Save + Clear buttons below. Click any material or pattern
+ * tile and the centre 3D piece reskins live before any network
+ * call. We keep per-slot dirty + busy state so saving leggings
+ * doesn't fight a pending save on the helmet.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArmorPiece3D } from '@/components/ArmorPiece3D';
+import { materialIconSrc, patternIconSrc } from '@/lib/trim-icons';
 
 export const ARMOR_SLOTS = ['head', 'chest', 'legs', 'feet'] as const;
 export type ArmorSlot = (typeof ARMOR_SLOTS)[number];
@@ -224,7 +226,7 @@ export function ArmorTrimEditor({ loadTrims, saveSlot, clearSlot }: ArmorTrimEdi
           ! {loadError}
         </p>
       ) : (
-        <ul className="space-y-3">
+        <ul className="space-y-4">
           {rowList.map(([slot, row]) => {
             const dirty =
               !row.saved
@@ -234,54 +236,120 @@ export function ArmorTrimEditor({ loadTrims, saveSlot, clearSlot }: ArmorTrimEdi
               <li
                 key={slot}
                 aria-label={SLOT_LABELS[slot]}
-                className="grid items-end gap-3 border border-[var(--rule)] bg-[var(--bg-sink)] px-4 py-3 md:grid-cols-[auto_1fr_1fr_auto_auto]"
+                className="border border-[var(--rule)] bg-[var(--bg-sink)] p-4"
               >
-                <ArmorPiece3D slot={slot} material={row.material} pattern={row.pattern} />
-                <label className="block">
-                  <TrimSelect
-                    value={row.material}
-                    options={TRIM_MATERIALS as readonly string[] as string[]}
-                    onChange={(v) =>
-                      update(slot, { material: v as TrimMaterial, msg: null })
-                    }
-                    disabled={row.busy}
-                  />
-                </label>
-                <label className="block">
-                  <TrimSelect
-                    value={row.pattern}
-                    options={TRIM_PATTERNS as readonly string[] as string[]}
-                    onChange={(v) =>
-                      update(slot, { pattern: v as TrimPattern, msg: null })
-                    }
-                    disabled={row.busy}
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={() => onSave(slot)}
-                  disabled={row.busy || !dirty}
-                  className="btn-primary disabled:opacity-30"
-                >
-                  {row.busy && dirty ? 'Saving…' : 'Save'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onClear(slot)}
-                  disabled={row.busy || !row.saved}
-                  className="btn-danger-link disabled:opacity-30"
-                >
-                  Clear
-                </button>
-                {row.msg && (
-                  <p
-                    className={`md:col-span-5 font-mono text-[10px] uppercase tracking-[0.22em] ${
-                      row.msg.kind === 'ok' ? 'text-[var(--text-soft)]' : 'text-white'
-                    }`}
-                  >
-                    {row.msg.kind === 'ok' ? '✓' : '!'} {row.msg.text}
-                  </p>
-                )}
+                <div className="grid gap-4 md:grid-cols-[auto_1fr_auto]">
+                  {/* Left: material item grid */}
+                  <div>
+                    <p className="label-mono mb-2 text-[var(--text-faint)]">
+                      Material
+                    </p>
+                    <div className="grid w-[148px] grid-cols-4 gap-1.5">
+                      {TRIM_MATERIALS.map((m) => {
+                        const active = m === row.material;
+                        return (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() =>
+                              !row.busy && update(slot, { material: m, msg: null })
+                            }
+                            title={m}
+                            disabled={row.busy}
+                            className={`flex aspect-square items-center justify-center border-2 transition-colors ${
+                              active
+                                ? 'border-white bg-white/[0.1]'
+                                : 'border-[var(--rule-strong)] hover:border-white'
+                            } disabled:opacity-40`}
+                          >
+                            <img
+                              src={materialIconSrc(m)}
+                              alt={m}
+                              className="h-6 w-6"
+                              style={{ imageRendering: 'pixelated' }}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Center: live 3D piece + slot label + actions */}
+                  <div className="flex flex-col items-center">
+                    <ArmorPiece3D
+                      slot={slot}
+                      material={row.material}
+                      pattern={row.pattern}
+                    />
+                    <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-soft)]">
+                      {row.material} · {row.pattern}
+                    </p>
+                    <div className="mt-3 flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => onSave(slot)}
+                        disabled={row.busy || !dirty}
+                        className="btn-primary disabled:opacity-30"
+                      >
+                        {row.busy && dirty ? 'Saving…' : 'Save'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onClear(slot)}
+                        disabled={row.busy || !row.saved}
+                        className="btn-danger-link disabled:opacity-30"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    {row.msg && (
+                      <p
+                        className={`mt-2 font-mono text-[10px] uppercase tracking-[0.22em] ${
+                          row.msg.kind === 'ok'
+                            ? 'text-[var(--text-soft)]'
+                            : 'text-white'
+                        }`}
+                      >
+                        {row.msg.kind === 'ok' ? '✓' : '!'} {row.msg.text}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Right: pattern template grid */}
+                  <div>
+                    <p className="label-mono mb-2 text-[var(--text-faint)]">
+                      Pattern
+                    </p>
+                    <div className="grid w-[220px] grid-cols-6 gap-1.5">
+                      {TRIM_PATTERNS.map((p) => {
+                        const active = p === row.pattern;
+                        return (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() =>
+                              !row.busy && update(slot, { pattern: p, msg: null })
+                            }
+                            title={p}
+                            disabled={row.busy}
+                            className={`flex aspect-square items-center justify-center border-2 transition-colors ${
+                              active
+                                ? 'border-white bg-white/[0.1]'
+                                : 'border-[var(--rule-strong)] hover:border-white'
+                            } disabled:opacity-40`}
+                          >
+                            <img
+                              src={patternIconSrc(p)}
+                              alt={p}
+                              className="h-6 w-6"
+                              style={{ imageRendering: 'pixelated' }}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
               </li>
             );
           })}
@@ -291,93 +359,3 @@ export function ArmorTrimEditor({ loadTrims, saveSlot, clearSlot }: ArmorTrimEdi
   );
 }
 
-/**
- * B&W brutalist dropdown for the trim material + pattern pickers.
- * Replaces the native `<select>` because the OS-painted listbox uses
- * its own (very-not-monochrome) menu background which clashes with the
- * rest of the admin shell. Mirrors the ClanSelect pattern — popover
- * button + listbox, click-outside + Escape to dismiss, ARIA wired up.
- */
-function TrimSelect({
-  value,
-  options,
-  onChange,
-  disabled,
-}: {
-  value: string;
-  options: string[];
-  onChange: (v: string) => void;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onMouseDown(e: MouseEvent) {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        setOpen(false);
-        buttonRef.current?.focus();
-      }
-    }
-    document.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  return (
-    <div ref={rootRef} className="relative mt-1">
-      <button
-        ref={buttonRef}
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 border-2 border-[var(--rule-strong)] bg-transparent px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.18em] text-white transition-colors hover:border-white disabled:opacity-40"
-      >
-        <span className="truncate">{value}</span>
-        <span aria-hidden className="text-[var(--text-mute)]">
-          {open ? '▴' : '▾'}
-        </span>
-      </button>
-      {open && (
-        <ul
-          role="listbox"
-          tabIndex={-1}
-          className="absolute left-0 right-0 top-full z-30 mt-1 max-h-60 overflow-y-auto border-2 border-white bg-[var(--bg-raise)] shadow-[4px_4px_0_0_rgba(255,255,255,0.18)]"
-        >
-          {options.map((opt) => {
-            const active = opt === value;
-            return (
-              <li key={opt}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={active}
-                  onClick={() => {
-                    onChange(opt);
-                    setOpen(false);
-                    buttonRef.current?.focus();
-                  }}
-                  className={`flex w-full items-center px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.18em] transition-colors ${
-                    active ? 'bg-white text-black' : 'text-white hover:bg-white/[0.08]'
-                  }`}
-                >
-                  {opt}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}

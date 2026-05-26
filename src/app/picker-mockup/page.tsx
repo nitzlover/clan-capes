@@ -23,6 +23,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArmorPiece3D } from '@/components/ArmorPiece3D';
+import { materialIconSrc } from '@/lib/trim-icons';
 
 const MATERIALS = [
   'iron',
@@ -382,7 +383,7 @@ function Variant4() {
     <div className="grid gap-4 md:grid-cols-[1fr_auto_1fr]">
       <div>
         <p className="label-mono mb-2 text-[var(--text-faint)]">Material</p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {MATERIALS.map((m) => {
             const active = m === material;
             return (
@@ -390,14 +391,17 @@ function Variant4() {
                 key={m}
                 type="button"
                 onClick={() => setMaterial(m)}
-                className={`flex flex-col items-center gap-1 border-2 px-2 py-2 transition-colors ${
-                  active ? 'border-white bg-white/[0.08]' : 'border-[var(--rule-strong)] hover:border-white'
+                title={m}
+                className={`flex aspect-square items-center justify-center border-2 transition-colors ${
+                  active ? 'border-white bg-white/[0.1]' : 'border-[var(--rule-strong)] hover:border-white'
                 }`}
               >
-                <PaletteStrip material={m} big />
-                <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--text-soft)]">
-                  {m}
-                </span>
+                <img
+                  src={materialIconSrc(m)}
+                  alt={m}
+                  className="h-7 w-7"
+                  style={{ imageRendering: 'pixelated' }}
+                />
               </button>
             );
           })}
