@@ -22,6 +22,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArmorPiece3D } from '@/components/ArmorPiece3D';
 
 const MATERIALS = [
   'iron',
@@ -95,6 +96,30 @@ export default function PickerMockup() {
         blurb="Single button per slot. Click opens a two-column popover (materials | patterns). Pick both, popover stays open until you tap Apply / outside. Half as many clicks for a full slot edit."
       >
         <Variant3 />
+      </VariantSection>
+
+      <VariantSection
+        n={4}
+        title="Inventory-style panel + live 3D"
+        blurb="Always-open editor that mirrors the in-game smithing-table layout: material tiles on the left, pattern grid on the right, a big rotating 3D armour piece in the centre that re-skins itself the instant you click an option. No popovers, no chevrons, no scrolling. Best for power users who set trims often."
+      >
+        <Variant4 />
+      </VariantSection>
+
+      <VariantSection
+        n={5}
+        title="Curated presets"
+        blurb="Six named kits (Knight, Royal, Pyre, etc) each carrying a fixed material + pattern combo. One click sets the trim. Hidden behind a 'More options' toggle lives the freeform picker for everything else. Strongest for low-effort branding where the leader doesn't want to design — they pick a vibe."
+      >
+        <Variant5 />
+      </VariantSection>
+
+      <VariantSection
+        n={6}
+        title="Single full-body armour stand"
+        blurb="One big WebGL viewer at the top of the section showing all 4 slots at once on a player figure. Picking material+pattern below updates the relevant body part in the same viewer. Replaces 4× per-row 3D widgets with one — drops WebGL context count from 4 to 1 per expanded clan, and gives the operator the gear-as-worn view they actually want to judge."
+      >
+        <Variant6 />
       </VariantSection>
     </main>
   );
@@ -338,6 +363,287 @@ function Variant3() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ===== Variant 4: inventory-style panel + live 3D =====
+
+/**
+ * Treats the picker like a Smithing Table screen: a fixed two-pane
+ * editor with the live 3D armour piece centre-stage. Tap any
+ * material or pattern tile, the centre swatch re-renders immediately
+ * thanks to ArmorPiece3D's keyed remount.
+ */
+function Variant4() {
+  const [material, setMaterial] = useState<Material>('gold');
+  const [pattern, setPattern] = useState<Pattern>('sentry');
+  return (
+    <div className="grid gap-4 md:grid-cols-[1fr_auto_1fr]">
+      <div>
+        <p className="label-mono mb-2 text-[var(--text-faint)]">Material</p>
+        <div className="grid grid-cols-3 gap-2">
+          {MATERIALS.map((m) => {
+            const active = m === material;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMaterial(m)}
+                className={`flex flex-col items-center gap-1 border-2 px-2 py-2 transition-colors ${
+                  active ? 'border-white bg-white/[0.08]' : 'border-[var(--rule-strong)] hover:border-white'
+                }`}
+              >
+                <PaletteStrip material={m} big />
+                <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--text-soft)]">
+                  {m}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="flex flex-col items-center justify-center">
+        <div className="h-40 w-40">
+          <ArmorPiece3D slot="head" material={material} pattern={pattern} />
+        </div>
+        <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-soft)]">
+          {material} · {pattern}
+        </p>
+      </div>
+      <div>
+        <p className="label-mono mb-2 text-[var(--text-faint)]">Pattern</p>
+        <div className="grid grid-cols-6 gap-2">
+          {PATTERNS.map((p) => {
+            const active = p === pattern;
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPattern(p)}
+                title={p}
+                className={`flex aspect-square items-center justify-center border-2 transition-colors ${
+                  active ? 'border-white bg-white/[0.1]' : 'border-[var(--rule-strong)] hover:border-white'
+                }`}
+              >
+                <img
+                  src={`/mc/item/${p}_armor_trim_smithing_template.png`}
+                  alt={p}
+                  className="h-7 w-7"
+                  style={{ imageRendering: 'pixelated' }}
+                />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== Variant 5: curated presets =====
+
+type Preset = {
+  id: string;
+  label: string;
+  blurb: string;
+  material: Material;
+  pattern: Pattern;
+};
+
+/**
+ * Hand-picked combinations that read as a vibe rather than a build.
+ * Operator scans 6 named kits and clicks one — done. Custom picker
+ * stays available for everything else behind the "Custom…" toggle.
+ */
+const PRESETS: Preset[] = [
+  { id: 'knight', label: 'Knight', blurb: 'Iron sentry, classic guard.', material: 'iron', pattern: 'sentry' },
+  { id: 'royal', label: 'Royal', blurb: 'Gold tide on a deep silhouette.', material: 'gold', pattern: 'tide' },
+  { id: 'pyre', label: 'Pyre', blurb: 'Redstone bolt, lit-up edges.', material: 'redstone', pattern: 'bolt' },
+  { id: 'wraith', label: 'Wraith', blurb: 'Netherite silence, no glint.', material: 'netherite', pattern: 'silence' },
+  { id: 'tidewalker', label: 'Tidewalker', blurb: 'Lapis coast, sea-worn.', material: 'lapis', pattern: 'coast' },
+  { id: 'sage', label: 'Sage', blurb: 'Emerald vex, quiet command.', material: 'emerald', pattern: 'vex' },
+];
+
+function Variant5() {
+  const [picked, setPicked] = useState<string>('knight');
+  const [showCustom, setShowCustom] = useState(false);
+  const [material, setMaterial] = useState<Material>('gold');
+  const [pattern, setPattern] = useState<Pattern>('sentry');
+  const preset = PRESETS.find((p) => p.id === picked) ?? PRESETS[0];
+  const effective = showCustom
+    ? { material, pattern }
+    : { material: preset.material, pattern: preset.pattern };
+  return (
+    <div className="grid gap-6 md:grid-cols-[1fr_auto]">
+      <div>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+          {PRESETS.map((p) => {
+            const active = !showCustom && p.id === picked;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => {
+                  setPicked(p.id);
+                  setShowCustom(false);
+                }}
+                className={`flex items-center gap-3 border-2 p-3 text-left transition-colors ${
+                  active ? 'border-white bg-white/[0.08]' : 'border-[var(--rule-strong)] hover:border-white'
+                }`}
+              >
+                <PatternThumb material={p.material} pattern={p.pattern} />
+                <span className="min-w-0">
+                  <span className="block font-sans text-sm font-extrabold uppercase tracking-wider text-white">
+                    {p.label}
+                  </span>
+                  <span className="block truncate font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+                    {p.material} · {p.pattern}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowCustom((s) => !s)}
+          className="mt-4 font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--text-mute)] underline-offset-4 hover:text-white hover:underline"
+        >
+          {showCustom ? '↑ Hide custom picker' : '↓ Custom…'}
+        </button>
+        {showCustom && (
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <SwatchDropdown
+              value={material}
+              options={MATERIALS as readonly string[] as string[]}
+              onChange={(v) => setMaterial(v as Material)}
+              renderRow={(name) => (
+                <span className="flex items-center gap-3">
+                  <PaletteStrip material={name} />
+                  <span>{name}</span>
+                </span>
+              )}
+            />
+            <SwatchDropdown
+              value={pattern}
+              options={PATTERNS as readonly string[] as string[]}
+              onChange={(v) => setPattern(v as Pattern)}
+              renderRow={(name) => (
+                <span className="flex items-center gap-3">
+                  <PatternThumb material={material} pattern={name} />
+                  <span>{name}</span>
+                </span>
+              )}
+            />
+          </div>
+        )}
+      </div>
+      <div className="flex flex-col items-center justify-center">
+        <div className="h-32 w-32">
+          <ArmorPiece3D slot="head" material={effective.material} pattern={effective.pattern} />
+        </div>
+        <p className="mt-3 max-w-[140px] text-center font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-soft)]">
+          {showCustom ? `${material} · ${pattern}` : preset.blurb}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ===== Variant 6: full-body armour stand =====
+
+type Slot = 'head' | 'chest' | 'legs' | 'feet';
+const SLOTS: Slot[] = ['head', 'chest', 'legs', 'feet'];
+const SLOT_LABEL: Record<Slot, string> = {
+  head: 'Helmet',
+  chest: 'Chestplate',
+  legs: 'Leggings',
+  feet: 'Boots',
+};
+
+/**
+ * One viewer, four slots. Operator picks which slot they're editing
+ * via the tab strip; material + pattern controls below update that
+ * slot in the single 3D figure above. All 4 trims live on the same
+ * silhouette so the operator can judge cohesion across the set, not
+ * just one piece at a time.
+ */
+function Variant6() {
+  const [activeSlot, setActiveSlot] = useState<Slot>('head');
+  const [trims, setTrims] = useState<Record<Slot, { material: Material; pattern: Pattern }>>({
+    head: { material: 'iron', pattern: 'sentry' },
+    chest: { material: 'gold', pattern: 'tide' },
+    legs: { material: 'lapis', pattern: 'coast' },
+    feet: { material: 'netherite', pattern: 'silence' },
+  });
+  const cur = trims[activeSlot];
+  return (
+    <div className="grid gap-6 md:grid-cols-[260px_1fr]">
+      <div className="flex flex-col items-center gap-3">
+        {/* Stacked pieces so the operator sees the entire kit at once.
+            Less elegant than a true skeletal stand but uses the same
+            ArmorPiece3D widget we already have — no new geometry to
+            wire up for the mockup. */}
+        {SLOTS.map((s) => (
+          <div key={s} className="h-20 w-40">
+            <ArmorPiece3D
+              slot={s}
+              material={trims[s].material}
+              pattern={trims[s].pattern}
+            />
+          </div>
+        ))}
+      </div>
+      <div>
+        <div className="flex flex-wrap gap-2">
+          {SLOTS.map((s) => {
+            const active = s === activeSlot;
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setActiveSlot(s)}
+                className={`border-2 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.18em] transition-colors ${
+                  active
+                    ? 'border-white bg-white text-black'
+                    : 'border-[var(--rule-strong)] text-white hover:border-white'
+                }`}
+              >
+                {SLOT_LABEL[s]}
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <SwatchDropdown
+            value={cur.material}
+            options={MATERIALS as readonly string[] as string[]}
+            onChange={(v) =>
+              setTrims((t) => ({ ...t, [activeSlot]: { ...t[activeSlot], material: v as Material } }))
+            }
+            renderRow={(name) => (
+              <span className="flex items-center gap-3">
+                <PaletteStrip material={name} />
+                <span>{name}</span>
+              </span>
+            )}
+          />
+          <SwatchDropdown
+            value={cur.pattern}
+            options={PATTERNS as readonly string[] as string[]}
+            onChange={(v) =>
+              setTrims((t) => ({ ...t, [activeSlot]: { ...t[activeSlot], pattern: v as Pattern } }))
+            }
+            renderRow={(name) => (
+              <span className="flex items-center gap-3">
+                <PatternThumb material={cur.material} pattern={name} />
+                <span>{name}</span>
+              </span>
+            )}
+          />
+        </div>
+      </div>
     </div>
   );
 }
