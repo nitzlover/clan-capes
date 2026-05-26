@@ -384,6 +384,21 @@ export function ArmorPiece3D({ slot, material, pattern }: Props) {
     // already at pivot center). Just centering on the pivot is enough
     // since cube positions already use the assembly's vertical center.
 
+    // Pointer-drag rotation only — no auto-spin (operator vetoed
+    // the constant rotation because it stole attention while
+    // reading the trim). Renders are scheduled imperatively via
+    // requestRender(), which coalesces overlapping calls so a fast
+    // pointermove burst still draws at most one frame per refresh.
+    let renderQueued = false;
+    const requestRender = () => {
+      if (renderQueued) return;
+      renderQueued = true;
+      requestAnimationFrame(() => {
+        renderQueued = false;
+        renderer.render(scene, camera);
+      });
+    };
+
     // Armor pass — separate cubes scaled up by ARMOR_SCALE so the
     // texture sits on top of the body filler without z-fighting.
     let cancelled = false;
@@ -408,18 +423,13 @@ export function ArmorPiece3D({ slot, material, pattern }: Props) {
           armorCube.scale.setScalar(ARMOR_SCALE);
           pivot.add(armorCube);
         }
+        requestRender();
       })
       .catch(() => {
         // Texture missing → leave the body filler showing.
       });
 
-    // Pointer-drag rotation. Auto-rotate runs whenever the user
-    // isn't actively dragging; pointerdown grabs control and feeds
-    // rotation deltas straight into the pivot. Pointer capture lets
-    // the drag survive the cursor leaving the canvas, which is the
-    // usual "I yanked it past the edge" UX expectation.
     const drag = { active: false, lastX: 0, lastY: 0 };
-    let lastTickMs = performance.now();
     const SENSITIVITY = 0.01;
     const X_TILT_MAX = Math.PI / 2 - 0.05;
 
@@ -439,6 +449,7 @@ export function ArmorPiece3D({ slot, material, pattern }: Props) {
       );
       drag.lastX = e.clientX;
       drag.lastY = e.clientY;
+      requestRender();
     };
     const onPointerUp = (e: PointerEvent) => {
       if (!drag.active) return;
@@ -457,19 +468,9 @@ export function ArmorPiece3D({ slot, material, pattern }: Props) {
     renderer.domElement.addEventListener('pointerup', onPointerUp);
     renderer.domElement.addEventListener('pointercancel', onPointerUp);
 
-    let rafId = 0;
-    const AUTO_RATE = 0.6;
-    const tick = () => {
-      const now = performance.now();
-      const dt = (now - lastTickMs) / 1000;
-      lastTickMs = now;
-      if (!drag.active) {
-        pivot.rotation.y += dt * AUTO_RATE;
-      }
-      renderer.render(scene, camera);
-      rafId = requestAnimationFrame(tick);
-    };
-    rafId = requestAnimationFrame(tick);
+    // Initial paint so the body cubes are visible before the armour
+    // texture finishes loading.
+    requestRender();
 
     const ro = new ResizeObserver(() => {
       const w = container.clientWidth || 200;
@@ -477,6 +478,7 @@ export function ArmorPiece3D({ slot, material, pattern }: Props) {
       renderer.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      requestRender();
     });
     ro.observe(container);
 
@@ -487,7 +489,6 @@ export function ArmorPiece3D({ slot, material, pattern }: Props) {
 
     return () => {
       cancelled = true;
-      cancelAnimationFrame(rafId);
       ro.disconnect();
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
