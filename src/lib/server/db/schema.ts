@@ -39,6 +39,7 @@ import {
 // ─── Enums ────────────────────────────────────────────────────────────
 
 export const memberRole = pgEnum('member_role', ['leader', 'deputy', 'member']);
+export const armorSlot = pgEnum('armor_slot', ['head', 'chest', 'legs', 'feet']);
 export const approvalKind = pgEnum('approval_kind', ['cape']);
 export const approvalStatus = pgEnum('approval_status', [
   'pending',
@@ -239,6 +240,39 @@ export const clanBanners = pgTable(
       .defaultNow(),
     updatedBy: text('updated_by').notNull(),
   },
+);
+
+/**
+ * Per-clan armour trim spec — one row per (clan, slot). Materials +
+ * patterns reference vanilla Minecraft registry keys (e.g. material
+ * "iron", pattern "sentry") so the plugin can resolve them via
+ * Registry lookup without an intermediate translation table.
+ *
+ * Composite PK lets the panel save a slot independently of the
+ * others; the plugin's listener applies whichever slots have a row
+ * and leaves untouched slots in their vanilla state.
+ */
+export const clanArmorTrims = pgTable(
+  'clan_armor_trims',
+  {
+    clanId: integer('clan_id')
+      .notNull()
+      .references(() => clans.id, { onDelete: 'cascade' }),
+    slot: armorSlot('slot').notNull(),
+    material: text('material').notNull(),
+    pattern: text('pattern').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedBy: text('updated_by').notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({
+      name: 'clan_armor_trims_pkey',
+      columns: [t.clanId, t.slot],
+    }),
+    clanIdx: index('clan_armor_trims_clan_idx').on(t.clanId),
+  }),
 );
 
 // ─── Leader-panel tokens (Phase 4) ────────────────────────────────────
