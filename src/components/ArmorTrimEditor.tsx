@@ -16,7 +16,7 @@
  * pending save on the helmet.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export const ARMOR_SLOTS = ['head', 'chest', 'legs', 'feet'] as const;
 export type ArmorSlot = (typeof ARMOR_SLOTS)[number];
@@ -222,39 +222,27 @@ export function ArmorTrimEditor({ loadTrims, saveSlot, clearSlot }: ArmorTrimEdi
                   <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
                     Material
                   </span>
-                  <select
+                  <TrimSelect
                     value={row.material}
-                    onChange={(e) =>
-                      update(slot, { material: e.target.value as TrimMaterial, msg: null })
+                    options={TRIM_MATERIALS as readonly string[] as string[]}
+                    onChange={(v) =>
+                      update(slot, { material: v as TrimMaterial, msg: null })
                     }
-                    className="input mt-1 font-mono text-[11px] uppercase tracking-[0.18em]"
                     disabled={row.busy}
-                  >
-                    {TRIM_MATERIALS.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </label>
                 <label className="block">
                   <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
                     Pattern
                   </span>
-                  <select
+                  <TrimSelect
                     value={row.pattern}
-                    onChange={(e) =>
-                      update(slot, { pattern: e.target.value as TrimPattern, msg: null })
+                    options={TRIM_PATTERNS as readonly string[] as string[]}
+                    onChange={(v) =>
+                      update(slot, { pattern: v as TrimPattern, msg: null })
                     }
-                    className="input mt-1 font-mono text-[11px] uppercase tracking-[0.18em]"
                     disabled={row.busy}
-                  >
-                    {TRIM_PATTERNS.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </label>
                 <button
                   type="button"
@@ -281,6 +269,97 @@ export function ArmorTrimEditor({ loadTrims, saveSlot, clearSlot }: ArmorTrimEdi
                     {row.msg.kind === 'ok' ? '✓' : '!'} {row.msg.text}
                   </p>
                 )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * B&W brutalist dropdown for the trim material + pattern pickers.
+ * Replaces the native `<select>` because the OS-painted listbox uses
+ * its own (very-not-monochrome) menu background which clashes with the
+ * rest of the admin shell. Mirrors the ClanSelect pattern — popover
+ * button + listbox, click-outside + Escape to dismiss, ARIA wired up.
+ */
+function TrimSelect({
+  value,
+  options,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onMouseDown(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative mt-1">
+      <button
+        ref={buttonRef}
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 border-2 border-[var(--rule-strong)] bg-transparent px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.18em] text-white transition-colors hover:border-white disabled:opacity-40"
+      >
+        <span className="truncate">{value}</span>
+        <span aria-hidden className="text-[var(--text-mute)]">
+          {open ? '▴' : '▾'}
+        </span>
+      </button>
+      {open && (
+        <ul
+          role="listbox"
+          tabIndex={-1}
+          className="absolute left-0 right-0 top-full z-30 mt-1 max-h-60 overflow-y-auto border-2 border-white bg-[var(--bg-raise)] shadow-[4px_4px_0_0_rgba(255,255,255,0.18)]"
+        >
+          {options.map((opt) => {
+            const active = opt === value;
+            return (
+              <li key={opt}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  onClick={() => {
+                    onChange(opt);
+                    setOpen(false);
+                    buttonRef.current?.focus();
+                  }}
+                  className={`flex w-full items-center px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.18em] transition-colors ${
+                    active ? 'bg-white text-black' : 'text-white hover:bg-white/[0.08]'
+                  }`}
+                >
+                  {opt}
+                </button>
               </li>
             );
           })}
