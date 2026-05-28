@@ -99,7 +99,104 @@ export default function EventsConfigPage() {
           ))}
         </div>
       )}
+
+      <EventHistory />
     </div>
+  );
+}
+
+type EventRun = {
+  id: number;
+  type: string;
+  status: string;
+  startedAt: string;
+  endedAt: string | null;
+  zone: { x: number; z: number; radius: number };
+  winnerTag: string | null;
+  participantCount: number;
+  killCount: number;
+};
+
+/**
+ * Read-only history of past + active event runs, newest first. Polls
+ * once on mount (the operator can refresh the page for a fresh pull —
+ * events are infrequent, no need for a live socket here).
+ */
+function EventHistory() {
+  const [runs, setRuns] = useState<EventRun[] | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await api<{ events: EventRun[] }>('/panel/events?limit=50');
+        if (!cancelled) setRuns(r.events);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) return;
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <section className="brutal-card mt-10 p-6">
+      <div className="mb-4 flex items-center justify-between">
+        <p className="label-mono">History</p>
+        <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+          {runs ? `${runs.length} runs` : '—'}
+        </span>
+      </div>
+      {error ? (
+        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-white">
+          ! {error}
+        </p>
+      ) : !runs ? (
+        <p className="text-sm text-[var(--text-mute)]">Loading…</p>
+      ) : runs.length === 0 ? (
+        <p className="text-sm text-[var(--text-faint)]">
+          No events have run yet. They fire on the configured interval once
+          the online-clan threshold is met.
+        </p>
+      ) : (
+        <ul className="border-t border-[var(--rule)] font-mono text-[11px]">
+          {runs.map((r) => (
+            <li
+              key={r.id}
+              className="grid grid-cols-[auto_1fr_auto_auto_auto] items-baseline gap-4 border-b border-[var(--rule)] py-2"
+            >
+              <span className="uppercase text-white">{r.type}</span>
+              <span className="text-[var(--text-faint)]">
+                {new Date(r.startedAt).toLocaleString()}
+              </span>
+              <span
+                className={
+                  r.status === 'ended'
+                    ? 'text-[var(--text-soft)]'
+                    : r.status === 'cancelled'
+                      ? 'text-[var(--text-mute)]'
+                      : 'text-white'
+                }
+              >
+                {r.status}
+              </span>
+              <span className="text-[var(--text-soft)]">
+                {r.winnerTag ? `▸ ${r.winnerTag}` : '—'}
+              </span>
+              <span
+                className="text-[var(--text-faint)]"
+                title={`zone ${r.zone.x}, ${r.zone.z} · r${r.zone.radius}`}
+              >
+                {r.participantCount}p · {r.killCount}k
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
