@@ -43,6 +43,24 @@ export default function ClansPage() {
   const [clans, setClans] = useState<Clan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  // 150ms debounced filter input — keeps re-renders cheap on big rosters
+  // without lagging behind every keystroke.
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedQuery(query.trim().toLowerCase()), 150);
+    return () => window.clearTimeout(handle);
+  }, [query]);
+  const visibleClans = useMemo(() => {
+    if (!debouncedQuery) return clans;
+    return clans.filter((c) => {
+      if (c.tag.toLowerCase().includes(debouncedQuery)) return true;
+      if (c.name.toLowerCase().includes(debouncedQuery)) return true;
+      return c.members.some((m) =>
+        m.playerName.toLowerCase().includes(debouncedQuery),
+      );
+    });
+  }, [clans, debouncedQuery]);
   // Set of lowercased UUIDs currently online on the selected server.
   // `null` = no fresh heartbeat (snapshot stale) → UI shows the
   // "unknown" dot. Polled every 30s in lockstep with the panel cache.
@@ -175,11 +193,25 @@ export default function ClansPage() {
       </div>
 
       <section className="brutal-card">
-        <div className="flex items-center justify-between border-b-2 border-[var(--rule-strong)] bg-[var(--bg-sink)] px-6 py-4">
+        <div className="flex items-center justify-between gap-3 border-b-2 border-[var(--rule-strong)] bg-[var(--bg-sink)] px-6 py-4">
           <span className="label-mono">Registered clans</span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
-            {clans.length} total
-          </span>
+          <div className="flex items-center gap-3">
+            {clans.length > 0 && (
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search tag / name / member…"
+                aria-label="Search clans"
+                className="input h-9 w-[260px] max-w-[40vw] font-mono text-[11px] uppercase tracking-[0.16em]"
+              />
+            )}
+            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+              {debouncedQuery
+                ? `${visibleClans.length}/${clans.length}`
+                : `${clans.length} total`}
+            </span>
+          </div>
         </div>
         {loading ? (
           <p className="px-6 py-6 text-sm text-[var(--text-mute)]">Loading…</p>
@@ -209,9 +241,22 @@ export default function ClansPage() {
               <strong className="text-white">+ Import PowerClans</strong> above.
             </p>
           </div>
+        ) : visibleClans.length === 0 ? (
+          <div className="px-6 py-10 text-center">
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--text-mute)]">
+              No clans match "{debouncedQuery}".
+            </p>
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              className="mt-2 text-xs text-[var(--text-soft)] underline"
+            >
+              Clear search
+            </button>
+          </div>
         ) : (
           <ul>
-            {clans.map((c) => (
+            {visibleClans.map((c) => (
               <ClanRow
                 key={c.id}
                 clan={c}
@@ -275,12 +320,7 @@ function ClanRow({
               className="ml-2 inline-flex items-center gap-1 text-[var(--text-soft)]"
               title={`${onlineCount} online now`}
             >
-              <span
-                aria-hidden
-                className={`inline-block h-2 w-2 rounded-full ${
-                  onlineCount > 0 ? 'bg-[#5fd068]' : 'bg-[var(--rule-strong)]'
-                }`}
-              />
+              <OnlineDot count={onlineCount} />
               {onlineCount} online
             </span>
           )}
@@ -412,8 +452,17 @@ function ClanEditor({
     }
   }
 
+  // Compact one-glance health summary — duplicates a few fields the
+  // collapsed row also shows, but having them side-by-side at the top
+  // of the editor saves the operator a scroll up to compare.
+  const editorOnlineCount =
+    onlineUuids === null
+      ? null
+      : clan.members.filter((m) => onlineUuids.has(m.playerUuid.toLowerCase())).length;
+
   return (
     <div className="border-t border-[var(--rule)] bg-[var(--bg-sink)] px-6 py-5">
+      <KpiStrip clan={clan} onlineCount={editorOnlineCount} />
       <div className="grid gap-6 md:grid-cols-[1.4fr_1fr]">
         <div>
           <p className="label-mono mb-3">Edit clan</p>
@@ -524,7 +573,7 @@ function ClanEditor({
         </span>
       </button>
       {show3D && (
-        <div className="-mx-1 mb-4 flex gap-3 overflow-x-auto px-1 py-3">
+        <div className="-mx-1 mb-4 flex flex-wrap justify-center gap-3 px-1 py-3">
           {clan.members.map((m, i) => (
             <MemberCard3D
               key={m.playerUuid}
@@ -779,6 +828,101 @@ function AddMemberForm({
  * preview — no inputs, no callbacks — so it can be dropped anywhere
  * a clan colour is being edited.
  */
+/**
+ * Online indicator dot. Continuously pulses while the clan has at
+ * least one member online (subtle ambient signal that the row is
+ * "alive"), and replays a one-shot punch every time the count
+ * actually changes so the user catches the delta even mid-glance.
+ *
+ * Implementation: `key={count}` forces the inner element to remount,
+ * which restarts the `pulse-dot-on` CSS animation (defined in
+ * globals.css). When count > 0 we layer an `infinite` animation on
+ * top via inline style; otherwise the dot stays static grey.
+ */
+function OnlineDot({ count }: { count: number }) {
+  const live = count > 0;
+  return (
+    <span
+      key={count}
+      aria-hidden
+      className={`inline-block h-2 w-2 rounded-full ${
+        live ? 'bg-[#5fd068]' : 'bg-[var(--rule-strong)]'
+      }`}
+      style={live ? { animation: 'pulse-dot-on 1s ease-out' } : undefined}
+    />
+  );
+}
+
+/**
+ * Compact KPI chip strip — sits at the top of the expanded
+ * ClanEditor so the operator gets a one-glance health summary
+ * before diving into the editor. Reads only from props (no extra
+ * fetches) so it adds zero latency to expand.
+ *
+ * Chips skipped for now because they'd each cost a network round-
+ * trip the row otherwise wouldn't pay: trims count, banner ✓,
+ * latest edit. Re-open if/when we move those into the clans-list
+ * payload.
+ */
+function KpiStrip({
+  clan,
+  onlineCount,
+}: {
+  clan: Clan;
+  onlineCount: number | null;
+}) {
+  const total = clan.members.length;
+  const onlinePct =
+    onlineCount === null || total === 0 ? null : Math.round((onlineCount / total) * 100);
+  const ageDays = useMemo(() => {
+    const t = Date.parse(clan.createdAt);
+    if (!Number.isFinite(t)) return null;
+    return Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
+  }, [clan.createdAt]);
+
+  const chips: { label: string; value: string; title?: string }[] = [];
+  if (clan.stats) {
+    chips.push({
+      label: 'K/D',
+      value: clan.stats.kd.toFixed(2),
+      title: `${clan.stats.kills} kills · ${clan.stats.deaths} deaths`,
+    });
+  }
+  if (onlineCount !== null && onlinePct !== null) {
+    chips.push({
+      label: 'Online',
+      value: `${onlineCount}/${total} ${onlinePct}%`,
+      title: 'Online of total members',
+    });
+  } else {
+    chips.push({ label: 'Members', value: String(total) });
+  }
+  if (ageDays !== null) {
+    chips.push({
+      label: 'Age',
+      value: ageDays >= 1 ? `${ageDays}d` : '<1d',
+      title: new Date(clan.createdAt).toLocaleString(),
+    });
+  }
+
+  if (chips.length === 0) return null;
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      {chips.map((c) => (
+        <span
+          key={c.label}
+          title={c.title}
+          className="inline-flex items-center gap-2 border border-[var(--rule-strong)] bg-[var(--bg-sink)] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.22em]"
+        >
+          <span className="text-[var(--text-faint)]">{c.label}</span>
+          <span className="text-[var(--text-soft)]">{c.value}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function ColorSnapPreview({ hex }: { hex: string }) {
   const snap = useMemo(() => nearestVanilla(hex), [hex]);
   return (

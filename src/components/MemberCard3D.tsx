@@ -64,26 +64,38 @@ type Props = {
 };
 
 /**
- * Static heroic stance — arms out slightly from the body, legs
- * shoulder-width, head straight. Set per-frame via a
- * FunctionAnimation because skinview3d's default IdleAnimation
- * resets every joint each tick — leaving the bones alone outside
- * an animation makes the viewer skip the figure entirely.
+ * Pose values from mcskins.top/avatar-maker, expressed in degrees
+ * per bone as `[rotX, rotY, rotZ]`. skinview3d's PlayerObject takes
+ * radians on each bone's `rotation`, so we convert on apply. Set
+ * every frame via FunctionAnimation because skinview3d's default
+ * IdleAnimation would overwrite the joints each tick.
  */
-function applyHeroicPose(
-  player: import('skinview3d').PlayerObject,
-) {
+const POSE_DEG = {
+  head: [0, 95, 0],
+  body: [0, 0, 0],
+  leftArm: [0, 0, 0],
+  rightArm: [-68, -57, -36],
+  leftLeg: [0, -4, 0],
+  rightLeg: [0, 0, 0],
+} as const;
+
+const D2R = Math.PI / 180;
+
+function applyPose(player: import('skinview3d').PlayerObject) {
   const skin = player.skin;
-  // Arms slightly out + a touch forward (battle-ready, not stiff).
-  skin.leftArm.rotation.z = 0.16;
-  skin.rightArm.rotation.z = -0.16;
-  skin.leftArm.rotation.x = -0.08;
-  skin.rightArm.rotation.x = -0.08;
-  // Legs in a shoulder-wide stance.
-  skin.leftLeg.rotation.z = 0.06;
-  skin.rightLeg.rotation.z = -0.06;
-  // Subtle head + body lean to avoid the "Steve at attention" look.
-  skin.head.rotation.y = -0.02;
+  const bones = [
+    [skin.head, POSE_DEG.head],
+    [skin.body, POSE_DEG.body],
+    [skin.leftArm, POSE_DEG.leftArm],
+    [skin.rightArm, POSE_DEG.rightArm],
+    [skin.leftLeg, POSE_DEG.leftLeg],
+    [skin.rightLeg, POSE_DEG.rightLeg],
+  ] as const;
+  for (const [bone, [x, y, z]] of bones) {
+    bone.rotation.x = x * D2R;
+    bone.rotation.y = y * D2R;
+    bone.rotation.z = z * D2R;
+  }
 }
 
 export function MemberCard3D({
@@ -127,7 +139,6 @@ export function MemberCard3D({
     if (!canvasRef.current) return;
     let cancelled = false;
     let local: SkinViewerType | null = null;
-    let raf = 0;
 
     const skinUrl = defaultSkinFor(playerUuid);
 
@@ -152,30 +163,17 @@ export function MemberCard3D({
       local.controls.enableRotate = true;
       local.controls.enablePan = false;
 
-      // Hold the pose every frame; pair with a tiny sway via
-      // playerObject.rotation.y so the figure has life without
-      // walking in place.
+      // Hold the static pose every frame. No sway, no breathing —
+      // per-card mount times were drifting out of phase and reading
+      // as jittery noise across a long member list. A frozen
+      // figurine is calmer and lets the eye scan the row.
       local.animation = new mod.FunctionAnimation((player) => {
-        applyHeroicPose(player);
+        applyPose(player);
       });
-
-      const start = performance.now();
-      const tick = () => {
-        if (!local) return;
-        const t = (performance.now() - start) / 1000;
-        // Gentle sway — ~30° peak-to-peak — and a faint vertical
-        // breathing motion, both slow enough to read as alive
-        // rather than spinning.
-        local.playerObject.rotation.y = Math.sin(t * 0.4) * 0.25;
-        local.playerObject.position.y = Math.sin(t * 1.1) * 0.05;
-        raf = requestAnimationFrame(tick);
-      };
-      raf = requestAnimationFrame(tick);
     })();
 
     return () => {
       cancelled = true;
-      if (raf) cancelAnimationFrame(raf);
       local?.dispose();
     };
   }, [shouldMount, playerUuid, width, height]);
