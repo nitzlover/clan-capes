@@ -101,13 +101,13 @@ export async function PATCH(
   if (scope instanceof NextResponse) return scope;
   const { clan, session } = scope;
 
-  let body: { name?: string; colorHex?: string };
+  let body: { name?: string; colorHex?: string; friendlyFire?: boolean };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 });
   }
-  const updates: { name?: string; colorHex?: string } = {};
+  const updates: { name?: string; colorHex?: string; friendlyFire?: boolean } = {};
   if (body.name !== undefined) {
     const n = body.name.trim();
     if (n.length < 1 || n.length > 32) {
@@ -129,6 +129,12 @@ export async function PATCH(
       );
     }
     updates.colorHex = body.colorHex.toUpperCase();
+  }
+  if (body.friendlyFire !== undefined) {
+    if (typeof body.friendlyFire !== 'boolean') {
+      return NextResponse.json({ error: 'friendlyFire must be a boolean' }, { status: 400 });
+    }
+    updates.friendlyFire = body.friendlyFire;
   }
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'no editable fields' }, { status: 400 });

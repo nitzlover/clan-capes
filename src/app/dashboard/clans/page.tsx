@@ -23,6 +23,7 @@ type Clan = {
   colorHex: string;
   leaderUuid: string;
   createdAt: string;
+  friendlyFire: boolean;
   members: Member[];
   stats?: { kills: number; deaths: number; kd: number };
 };
@@ -498,6 +499,7 @@ function ClanEditor({
               </span>
               <ColorSnapPreview hex={color} />
             </label>
+            <FriendlyFireSwitch clan={clan} onChange={onChange} qs={qs} />
             <div className="flex flex-wrap items-center gap-3">
               <button onClick={saveMeta} disabled={busy} className="btn-primary disabled:opacity-40">
                 {busy ? 'Saving…' : 'Save'}
@@ -920,6 +922,81 @@ function KpiStrip({
         </span>
       ))}
     </div>
+  );
+}
+
+/**
+ * Optimistic friendly-fire toggle.
+ *
+ * Hits the same PATCH endpoint that name + colour use, but renders
+ * separately so the boolean state has its own visual affordance
+ * instead of hiding behind a Save button. Flips locally on click,
+ * reverts on server error.
+ */
+function FriendlyFireSwitch({
+  clan,
+  onChange,
+  qs,
+}: {
+  clan: Clan;
+  onChange: () => void;
+  qs: string;
+}) {
+  const [value, setValue] = useState(clan.friendlyFire);
+  const [busy, setBusy] = useState(false);
+  // Reset local state if the parent reloads a fresh clan row (e.g.
+  // after disband/recreate, or a race with another panel session).
+  useEffect(() => {
+    setValue(clan.friendlyFire);
+  }, [clan.friendlyFire]);
+
+  async function toggle() {
+    if (busy) return;
+    const next = !value;
+    setValue(next);
+    setBusy(true);
+    try {
+      await api(`/panel/clans/${clan.tag}${qs}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ friendlyFire: next }),
+      });
+      onChange();
+    } catch (e) {
+      setValue(!next);
+      if (!(e instanceof UnauthorizedError)) {
+        alert(e instanceof Error ? e.message : 'Toggle failed');
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <label className="block">
+      <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+        Friendly fire
+      </span>
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={busy}
+        aria-pressed={value}
+        className={`mt-1 inline-flex items-center gap-3 border-2 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.22em] transition-colors disabled:opacity-40 ${
+          value
+            ? 'border-white bg-white/[0.08] text-white'
+            : 'border-[var(--rule-strong)] text-[var(--text-mute)] hover:border-white'
+        }`}
+      >
+        <span
+          aria-hidden
+          className={`inline-block h-2 w-2 rounded-full ${
+            value ? 'bg-white' : 'bg-[var(--rule-strong)]'
+          }`}
+        />
+        {value ? 'On — PvP allowed inside clan' : 'Off — clan damage blocked'}
+      </button>
+    </label>
   );
 }
 

@@ -57,6 +57,13 @@
       "when": 1779710000000,
       "tag": "0007_armor_trims",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779912000000,
+      "tag": "0008_announcements_friendly_fire",
+      "breakpoints": true
     }
   ]
 }

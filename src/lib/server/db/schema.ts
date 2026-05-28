@@ -31,6 +31,7 @@ import {
   index,
   jsonb,
   bigint,
+  boolean,
   uuid,
   varchar,
   pgEnum,
@@ -142,6 +143,10 @@ export const clans = pgTable(
       .notNull()
       .defaultNow(),
     disbandedAt: timestamp('disbanded_at', { withTimezone: true }),
+    // Wave 2 — per-clan PvP toggle consumed by the plugin's damage
+    // listener. Default `true` keeps vanilla behaviour for clans that
+    // existed before migration 0008.
+    friendlyFire: boolean('friendly_fire').notNull().default(true),
   },
   (t) => ({
     // A tag is unique per server, not globally — two servers can each
@@ -274,6 +279,28 @@ export const clanArmorTrims = pgTable(
     clanIdx: index('clan_armor_trims_clan_idx').on(t.clanId),
   }),
 );
+
+/**
+ * Wave 2 — single-body announcement per clan. Leader / deputy edits
+ * via the clan panel; the plugin polls `/api/plugin/announcements`
+ * every 5 min and surfaces the body in `/clan info` and on the panel
+ * banner. PK is `clanId` so each clan owns at most one row; cleared
+ * on disband through the FK cascade.
+ *
+ * `updatedBy` is informational (admin username or in-game player
+ * name) so the audit trail can attribute edits without joining the
+ * audit log on every read.
+ */
+export const clanAnnouncements = pgTable('clan_announcements', {
+  clanId: integer('clan_id')
+    .primaryKey()
+    .references(() => clans.id, { onDelete: 'cascade' }),
+  body: text('body').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedBy: text('updated_by').notNull(),
+});
 
 // ─── Leader-panel tokens (Phase 4) ────────────────────────────────────
 

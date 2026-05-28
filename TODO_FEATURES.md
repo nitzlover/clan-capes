@@ -116,6 +116,85 @@ or move into `## Shipped` as items land.
 
 ---
 
+## Wave 5 — Events (new, large)
+
+Captured 2026-05-28 from `events.txt`. Two scheduled PvP events with
+shared infrastructure (zone, barrier, scoreboard, participant
+tracking, statistics).
+
+- **Shared infra.**
+  - `EventScheduler` — cron-like trigger checking the online-clans
+    threshold (≥2 players from ≥2 different clans) before firing.
+  - `Zone` utility — circle on the XZ plane with `contains()` and
+    `boundaryPoints()` helpers. Radius and center configurable per
+    event type.
+  - `BarrierRenderer` — particle wall along the zone boundary on a
+    tick loop. Visible to all players, no client mod required.
+  - `BoundaryListeners` — cancel `PlayerMoveEvent` crossings into a
+    closed zone, `ProjectileLaunchEvent` for ender-pearl tosses
+    through the barrier, `BlockPlaceEvent` inside a closed zone.
+  - `ParticipantTracker` — in/out detection, comeback timer on
+    crash/kick (30 s rejoin window), tiebreaker grace window for
+    teammates of a still-living member (3 min, unless a clan bed
+    survives inside the zone).
+  - `EventScoreboard` — per-player side panel with stage, remaining
+    time, participant counts, current leader. Tick-driven update.
+  - `ChatNotifier` — single source for stage transitions, winner
+    announcement, zone coordinates.
+
+- **Airdrop event.** Every 2 h (configurable).
+  - Zone: 300-block radius (configurable), center random within
+    10 k blocks of spawn.
+  - Stage 1 — prep, 20 min: announce zone center, players gather.
+  - Stage 2 — landing, 10 min: drop the airdrop at a random point
+    inside the zone, PvP opens.
+  - Stage 3 — finale: last clan standing inside the zone wins.
+  - Loot collection: 5 min after the winner is fixed before the
+    drop despawns.
+
+- **King of the hill event.** Every 5 h (configurable).
+  - Zone: fixed radius near spawn.
+  - Custom structure with loot chest spawned at start (NBT
+    template files shipped in `paper-plugin/src/main/resources/
+    structures/koth/`).
+  - Cond: last clan with a player still inside the zone wins.
+
+- **Migration 0010.**
+  - `events (id, server_id, type, status, started_at, ended_at,
+    zone_center_x, zone_center_z, zone_radius, winner_clan_id,
+    config_snapshot jsonb)`
+  - `event_participants (event_id, clan_id, player_uuid, kills,
+    deaths, joined_at, eliminated_at)`
+  - `event_kills (id, event_id, killer_uuid, victim_uuid,
+    killer_clan_id, victim_clan_id, at)`
+  - `event_config (server_id, type PK, interval_minutes, duration_minutes,
+    radius_blocks, payload jsonb)`
+
+- **Endpoints (~10).**
+  - `POST /api/plugin/events/start` (kicks off DB row + returns id)
+  - `POST /api/plugin/events/end` (winner + stats)
+  - `POST /api/plugin/events/kill` (incremental kill log)
+  - `GET /api/plugin/events/config` (pull per-server config snapshot)
+  - `GET /api/panel/events` (list / filter)
+  - `GET /api/panel/events/[id]` (detail + participants + kills)
+  - `GET /api/panel/events/config` (admin pull)
+  - `PUT /api/panel/events/config` (admin save)
+  - `GET /api/panel/events/leaderboard` (per-clan event totals)
+  - `GET /api/leader/events/active` (live state for clan-panel)
+
+- **Panel UI.**
+  - `/dashboard/events` — config form + history table + active monitor.
+  - `/dashboard/leaderboards/events` — per-clan event win counts,
+    kill ratios per event type.
+  - Per-clan event stats block embedded in expanded ClanEditor.
+
+- **Out of scope (initial pass).** Custom structure designer (use
+  pre-made NBT files), in-panel loot-table editor (use vanilla loot
+  pools), client-mod-side barrier rendering (server particle wall
+  is enough), more than two event types.
+
+---
+
 ## Out of scope / explicitly skipped
 
 - Auto-replace plugin jar on update — operator must approve.

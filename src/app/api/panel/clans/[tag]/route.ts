@@ -90,7 +90,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ tag: string }
     );
   }
 
-  let body: { name?: string; colorHex?: string };
+  let body: { name?: string; colorHex?: string; friendlyFire?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -106,7 +106,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ tag: string }
     return NextResponse.json({ error: 'clan not found' }, { status: 404 });
   }
 
-  const updates: { name?: string; colorHex?: string } = {};
+  const updates: { name?: string; colorHex?: string; friendlyFire?: boolean } = {};
   if (body.name !== undefined) {
     const n = body.name.trim();
     if (n.length < 1 || n.length > 32) {
@@ -131,6 +131,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ tag: string }
       );
     }
     updates.colorHex = body.colorHex.toUpperCase();
+  }
+  if (body.friendlyFire !== undefined) {
+    if (typeof body.friendlyFire !== 'boolean') {
+      return NextResponse.json(
+        { error: 'friendlyFire must be a boolean' },
+        { status: 400 },
+      );
+    }
+    updates.friendlyFire = body.friendlyFire;
   }
   if (Object.keys(updates).length === 0) {
     return NextResponse.json(

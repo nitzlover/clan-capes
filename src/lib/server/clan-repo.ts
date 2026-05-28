@@ -27,6 +27,10 @@ export type ClanDto = {
   colorHex: string;
   leaderUuid: string;
   createdAt: string;
+  // Wave 2 — per-clan PvP toggle. Default `true` = vanilla behaviour;
+  // false instructs the plugin's damage listener to cancel
+  // EntityDamageByEntityEvent when both sides share this clan.
+  friendlyFire: boolean;
   members: ClanMemberDto[];
 };
 
@@ -77,6 +81,7 @@ export async function listClansForServer(serverId: number): Promise<ClanDto[]> {
     colorHex: c.colorHex,
     leaderUuid: c.leaderUuid,
     createdAt: c.createdAt.toISOString(),
+    friendlyFire: c.friendlyFire,
     members: membersByClan.get(c.id) ?? [],
   }));
 }
@@ -119,6 +124,7 @@ export async function getClanByTag(
     colorHex: clan.colorHex,
     leaderUuid: clan.leaderUuid,
     createdAt: clan.createdAt.toISOString(),
+    friendlyFire: clan.friendlyFire,
     members: members.map((m) => ({
       playerUuid: m.playerUuid,
       playerName: m.playerName,

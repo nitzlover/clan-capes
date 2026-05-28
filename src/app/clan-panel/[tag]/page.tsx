@@ -41,6 +41,7 @@ type Clan = {
   colorHex: string;
   leaderUuid: string;
   createdAt: string;
+  friendlyFire: boolean;
   members: Member[];
 };
 
@@ -149,6 +150,7 @@ export default function ClanPanelTagPage() {
         await fetch('/api/leader/logout', { method: 'POST' }).catch(() => {});
         router.replace('/clan-panel');
       }} />
+      <AnnouncementSection clan={data.clan} role={data.role} />
       <StatsChips season={data.season} stats={data.stats} />
       <ClanInfoSection clan={data.clan} onSaved={reload} />
       <MembersSection
@@ -559,6 +561,207 @@ function DangerZone({
       <button onClick={disband} disabled={busy} className="brutal-btn mt-4 disabled:opacity-40">
         {busy ? 'Disbanding…' : `Disband ${clan.tag}`}
       </button>
+    </section>
+  );
+}
+
+/**
+ * Sticky-feeling announcement block at the top of the clan panel.
+ *
+ * Read-only for members, editable inline for leader / deputy. We fetch
+ * on mount + on each successful save (no re-render of the whole page —
+ * the plugin polls every 5 min, so the panel doesn't need to either).
+ *
+ * Empty state shows an "Add announcement" CTA only for editors; members
+ * just see nothing, which keeps the panel quiet when there's no news.
+ */
+function AnnouncementSection({
+  clan,
+  role,
+}: {
+  clan: Clan;
+  role: 'leader' | 'deputy';
+}) {
+  const [body, setBody] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const canEdit = role === 'leader' || role === 'deputy';
+  const path = `/api/leader/clans/${encodeURIComponent(clan.tag)}/announcement`;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(path);
+        if (cancelled) return;
+        if (res.status === 404) {
+          setBody(null);
+          setUpdatedAt(null);
+          return;
+        }
+        if (!res.ok) return;
+        const data = await res.json();
+        setBody(data.body);
+        setUpdatedAt(data.updatedAt);
+      } catch {
+        /* keep prior state on transient errors */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [path]);
+
+  async function save() {
+    const trimmed = draft.trim();
+    if (trimmed.length < 1 || trimmed.length > 500) {
+      setMsg({ kind: 'err', text: 'body must be 1-500 chars' });
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(path, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: trimmed }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setBody(data.body);
+      setUpdatedAt(data.updatedAt);
+      setEditing(false);
+      setMsg({ kind: 'ok', text: 'Saved.' });
+    } catch (e) {
+      setMsg({ kind: 'err', text: e instanceof Error ? e.message : 'Save failed' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearAnnouncement() {
+    if (!confirm('Remove the announcement?')) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(path, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      setBody(null);
+      setUpdatedAt(null);
+      setDraft('');
+      setEditing(false);
+      setMsg({ kind: 'ok', text: 'Cleared.' });
+    } catch (e) {
+      setMsg({ kind: 'err', text: e instanceof Error ? e.message : 'Clear failed' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Hide entirely when there's no body and the viewer can't add one.
+  if (!canEdit && !body) return null;
+
+  if (editing) {
+    return (
+      <section className="brutal-card mb-6 p-5">
+        <p className="label-mono mb-3 text-[var(--text-faint)]">Announcement</p>
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          maxLength={500}
+          rows={4}
+          placeholder="Plain text, up to 500 chars."
+          className="input w-full font-mono text-sm"
+        />
+        <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+          {draft.trim().length}/500
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={save}
+            disabled={busy}
+            className="btn-primary disabled:opacity-40"
+          >
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(false);
+              setDraft(body ?? '');
+              setMsg(null);
+            }}
+            disabled={busy}
+            className="btn-ghost disabled:opacity-40"
+          >
+            Cancel
+          </button>
+          {body && (
+            <button
+              type="button"
+              onClick={clearAnnouncement}
+              disabled={busy}
+              className="btn-danger-link disabled:opacity-40"
+            >
+              Remove
+            </button>
+          )}
+          {msg && (
+            <span
+              className={`ml-auto font-mono text-[10px] uppercase tracking-[0.22em] ${
+                msg.kind === 'ok' ? 'text-[var(--text-soft)]' : 'text-white'
+              }`}
+            >
+              {msg.kind === 'ok' ? '✓' : '!'} {msg.text}
+            </span>
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="brutal-card mb-6 p-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="label-mono text-[var(--text-faint)]">Announcement</p>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => {
+              setDraft(body ?? '');
+              setEditing(true);
+              setMsg(null);
+            }}
+            className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-mute)] hover:text-white"
+          >
+            {body ? 'Edit' : '+ Add'}
+          </button>
+        )}
+      </div>
+      {body ? (
+        <>
+          <p className="mt-3 whitespace-pre-wrap text-sm text-white">{body}</p>
+          {updatedAt && (
+            <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+              Updated {new Date(updatedAt).toLocaleString()}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+          No announcement set.
+        </p>
+      )}
     </section>
   );
 }
