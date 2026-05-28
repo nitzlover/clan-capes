@@ -7,6 +7,7 @@ import dev.clancapes.api.dto.AnnouncementDto;
 import dev.clancapes.api.dto.ApiError;
 import dev.clancapes.api.dto.BannerDto;
 import dev.clancapes.api.dto.ClanDto;
+import dev.clancapes.api.dto.EventConfigDto;
 import dev.clancapes.api.dto.SettingsDto;
 import dev.clancapes.api.dto.TrimDto;
 
@@ -126,6 +127,14 @@ public final class PanelClient {
         return sendJson(req, JsonObject.class).thenApply(json -> {
             java.lang.reflect.Type listType = new TypeToken<List<TrimDto>>(){}.getType();
             return gson.fromJson(json.get("trims"), listType);
+        });
+    }
+
+    public CompletableFuture<List<EventConfigDto>> listEventConfigs() {
+        HttpRequest req = requestBuilder("/api/plugin/events/config").GET().build();
+        return sendJson(req, JsonObject.class).thenApply(json -> {
+            java.lang.reflect.Type listType = new TypeToken<List<EventConfigDto>>(){}.getType();
+            return gson.fromJson(json.get("configs"), listType);
         });
     }
 

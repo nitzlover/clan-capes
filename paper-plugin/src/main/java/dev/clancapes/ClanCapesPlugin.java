@@ -4,6 +4,7 @@ import dev.clancapes.api.PanelClient;
 import dev.clancapes.command.ClanCapeCommand;
 import dev.clancapes.command.ClanChatCommand;
 import dev.clancapes.command.ClanCommand;
+import dev.clancapes.events.EventScheduler;
 import dev.clancapes.listener.FriendlyFireListener;
 import dev.clancapes.listener.PlayerDeathListener;
 import dev.clancapes.listener.PlayerJoinListener;
@@ -12,6 +13,7 @@ import dev.clancapes.repo.AnnouncementRepository;
 import dev.clancapes.repo.ArmorTrimRepository;
 import dev.clancapes.repo.BannerRepository;
 import dev.clancapes.repo.ClanRepository;
+import dev.clancapes.repo.EventConfigRepository;
 import dev.clancapes.repo.SettingsRepository;
 import dev.clancapes.task.HeartbeatTask;
 import dev.clancapes.task.RefreshTask;
@@ -31,6 +33,8 @@ public final class ClanCapesPlugin extends JavaPlugin {
     private BannerRepository bannerRepository;
     private SettingsRepository settingsRepository;
     private AnnouncementRepository announcementRepository;
+    private EventConfigRepository eventConfigRepository;
+    private EventScheduler eventScheduler;
     private ClanCapesExpansion expansion;
     private final List<BukkitTask> scheduled = new ArrayList<>();
 
@@ -43,6 +47,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
         bannerRepository = new BannerRepository(panelClient, getLogger());
         settingsRepository = new SettingsRepository(panelClient, getLogger());
         announcementRepository = new AnnouncementRepository(panelClient, getLogger());
+        eventConfigRepository = new EventConfigRepository(panelClient, getLogger());
 
         registerCommands();
         Bukkit.getPluginManager().registerEvents(new PlayerJoinListener(this), this);
@@ -68,11 +73,21 @@ public final class ClanCapesPlugin extends JavaPlugin {
             bannerRepository.refresh();
             settingsRepository.refresh();
             announcementRepository.refresh();
+            eventConfigRepository.refresh();
         }
+
+        // Boot the scheduler — its own tick gates on EventConfigRepository
+        // being non-empty, so a pre-linked deploy is harmless (no-op tick).
+        eventScheduler = new EventScheduler(this);
+        eventScheduler.start();
     }
 
     @Override
     public void onDisable() {
+        if (eventScheduler != null) {
+            eventScheduler.stop();
+            eventScheduler = null;
+        }
         cancelScheduled();
         if (expansion != null) {
             try {
@@ -108,6 +123,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
         int trimsSec = getConfig().getInt("panel.refresh-trims-sec", 300);
         int settingsSec = getConfig().getInt("panel.refresh-settings-sec", 600);
         int announcementsSec = getConfig().getInt("panel.refresh-announcements-sec", 300);
+        int eventConfigSec = getConfig().getInt("panel.refresh-event-config-sec", 300);
         int heartbeatSec = getConfig().getInt("panel.heartbeat-sec", 30);
 
         scheduled.add(new RefreshTask(this, "clans", () -> clanRepository.refresh())
@@ -120,6 +136,8 @@ public final class ClanCapesPlugin extends JavaPlugin {
                 .runTaskTimerAsynchronously(this, ticksPerSec * settingsSec, ticksPerSec * settingsSec));
         scheduled.add(new RefreshTask(this, "announcements", () -> announcementRepository.refresh())
                 .runTaskTimerAsynchronously(this, ticksPerSec * announcementsSec, ticksPerSec * announcementsSec));
+        scheduled.add(new RefreshTask(this, "event-config", () -> eventConfigRepository.refresh())
+                .runTaskTimerAsynchronously(this, ticksPerSec * eventConfigSec, ticksPerSec * eventConfigSec));
         scheduled.add(new HeartbeatTask(this)
                 .runTaskTimerAsynchronously(this, ticksPerSec * heartbeatSec, ticksPerSec * heartbeatSec));
     }
@@ -144,6 +162,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
         bannerRepository = new BannerRepository(panelClient, getLogger());
         settingsRepository = new SettingsRepository(panelClient, getLogger());
         announcementRepository = new AnnouncementRepository(panelClient, getLogger());
+        eventConfigRepository = new EventConfigRepository(panelClient, getLogger());
         startScheduledTasks();
         if (panelClient.isConfigured()) {
             clanRepository.refresh();
@@ -151,6 +170,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
             bannerRepository.refresh();
             settingsRepository.refresh();
             announcementRepository.refresh();
+            eventConfigRepository.refresh();
         }
     }
 
@@ -160,4 +180,5 @@ public final class ClanCapesPlugin extends JavaPlugin {
     public BannerRepository getBannerRepository() { return bannerRepository; }
     public SettingsRepository getSettingsRepository() { return settingsRepository; }
     public AnnouncementRepository getAnnouncementRepository() { return announcementRepository; }
+    public EventConfigRepository getEventConfigRepository() { return eventConfigRepository; }
 }

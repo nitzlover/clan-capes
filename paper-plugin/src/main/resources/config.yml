@@ -20,6 +20,7 @@ panel:
   refresh-trims-sec: 300
   refresh-settings-sec: 600     # 10 min
   refresh-announcements-sec: 300
+  refresh-event-config-sec: 300
   heartbeat-sec: 30
   # HTTP timeout per request.
   request-timeout-ms: 5000
