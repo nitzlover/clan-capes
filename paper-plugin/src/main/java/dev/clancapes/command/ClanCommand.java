@@ -173,6 +173,19 @@ public final class ClanCommand implements CommandExecutor {
                             + " (" + String.format(Locale.ROOT, "%.2f", clan.stats.kd) + ")",
                     NamedTextColor.GRAY));
         }
+        // Friendly-fire status — surfaced only when the clan has explicitly
+        // opted out, since the default-on case is the silent baseline.
+        if (Boolean.FALSE.equals(clan.friendlyFire)) {
+            sender.sendMessage(Component.text(
+                    "Friendly fire: OFF (intra-clan damage blocked)", NamedTextColor.GRAY));
+        }
+        // Pinned announcement, if any. Body is plain text capped at 500 chars
+        // server-side; render it as a single italic line under a header so
+        // long announcements wrap naturally in the vanilla chat box.
+        plugin.getAnnouncementRepository().get(clan.tag).ifPresent(a -> {
+            sender.sendMessage(Component.text("Announcement:", NamedTextColor.GOLD));
+            sender.sendMessage(Component.text("  " + a.body, NamedTextColor.WHITE));
+        });
         return true;
     }
 
