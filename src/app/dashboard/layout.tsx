@@ -63,6 +63,12 @@ const NAV: Array<{
     hint: 'Per-clan crest',
   },
   {
+    href: '/dashboard/events',
+    label: 'Events',
+    icon: 'schedule',
+    hint: 'Airdrop · KotH config',
+  },
+  {
     href: '/dashboard/audit',
     label: 'Audit',
     icon: 'receipt_long',

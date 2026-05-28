@@ -54,6 +54,19 @@ export const inviteStatus = pgEnum('invite_status', [
   'expired',
 ]);
 
+// Wave 5 — scheduled PvP events. Two variants live in the same
+// taxonomy so a single events table covers both Airdrop and
+// King-of-the-Hill without a polymorphic discriminator.
+export const eventType = pgEnum('event_type', ['airdrop', 'koth']);
+export const eventStatus = pgEnum('event_status', [
+  'pending',
+  'prep',
+  'landing',
+  'finale',
+  'ended',
+  'cancelled',
+]);
+
 // ─── Servers ──────────────────────────────────────────────────────────
 
 /**
@@ -301,6 +314,136 @@ export const clanAnnouncements = pgTable('clan_announcements', {
     .defaultNow(),
   updatedBy: text('updated_by').notNull(),
 });
+
+// ─── Events (Wave 5) ──────────────────────────────────────────────────
+
+/**
+ * Per-run event row. The plugin owns the state machine; this row
+ * persists the snapshot so the panel + admin UI can read history
+ * + live status without polling the world. `configSnapshot` freezes
+ * the launch-time params so a later config edit doesn't rewrite
+ * history.
+ */
+export const events = pgTable(
+  'events',
+  {
+    id: serial('id').primaryKey(),
+    serverId: integer('server_id')
+      .notNull()
+      .references(() => servers.id, { onDelete: 'cascade' }),
+    type: eventType('type').notNull(),
+    status: eventStatus('status').notNull().default('pending'),
+    startedAt: timestamp('started_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    zoneCenterX: integer('zone_center_x').notNull(),
+    zoneCenterZ: integer('zone_center_z').notNull(),
+    zoneRadius: integer('zone_radius').notNull(),
+    winnerClanId: integer('winner_clan_id').references(() => clans.id, {
+      onDelete: 'set null',
+    }),
+    configSnapshot: jsonb('config_snapshot').notNull().default({}),
+  },
+  (t) => ({
+    serverStartedIdx: index('events_server_started_idx').on(
+      t.serverId,
+      t.startedAt,
+    ),
+    serverTypeIdx: index('events_server_type_idx').on(t.serverId, t.type),
+  }),
+);
+
+/**
+ * Per-participant counters per event. PK = (event, player) so a
+ * crash-and-rejoin updates the same row. `eliminatedAt IS NULL`
+ * means the player is still in the zone at the most recent write.
+ */
+export const eventParticipants = pgTable(
+  'event_participants',
+  {
+    eventId: integer('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    clanId: integer('clan_id')
+      .notNull()
+      .references(() => clans.id, { onDelete: 'cascade' }),
+    playerUuid: uuid('player_uuid').notNull(),
+    kills: integer('kills').notNull().default(0),
+    deaths: integer('deaths').notNull().default(0),
+    joinedAt: timestamp('joined_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    eliminatedAt: timestamp('eliminated_at', { withTimezone: true }),
+  },
+  (t) => ({
+    pk: primaryKey({
+      name: 'event_participants_pkey',
+      columns: [t.eventId, t.playerUuid],
+    }),
+    clanIdx: index('event_participants_clan_idx').on(t.eventId, t.clanId),
+  }),
+);
+
+/**
+ * Immutable kill log scoped to an event. Mirrors the global
+ * kill_events table but with an eventId so leaderboards can filter
+ * without a windowed scan.
+ */
+export const eventKills = pgTable(
+  'event_kills',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    eventId: integer('event_id')
+      .notNull()
+      .references(() => events.id, { onDelete: 'cascade' }),
+    killerUuid: uuid('killer_uuid').notNull(),
+    victimUuid: uuid('victim_uuid').notNull(),
+    killerClanId: integer('killer_clan_id').references(() => clans.id, {
+      onDelete: 'set null',
+    }),
+    victimClanId: integer('victim_clan_id').references(() => clans.id, {
+      onDelete: 'set null',
+    }),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    eventIdx: index('event_kills_event_idx').on(t.eventId),
+  }),
+);
+
+/**
+ * Per-server per-type config — tunable knobs for the EventScheduler.
+ * `payload` carries variant-specific params (loot pool selector,
+ * structure id, etc.) so each new event type doesn't need a column
+ * per parameter.
+ */
+export const eventConfig = pgTable(
+  'event_config',
+  {
+    serverId: integer('server_id')
+      .notNull()
+      .references(() => servers.id, { onDelete: 'cascade' }),
+    type: eventType('type').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    intervalMinutes: integer('interval_minutes').notNull(),
+    durationMinutes: integer('duration_minutes').notNull(),
+    radiusBlocks: integer('radius_blocks').notNull(),
+    payload: jsonb('payload').notNull().default({}),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedBy: text('updated_by').notNull().default('system'),
+  },
+  (t) => ({
+    pk: primaryKey({
+      name: 'event_config_pkey',
+      columns: [t.serverId, t.type],
+    }),
+  }),
+);
 
 // ─── Leader-panel tokens (Phase 4) ────────────────────────────────────
 
