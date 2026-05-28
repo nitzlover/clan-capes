@@ -4,6 +4,7 @@ import dev.clancapes.ClanCapesPlugin;
 import dev.clancapes.api.dto.ClanDto;
 import dev.clancapes.api.dto.EventConfigDto;
 import org.bukkit.Bukkit;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -41,6 +42,8 @@ public final class EventScheduler {
     /** Per-type wall-clock timestamp (ms) of the last attempted firing. */
     private final Map<String, Long> lastFired = new HashMap<>();
     private BukkitTask task;
+    /** The single in-flight event, if any. One event runs at a time. */
+    private AirdropEvent activeEvent;
 
     public EventScheduler(ClanCapesPlugin plugin) {
         this.plugin = plugin;
@@ -61,6 +64,13 @@ public final class EventScheduler {
     }
 
     private void tick() {
+        // Reap a finished event before considering new firings — one
+        // event at a time keeps the zone / scoreboard unambiguous.
+        if (activeEvent != null && activeEvent.isFinished()) {
+            activeEvent = null;
+        }
+        if (activeEvent != null) return;
+
         var repo = plugin.getEventConfigRepository();
         if (repo == null) return;
         long now = System.currentTimeMillis();
@@ -71,7 +81,7 @@ public final class EventScheduler {
             if (elapsedMs < intervalMs) continue;
             if (!onlineThresholdMet(cfg)) continue;
             lastFired.put(cfg.type, now);
-            tryFire(cfg);
+            if (tryFire(cfg)) return; // one launch per tick
         }
     }
 
@@ -104,14 +114,35 @@ public final class EventScheduler {
     }
 
     /**
-     * Phase 5.2: logs the decision. Phase 5.3 will dispatch to the
-     * variant-specific runtime (AirdropEvent / KingOfHillEvent).
+     * Dispatch to the variant runtime. Returns true if an event was
+     * actually launched (so the caller stops scanning this tick).
+     * KotH (phase 5.4) plugs in alongside the airdrop branch.
      */
-    private void tryFire(EventConfigDto cfg) {
-        log.info("[event-scheduler] would fire type=" + cfg.type
-                + " (interval=" + cfg.intervalMinutes + "m"
-                + " duration=" + cfg.durationMinutes + "m"
-                + " radius=" + cfg.radiusBlocks + ")");
-        // TODO phase 5.3 — instantiate the variant Event and start it.
+    private boolean tryFire(EventConfigDto cfg) {
+        World world = pickEventWorld();
+        if (world == null) {
+            log.warning("[event-scheduler] no overworld found; skipping " + cfg.type);
+            return false;
+        }
+        if ("airdrop".equalsIgnoreCase(cfg.type)) {
+            log.info("[event-scheduler] launching airdrop"
+                    + " (radius=" + cfg.radiusBlocks + ")");
+            AirdropEvent ev = new AirdropEvent(plugin, world, cfg);
+            ev.start();
+            activeEvent = ev;
+            return true;
+        }
+        // koth + future types: not yet implemented — log + skip so the
+        // scheduler keeps cadence without crashing.
+        log.info("[event-scheduler] type " + cfg.type + " not yet implemented");
+        return false;
+    }
+
+    /** First NORMAL-environment world (the overworld). */
+    private World pickEventWorld() {
+        for (World w : Bukkit.getWorlds()) {
+            if (w.getEnvironment() == World.Environment.NORMAL) return w;
+        }
+        return Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().get(0);
     }
 }

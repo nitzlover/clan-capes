@@ -173,6 +173,33 @@ public final class PanelClient {
 
     // ──────────────────────────── writes ───────────────────────────
 
+    /** Begin an event run; panel returns the new row's {@code id}. */
+    public CompletableFuture<JsonObject> postEventStart(JsonObject payload) {
+        HttpRequest req = requestBuilder("/api/plugin/events/start")
+                .header("Content-Type", "application/json")
+                .POST(jsonBody(gson, payload))
+                .build();
+        return sendJson(req, JsonObject.class);
+    }
+
+    /** Finalise an event run with winner + per-participant counters. */
+    public CompletableFuture<JsonObject> postEventEnd(JsonObject payload) {
+        HttpRequest req = requestBuilder("/api/plugin/events/end")
+                .header("Content-Type", "application/json")
+                .POST(jsonBody(gson, payload))
+                .build();
+        return sendJson(req, JsonObject.class);
+    }
+
+    /** Log a single in-event kill. */
+    public CompletableFuture<JsonObject> postEventKill(JsonObject payload) {
+        HttpRequest req = requestBuilder("/api/plugin/events/kill")
+                .header("Content-Type", "application/json")
+                .POST(jsonBody(gson, payload))
+                .build();
+        return sendJson(req, JsonObject.class);
+    }
+
     public CompletableFuture<JsonObject> postKill(UUID killer, UUID victim) {
         Map<String, Object> body = Map.of(
                 "killerUuid", killer.toString(),
