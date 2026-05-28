@@ -1,38 +1,34 @@
 name: ClanCapes
 version: '${version}'
 main: dev.clancapes.ClanCapesPlugin
-api-version: '1.21'
+api-version: '26.1'
 authors: [ClanCapes]
-description: Clan custom capes — REST API, PowerClans integration, web panel sync
+description: Clan management — capes, banners, armor trims, K/D stats — REST-synced with web panel
 website: https://github.com/clancapes/clan-capes
-softdepend: [PowerClans, PlaceholderAPI]
+softdepend: [PlaceholderAPI]
 commands:
   clancape:
-    description: Clan cape management
-    usage: /clancape [set <url>|remove|reload|setup|link]
+    description: Server registration + cape management
+    usage: /clancape <setup|link|reload>
     aliases: [clancapes, ccape]
+    permission: clancapes.cape.admin
   clans:
-    description: Panel-backed clan management
-    usage: /clan <create|disband|info|list|invite|accept|decline|leave|kick|promote|demote|transfer|color>
-    # `/clan` collides with PowerClans during the Phase 2 transition;
-    # we register `clans` as primary so both plugins can coexist. The
-    # `clan` alias is the friendly form shown in usage hints — Bukkit
-    # routes it to us automatically once PowerClans is unloaded.
+    description: Clan management
+    usage: /clan <create|disband|info|list|invite|accept|decline|leave|kick|promote|demote|transfer|color|panel>
     aliases: [clan, cl, myclan]
+    permission: clancapes.clan.use
   clanc:
     description: Send a message to your clan only
     usage: /clanc <message>
     aliases: [cc, clanchat]
+    permission: clancapes.clan.use
 permissions:
-  clan.cape:
-    description: Manage your clan cape
-    default: op
-  clan.cape.admin:
-    description: Admin cape management for any clan
-    default: op
-  clan.cape.setup:
-    description: Register this server with the panel (one-time-pass setup)
+  clancapes.cape.admin:
+    description: Register server and manage panel API key
     default: op
   clancapes.clan.use:
-    description: Use the /clans command
+    description: Use /clan and /clanc commands
     default: true
+  clancapes.clan.admin:
+    description: Override clan ownership checks (admin moderation)
+    default: op

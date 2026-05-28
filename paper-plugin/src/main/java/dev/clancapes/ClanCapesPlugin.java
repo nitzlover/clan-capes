@@ -1,395 +1,151 @@
 package dev.clancapes;
 
-import dev.clancapes.api.RestApiServer;
-import dev.clancapes.clan.ArmorTrimRepository;
-import dev.clancapes.clan.BannerRepository;
-import dev.clancapes.clan.ClanRepository;
-import dev.clancapes.clan.ClanTeamManager;
-import dev.clancapes.clan.PendingInvites;
-import dev.clancapes.clan.SettingsCache;
-import dev.clancapes.clan.StatsCache;
+import dev.clancapes.api.PanelClient;
 import dev.clancapes.command.ClanCapeCommand;
+import dev.clancapes.command.ClanChatCommand;
 import dev.clancapes.command.ClanCommand;
-import dev.clancapes.config.PluginConfig;
-import dev.clancapes.hook.PowerClansHook;
-import dev.clancapes.hook.PlaceholderHook;
-import dev.clancapes.listener.ArmorTrimListener;
-import dev.clancapes.listener.ClanVillagerListener;
-import dev.clancapes.listener.PvpKillListener;
-import dev.clancapes.listener.ShieldBannerListener;
-import dev.clancapes.panel.HeartbeatTask;
-import dev.clancapes.panel.PanelClient;
-import dev.clancapes.service.BannerService;
-import dev.clancapes.service.CapeService;
-import dev.clancapes.sync.CapeSyncChannel;
-import dev.clancapes.storage.StorageFactory;
-import dev.clancapes.storage.CapeStorage;
+import dev.clancapes.listener.PlayerDeathListener;
+import dev.clancapes.listener.PlayerJoinListener;
+import dev.clancapes.placeholder.ClanCapesExpansion;
+import dev.clancapes.repo.ArmorTrimRepository;
+import dev.clancapes.repo.BannerRepository;
+import dev.clancapes.repo.ClanRepository;
+import dev.clancapes.repo.SettingsRepository;
+import dev.clancapes.task.HeartbeatTask;
+import dev.clancapes.task.RefreshTask;
+import org.bukkit.Bukkit;
+import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
-public final class ClanCapesPlugin extends JavaPlugin {
-    private static ClanCapesPlugin instance;
+import java.util.ArrayList;
+import java.util.List;
 
-    private PluginConfig pluginConfig;
-    private CapeStorage storage;
-    private CapeService capeService;
-    private BannerService bannerService;
-    private RestApiServer apiServer;
-    private CapeSyncChannel syncChannel;
-    private PowerClansHook powerClansHook;
-    private PlaceholderHook placeholderHook;
-    private HeartbeatTask heartbeatTask;
-    private ClanRepository clanRepository;
-    private BannerRepository bannerRepository;
-    private ArmorTrimRepository armorTrimRepository;
-    private ClanTeamManager clanTeamManager;
-    private PendingInvites pendingInvites;
-    private StatsCache statsCache;
-    private SettingsCache settingsCache;
-    /**
-     * Shared HTTP client for every panel REST call. Previously each
-     * call site (HeartbeatTask, StatsCache, SettingsCache, PvpKillListener,
-     * /clan panel handler, ClanRepository / BannerRepository …) allocated
-     * a fresh PanelClient with its own java.net.http.HttpClient, which
-     * meant a fresh selector thread + TLS context cache per kill, per
-     * heartbeat, per placeholder fetch. Now there's one.
-     */
+public final class ClanCapesPlugin extends JavaPlugin {
+
     private PanelClient panelClient;
-    private BukkitTask clanRefreshTask;
-    private BukkitTask bannerRefreshTask;
-    private BukkitTask settingsRefreshTask;
-    private BukkitTask armorTrimRefreshTask;
+    private ClanRepository clanRepository;
+    private ArmorTrimRepository armorTrimRepository;
+    private BannerRepository bannerRepository;
+    private SettingsRepository settingsRepository;
+    private ClanCapesExpansion expansion;
+    private final List<BukkitTask> scheduled = new ArrayList<>();
 
     @Override
     public void onEnable() {
-        instance = this;
         saveDefaultConfig();
-        pluginConfig = new PluginConfig(getConfig());
+        buildPanelClient();
+        clanRepository = new ClanRepository(panelClient, getLogger());
+        armorTrimRepository = new ArmorTrimRepository(panelClient, getLogger());
+        bannerRepository = new BannerRepository(panelClient, getLogger());
+        settingsRepository = new SettingsRepository(panelClient, getLogger());
 
-        // Warm-load every inner/anonymous class referenced from a
-        // panel-facing code path. Paper 26.x's PluginClassLoader has
-        // a recurring bug where lazy resolution of nested classes
-        // fails once the plugin has been running for a while
-        // (Jetty's ManagedSelector$Accept, our PowerClanEntry, the
-        // PanelClient response DTOs). Touching each one here while
-        // the classloader context is fresh forces the JVM to cache
-        // them so the later `gson.fromJson(..., SomeClass.class)`
-        // call never has to re-resolve through PluginClassLoader.
-        preloadPanelInnerClasses();
+        registerCommands();
+        Bukkit.getPluginManager().registerEvents(new PlayerJoinListener(this), this);
+        Bukkit.getPluginManager().registerEvents(new PlayerDeathListener(this), this);
 
-        // Shared panel HTTP client (one HttpClient for the whole plugin
-        // lifetime, see field comment for why per-call allocation was
-        // a measurable resource leak).
-        panelClient = new PanelClient(this);
-
-        storage = StorageFactory.create(this, pluginConfig);
-        storage.init();
-
-        powerClansHook = new PowerClansHook(this);
-        powerClansHook.register();
-
-        syncChannel = new CapeSyncChannel(this);
-        syncChannel.register();
-
-        capeService = new CapeService(this, storage, pluginConfig, syncChannel, powerClansHook);
-        bannerService = new BannerService(this, storage, powerClansHook);
-
-        placeholderHook = new PlaceholderHook(this, capeService);
-        placeholderHook.register();
-
-        getServer().getPluginManager().registerEvents(
-                new ShieldBannerListener(this, bannerService), this);
-
-        // Phase 5 — PvP kill ingest. Stats cache is created up front so
-        // the placeholder hook can read from it on the first render.
-        statsCache = new StatsCache(this);
-        getServer().getPluginManager().registerEvents(
-                new PvpKillListener(this), this);
-
-        // Clan-scoped villager gossip sync: zombie-villager cure +
-        // Hero-of-the-Village now broadcasts the discount perk to
-        // every online clan member, not just the trigger player. See
-        // ClanVillagerListener for the trigger paths and radius.
-        getServer().getPluginManager().registerEvents(
-                new ClanVillagerListener(this), this);
-
-        // Phase 6 — live operator settings (palette / cooldowns / max
-        // layers). Initial refresh fires immediately; periodic poll
-        // matches the 5-min cadence used by clan + banner caches.
-        settingsCache = new SettingsCache(this);
-        settingsCache.refreshAsync(null);
-        settingsRefreshTask = getServer().getScheduler().runTaskTimerAsynchronously(
-                this,
-                () -> settingsCache.refreshAsync(null),
-                20L * 60 * 5,
-                20L * 60 * 5);
-
-        var command = new ClanCapeCommand(this, capeService, powerClansHook);
-        var pluginCommand = getCommand("clancape");
-        if (pluginCommand == null) {
-            getLogger().severe("Command 'clancape' missing from plugin.yml — disabling plugin");
-            getServer().getPluginManager().disablePlugin(this);
-            return;
-        }
-        pluginCommand.setExecutor(command);
-        pluginCommand.setTabCompleter(command);
-
-        if (pluginConfig.isApiEnabled()) {
-            apiServer = new RestApiServer(this, capeService, bannerService, pluginConfig, powerClansHook);
-            apiServer.start();
-        }
-
-        // Start the panel heartbeat task. The task itself no-ops while
-        // panel.url or panel.api-key is empty, so servers that haven't
-        // run /clancape setup yet stay silent.
-        heartbeatTask = new HeartbeatTask(this);
-        heartbeatTask.start();
-
-        // Bootstrap the clan repository + team manager. Repository pulls
-        // the full clan list off the panel; team manager mirrors that
-        // into vanilla scoreboard teams (one per clan) so nametag +
-        // TAB prefixes paint themselves without packet magic. Both
-        // no-op while the panel block is empty.
-        clanRepository = new ClanRepository(this);
-        bannerRepository = new BannerRepository(this);
-        clanTeamManager = new ClanTeamManager(this);
-        pendingInvites = new PendingInvites();
-
-        Runnable syncTeamsOnMain = () ->
-                getServer().getScheduler().runTask(this, () -> clanTeamManager.sync());
-        clanRepository.refreshAsync(syncTeamsOnMain);
-        clanRefreshTask = getServer().getScheduler().runTaskTimerAsynchronously(
-                this,
-                () -> clanRepository.refreshAsync(syncTeamsOnMain),
-                20L * 60 * 5,  // first periodic refresh: +5 min after enable
-                20L * 60 * 5); // every 5 min thereafter
-
-        // Banner cache — same cadence so Phase-3 auto-paint sees panel
-        // edits within five minutes even without the explicit ping from
-        // the panel's BannerSync endpoint (which can lose packets across
-        // a flaky network).
-        bannerRepository.refreshAsync(null);
-        bannerRefreshTask = getServer().getScheduler().runTaskTimerAsynchronously(
-                this,
-                () -> bannerRepository.refreshAsync(null),
-                20L * 60 * 5,
-                20L * 60 * 5);
-
-        // Armour trim cache + listener — same cadence pattern as the
-        // banner cache. ArmorTrimListener stamps the spec onto the
-        // equipped piece the moment a clan member dons it.
-        armorTrimRepository = new ArmorTrimRepository(this);
-        armorTrimRepository.refreshAsync(null);
-        armorTrimRefreshTask = getServer().getScheduler().runTaskTimerAsynchronously(
-                this,
-                () -> armorTrimRepository.refreshAsync(null),
-                20L * 60 * 5,
-                20L * 60 * 5);
-        getServer().getPluginManager().registerEvents(
-                new ArmorTrimListener(this), this);
-
-        // /clans command — uses `clans` as primary name to coexist
-        // with PowerClans's /clan during the migration window. Once
-        // PowerClans is removed, the `clan` alias in plugin.yml takes
-        // over automatically.
-        var clanCmd = new ClanCommand(this, pendingInvites);
-        var clansBukkit = getCommand("clans");
-        if (clansBukkit != null) {
-            clansBukkit.setExecutor(clanCmd);
-            clansBukkit.setTabCompleter(clanCmd);
+        if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
+            expansion = new ClanCapesExpansion(this);
+            expansion.register();
+            getLogger().info("PlaceholderAPI expansion registered.");
         } else {
-            getLogger().warning("Command 'clans' missing from plugin.yml; /clans disabled");
+            getLogger().info("PlaceholderAPI not present — placeholders disabled.");
         }
 
-        // /clanc — clan-only chat broadcast.
-        var clancBukkit = getCommand("clanc");
-        if (clancBukkit != null) {
-            clancBukkit.setExecutor(new dev.clancapes.command.ClanChatCommand(this));
+        startScheduledTasks();
+
+        if (!panelClient.isConfigured()) {
+            getLogger().warning("Panel not linked. Run /clancape setup to register.");
         } else {
-            getLogger().warning("Command 'clanc' missing from plugin.yml; /clanc disabled");
+            // Warm caches once on enable so /clan info works immediately.
+            clanRepository.refresh();
+            armorTrimRepository.refresh();
+            bannerRepository.refresh();
+            settingsRepository.refresh();
         }
-
-        getLogger().info("ClanCapes enabled (storage=" + pluginConfig.getStorageType()
-                + ", api=" + pluginConfig.isApiEnabled() + ")");
     }
 
     @Override
     public void onDisable() {
-        if (clanRefreshTask != null) {
-            clanRefreshTask.cancel();
-            clanRefreshTask = null;
-        }
-        if (bannerRefreshTask != null) {
-            bannerRefreshTask.cancel();
-            bannerRefreshTask = null;
-        }
-        if (settingsRefreshTask != null) {
-            settingsRefreshTask.cancel();
-            settingsRefreshTask = null;
-        }
-        if (armorTrimRefreshTask != null) {
-            armorTrimRefreshTask.cancel();
-            armorTrimRefreshTask = null;
-        }
-        if (clanTeamManager != null) {
+        cancelScheduled();
+        if (expansion != null) {
             try {
-                clanTeamManager.shutdown();
-            } catch (Exception ignored) {
-                // Scoreboard may already be torn down on shutdown.
+                expansion.unregister();
+            } catch (Throwable ignore) {
             }
-        }
-        if (heartbeatTask != null) {
-            heartbeatTask.stop();
-        }
-        if (apiServer != null) {
-            apiServer.stop();
-        }
-        if (storage != null) {
-            storage.close();
-        }
-        instance = null;
-    }
-
-    public static ClanCapesPlugin getInstance() {
-        return instance;
-    }
-
-    public PluginConfig getPluginConfig() {
-        return pluginConfig;
-    }
-
-    public CapeService getCapeService() {
-        return capeService;
-    }
-
-    public BannerService getBannerService() {
-        return bannerService;
-    }
-
-    public PowerClansHook getPowerClansHook() {
-        return powerClansHook;
-    }
-
-    /**
-     * DB-backed clan source of truth. Populated asynchronously from
-     * {@code /api/plugin/clans} after enable; may be empty for the
-     * first few hundred milliseconds. Coexists with PowerClansHook
-     * during Phase 2.1–2.4 and replaces it entirely in Phase 2.5.
-     */
-    public ClanRepository getClanRepository() {
-        return clanRepository;
-    }
-
-    /**
-     * Panel-backed banner cache. Feeds {@link BannerService#applyToHeldShields}
-     * so Phase-3 auto-paint reads the same DB the admin UI writes to,
-     * instead of the legacy local SQLite store. May be null on a
-     * pre-Phase-3 deploy — callers should guard accordingly.
-     */
-    public BannerRepository getBannerRepository() {
-        return bannerRepository;
-    }
-
-    /**
-     * Per-player stats cache feeding the K/D placeholders. Refreshed
-     * lazily on miss + invalidated by the PvP listener after every
-     * kill so subsequent placeholder reads pick up the new totals
-     * without waiting for the cache TTL.
-     */
-    public StatsCache getStatsCache() {
-        return statsCache;
-    }
-
-    /**
-     * Panel-backed armour trim cache. Feeds {@link dev.clancapes.listener.ArmorTrimListener}
-     * so equipping a piece of armour stamps the clan's trim onto it
-     * without rewriting any other meta (enchants, lore, durability).
-     */
-    public ArmorTrimRepository getArmorTrimRepository() {
-        return armorTrimRepository;
-    }
-
-    /**
-     * Operator-set settings (palette / cooldowns / max layers).
-     * Refreshed every 5 min from {@code /api/plugin/settings}.
-     */
-    public SettingsCache getSettingsCache() {
-        return settingsCache;
-    }
-
-    /** Shared panel HTTP client — every call site should use this rather than allocating. */
-    public PanelClient getPanelClient() {
-        return panelClient;
-    }
-
-    /**
-     * Soft reload — re-read config.yml off disk, swap the in-memory
-     * PluginConfig wrapper so callers that hold {@code getPluginConfig()}
-     * (HeartbeatTask, RestApiServer, etc.) start seeing the fresh
-     * values on their next tick. Does NOT disable/enable the plugin,
-     * which avoids the Paper-classloader + shaded-Jetty crash that
-     * {@code /plugman reload ClanCapes} triggers on shutdown.
-     *
-     * Use this whenever config.yml changed and the operator wants the
-     * plugin to pick up the change without restarting the whole
-     * server.
-     */
-    public void refreshPluginConfig() {
-        reloadConfig();
-        pluginConfig = new PluginConfig(getConfig());
-    }
-
-    /**
-     * Force-resolve every PanelClient inner DTO + the model classes
-     * that get loaded lazily by gson.fromJson(...). Without this,
-     * Paper 26.x's PluginClassLoader has been observed to throw
-     * NoClassDefFoundError on the FIRST in-game use of features like
-     * {@code /clan panel} (LeaderTokenResponse) or the legacy
-     * PowerClans path (PowerClanEntry) even though the classes are
-     * physically present in the shaded jar.
-     *
-     * Each entry is wrapped in its own try/catch so one missing class
-     * (during a partial-migration deploy) doesn't abort the rest of
-     * the warm-up. Failures are logged at FINE — operators only need
-     * to see them when debugging classloader pathology.
-     */
-    private void preloadPanelInnerClasses() {
-        String[] classes = {
-                // PanelClient response DTOs (every inner class on the
-                // PanelClient surface that gson.fromJson can hit).
-                "dev.clancapes.panel.PanelClient$RegisterResponse",
-                "dev.clancapes.panel.PanelClient$HeartbeatResponse",
-                "dev.clancapes.panel.PanelClient$ServerStub",
-                "dev.clancapes.panel.PanelClient$ClanListResponse",
-                "dev.clancapes.panel.PanelClient$ClanResponse",
-                "dev.clancapes.panel.PanelClient$BannerJson",
-                "dev.clancapes.panel.PanelClient$BannerListResponse",
-                "dev.clancapes.panel.PanelClient$LeaderTokenResponse",
-                "dev.clancapes.panel.PanelClient$PanelException",
-                // Model records referenced from late-bound code paths.
-                "dev.clancapes.model.BannerPatternSpec",
-                "dev.clancapes.model.ClanBannerRecord",
-                "dev.clancapes.model.ClanCapeRecord",
-                "dev.clancapes.model.PlayerCapeDto",
-                "dev.clancapes.model.PowerClanEntry",
-                // SettingsCache + StatsCache inner snapshots.
-                "dev.clancapes.clan.SettingsCache$Snapshot",
-                "dev.clancapes.clan.StatsCache$Entry",
-                "dev.clancapes.clan.Clan",
-                "dev.clancapes.clan.ClanMember",
-                "dev.clancapes.clan.ClanMember$Role",
-                // ArmorTrimRepository nested types — listener resolves
-                // these on every PlayerArmorChangeEvent.
-                "dev.clancapes.clan.ArmorTrimRepository$Slot",
-                "dev.clancapes.clan.ArmorTrimRepository$TrimSpec",
-        };
-        ClassLoader cl = ClanCapesPlugin.class.getClassLoader();
-        for (String name : classes) {
-            try {
-                Class.forName(name, true, cl);
-            } catch (Throwable ignored) {
-                getLogger().fine("[preload] skipped " + name);
-            }
+            expansion = null;
         }
     }
+
+    private void registerCommands() {
+        PluginCommand clancape = getCommand("clancape");
+        if (clancape != null) clancape.setExecutor(new ClanCapeCommand(this));
+        PluginCommand clans = getCommand("clans");
+        if (clans != null) clans.setExecutor(new ClanCommand(this));
+        PluginCommand clanc = getCommand("clanc");
+        if (clanc != null) clanc.setExecutor(new ClanChatCommand(this));
+    }
+
+    private void buildPanelClient() {
+        String url = getConfig().getString("panel.url", "").trim();
+        String apiKey = getConfig().getString("panel.api-key", "").trim();
+        int timeoutMs = getConfig().getInt("panel.request-timeout-ms", 5000);
+        boolean debug = getConfig().getBoolean("logging.debug", false);
+        panelClient = new PanelClient(url, apiKey, timeoutMs, getLogger(), debug);
+    }
+
+    private void startScheduledTasks() {
+        cancelScheduled();
+        long ticksPerSec = 20L;
+        int clansSec = getConfig().getInt("panel.refresh-clans-sec", 300);
+        int bannersSec = getConfig().getInt("panel.refresh-banners-sec", 300);
+        int trimsSec = getConfig().getInt("panel.refresh-trims-sec", 300);
+        int settingsSec = getConfig().getInt("panel.refresh-settings-sec", 600);
+        int heartbeatSec = getConfig().getInt("panel.heartbeat-sec", 30);
+
+        scheduled.add(new RefreshTask(this, "clans", () -> clanRepository.refresh())
+                .runTaskTimerAsynchronously(this, ticksPerSec * clansSec, ticksPerSec * clansSec));
+        scheduled.add(new RefreshTask(this, "banners", () -> bannerRepository.refresh())
+                .runTaskTimerAsynchronously(this, ticksPerSec * bannersSec, ticksPerSec * bannersSec));
+        scheduled.add(new RefreshTask(this, "trims", () -> armorTrimRepository.refresh())
+                .runTaskTimerAsynchronously(this, ticksPerSec * trimsSec, ticksPerSec * trimsSec));
+        scheduled.add(new RefreshTask(this, "settings", () -> settingsRepository.refresh())
+                .runTaskTimerAsynchronously(this, ticksPerSec * settingsSec, ticksPerSec * settingsSec));
+        scheduled.add(new HeartbeatTask(this)
+                .runTaskTimerAsynchronously(this, ticksPerSec * heartbeatSec, ticksPerSec * heartbeatSec));
+    }
+
+    private void cancelScheduled() {
+        for (BukkitTask t : scheduled) {
+            try { t.cancel(); } catch (Throwable ignore) {}
+        }
+        scheduled.clear();
+    }
+
+    /**
+     * Called by /clancape link and /clancape reload — rebuilds the panel
+     * client with fresh credentials and re-arms the scheduled refresh
+     * tasks so the next tick already uses the new key.
+     */
+    public void reloadFromConfig() {
+        buildPanelClient();
+        // Replace the client reference seen by the repos.
+        clanRepository = new ClanRepository(panelClient, getLogger());
+        armorTrimRepository = new ArmorTrimRepository(panelClient, getLogger());
+        bannerRepository = new BannerRepository(panelClient, getLogger());
+        settingsRepository = new SettingsRepository(panelClient, getLogger());
+        startScheduledTasks();
+        if (panelClient.isConfigured()) {
+            clanRepository.refresh();
+            armorTrimRepository.refresh();
+            bannerRepository.refresh();
+            settingsRepository.refresh();
+        }
+    }
+
+    public PanelClient getPanelClient() { return panelClient; }
+    public ClanRepository getClanRepository() { return clanRepository; }
+    public ArmorTrimRepository getArmorTrimRepository() { return armorTrimRepository; }
+    public BannerRepository getBannerRepository() { return bannerRepository; }
+    public SettingsRepository getSettingsRepository() { return settingsRepository; }
 }

@@ -1,33 +1,26 @@
 package dev.clancapes.command;
 
 import dev.clancapes.ClanCapesPlugin;
-import dev.clancapes.clan.Clan;
-import dev.clancapes.clan.ClanMember;
-import dev.clancapes.clan.ClanRepository;
-import dev.clancapes.util.VanillaColor;
+import dev.clancapes.api.dto.ClanDto;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-import org.jetbrains.annotations.NotNull;
 
-import java.util.Optional;
+import java.util.UUID;
 
 /**
- * Clan-only chat command — {@code /clanc <message>} (aliases: cc, clanchat).
- *
- * Broadcasts the message exclusively to currently-online members of
- * the sender's clan. Unclanned senders get a polite rejection. Format
- * uses legacy &-codes so every client renders consistently without
- * an Adventure component round-trip:
- *
- *   §8[§7CC§8] §8[§fTAG§8] §fSender §8» §7message
- *
- * No persistence — clan chat is fire-and-forget by design, mirroring
- * Discord's "ephemeral" channel semantics for in-game ops chatter.
+ * Clan-only chat. Routes the message to every online member of the
+ * sender's clan, prefixed with the coloured tag. Players outside the
+ * clan see nothing — the panel doesn't persist clan chat either, so
+ * messages are ephemeral by design.
  */
 public final class ClanChatCommand implements CommandExecutor {
+
     private final ClanCapesPlugin plugin;
 
     public ClanChatCommand(ClanCapesPlugin plugin) {
@@ -35,61 +28,48 @@ public final class ClanChatCommand implements CommandExecutor {
     }
 
     @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
-                             @NotNull String label, @NotNull String[] args) {
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage("Players only.");
+            sender.sendMessage(Component.text("Player only.", NamedTextColor.RED));
             return true;
         }
         if (args.length == 0) {
-            player.sendMessage("§7Usage: §f/clanc <message>");
+            player.sendMessage(Component.text("Usage: /clanc <message>", NamedTextColor.RED));
             return true;
         }
-
-        ClanRepository repo = plugin.getClanRepository();
-        if (repo == null) {
-            player.sendMessage("§cClan system not loaded yet, try again in a second.");
+        ClanDto clan = plugin.getClanRepository().getByPlayer(player.getUniqueId()).orElse(null);
+        if (clan == null) {
+            player.sendMessage(Component.text("You are not in a clan.", NamedTextColor.RED));
             return true;
         }
-        Optional<Clan> mine = repo.byPlayer(player.getUniqueId());
-        if (mine.isEmpty()) {
-            player.sendMessage("§cYou're not in a clan.");
-            return true;
-        }
-        Clan clan = mine.get();
+        String message = String.join(" ", args);
+        TextColor color = parseColor(clan.colorHex);
+        Component line = Component.text("[" + clan.tag + "] ", color)
+                .append(Component.text(player.getName() + ": ", NamedTextColor.WHITE))
+                .append(Component.text(message, NamedTextColor.GRAY));
 
-        // Concatenate args back into a single message — Bukkit splits
-        // on whitespace, but we want the original spacing preserved
-        // verbatim (trimmed).
-        String message = String.join(" ", args).trim();
-        if (message.isEmpty()) {
-            player.sendMessage("§7Usage: §f/clanc <message>");
-            return true;
-        }
-
-        // Clan tag rendered in the clan's snapped-vanilla §-code so
-        // every client + chat plugin (LPC, DeluxeChat, TAB) renders it
-        // identically. Hardcoded §f used to ignore clan colour entirely.
-        String tagColor = VanillaColor.legacyPrefix(clan.colorHex());
-        String line = "§8[§7CC§8] §8[" + tagColor + clan.tag() + "§8] §f"
-                + player.getName() + " §8» §7" + message;
-
-        int delivered = 0;
-        for (ClanMember member : clan.members()) {
-            Player recipient = Bukkit.getPlayer(member.playerUuid());
-            if (recipient == null || !recipient.isOnline()) {
-                continue;
+        if (clan.members == null) return true;
+        for (var m : clan.members) {
+            if (m.playerUuid == null) continue;
+            try {
+                UUID uuid = UUID.fromString(m.playerUuid);
+                Player member = Bukkit.getPlayer(uuid);
+                if (member != null && member.isOnline()) {
+                    member.sendMessage(line);
+                }
+            } catch (IllegalArgumentException ignore) {
             }
-            recipient.sendMessage(line);
-            delivered++;
-        }
-
-        if (delivered == 0) {
-            // Sender is the only online member — echo back so they at
-            // least see the message they tried to send.
-            player.sendMessage(line);
-            player.sendMessage("§8(no other clan members online)");
         }
         return true;
+    }
+
+    private static TextColor parseColor(String hex) {
+        if (hex == null || hex.isEmpty()) return NamedTextColor.WHITE;
+        try {
+            String h = hex.startsWith("#") ? hex.substring(1) : hex;
+            return TextColor.color(Integer.parseInt(h, 16));
+        } catch (NumberFormatException e) {
+            return NamedTextColor.WHITE;
+        }
     }
 }

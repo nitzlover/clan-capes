@@ -1,69 +1,43 @@
 # Clan Capes — Paper plugin configuration
-storage:
-  type: sqlite # sqlite | json
-  sqlite-file: plugins/ClanCapes/data.db
-  json-file: plugins/ClanCapes/capes.json
-
-api:
-  enabled: true
-  host: 0.0.0.0
-  port: 8080
-  # Shared secret for web panel / internal calls (header: X-ClanCapes-Token)
-  token: change-me-in-production
-  # Public CDN/base URL returned to clients (no trailing slash)
-  cdn-base-url: http://127.0.0.1:3001/static/capes
-  cors-origins:
-    - http://127.0.0.1:3000
-    - http://localhost:3000
-
-capes:
-  # Local storage for uploaded capes (served via CDN URL above or nginx)
-  storage-dir: plugins/ClanCapes/capes
-  max-file-size-kb: 256
-  allowed-sizes:
-    - width: 64
-      height: 32
-    - width: 128
-      height: 64
-
-integrations:
-  powerclans: true
-  # Optional absolute/relative path to PowerClans data.yml (default: plugins/PowerClans/data.yml)
-  powerclans-data-file: ''
-  placeholderapi: true
-
-webhook:
-  enabled: false
-  url: ''
-  secret: ''
-
-logging:
-  # Verbose logs for REST API hits, PowerClans resolves, cape sync notifications
-  debug: false
-
-# Web panel integration (Phase 1+).
 #
-# 1) Set `panel.url` to the panel's base URL (no trailing slash) BEFORE
-#    running /clancape setup.
-# 2) Run /clancape setup [server-name] — plugin generates a one-time
-#    token, POSTs it to the panel, and prints the plaintext to chat once.
-# 3) Paste the token into the panel's "Register server" modal — panel
-#    issues a long-lived API key.
-# 4) Run /clancape link <ck_live_…> — plugin stores the key under
-#    panel.api-key below. Restart not required.
+# After install:
+#   1) Set panel.url to your panel base URL (no trailing slash).
+#   2) Run `/clancape setup [server-name]` — plugin generates a one-time
+#      token. Paste it into /dashboard/servers "Register server" modal.
+#   3) Panel returns a long-lived API key (ck_live_…). Run
+#      `/clancape link <api-key>` — plugin saves it under panel.api-key.
+#   4) Restart not required. `/clancape reload` re-reads config.
 #
-# Leaving panel.url empty disables panel sync entirely; the plugin keeps
-# working with its local SQLite storage and the embedded REST API only.
+# Leaving panel.url empty disables all panel sync (offline-only mode).
+
 panel:
   url: ''
   server-name: ''
   api-key: ''
+  # Polling intervals in seconds. Defaults keep network load minimal.
+  refresh-clans-sec: 300        # 5 min
+  refresh-banners-sec: 300
+  refresh-trims-sec: 300
+  refresh-settings-sec: 600     # 10 min
+  heartbeat-sec: 30
+  # HTTP timeout per request.
+  request-timeout-ms: 5000
+
+leader-panel:
+  # TTL of the /clan panel single-use token in seconds.
+  token-ttl-sec: 600
 
 messages:
   prefix: '&8[&6ClanCapes&8] &7'
   no-clan: '&cYou are not in a clan.'
-  cape-set: '&aClan cape updated.'
-  cape-removed: '&eClan cape removed.'
-  cape-reloaded: '&aCape cache reloaded.'
-  invalid-url: '&cInvalid cape URL.'
   no-permission: '&cNo permission.'
+  panel-not-linked: '&cPanel not linked. Run /clancape setup first.'
+  panel-link-success: '&aPanel linked successfully.'
+  cape-reloaded: '&aPlugin reloaded.'
+  invalid-args: '&cUsage: %usage%'
+  clan-tag-invalid: '&cClan tag must be 2-6 uppercase letters/digits.'
+  clan-name-invalid: '&cClan name must be 1-32 characters.'
+
+logging:
+  # Verbose log lines: every HTTP call, every cache refresh, every kill ingest.
+  debug: false
