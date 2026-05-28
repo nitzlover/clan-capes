@@ -71,19 +71,30 @@ export function validateEventConfig(
   if (typeof b.type !== 'string' || !EVENT_TYPES.includes(b.type as EventTypeName)) {
     return { ok: false, error: `type must be one of: ${EVENT_TYPES.join(', ')}` };
   }
-  const intInRange = (v: unknown, lo: number, hi: number) =>
+  // Type-predicate form so a passing check narrows the value down
+  // to `number` for the constructed DTO. Without `is number` the
+  // tsc strict checker leaves the field typed `unknown` and refuses
+  // the assignment in the return literal.
+  const intInRange = (
+    v: unknown,
+    lo: number,
+    hi: number,
+  ): v is number =>
     typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi;
 
   if (typeof b.enabled !== 'boolean') {
     return { ok: false, error: 'enabled must be a boolean' };
   }
-  if (!intInRange(b.intervalMinutes, 5, 7 * 24 * 60)) {
+  const intervalMinutes = b.intervalMinutes;
+  if (!intInRange(intervalMinutes, 5, 7 * 24 * 60)) {
     return { ok: false, error: 'intervalMinutes must be 5..10080' };
   }
-  if (!intInRange(b.durationMinutes, 1, 12 * 60)) {
+  const durationMinutes = b.durationMinutes;
+  if (!intInRange(durationMinutes, 1, 12 * 60)) {
     return { ok: false, error: 'durationMinutes must be 1..720' };
   }
-  if (!intInRange(b.radiusBlocks, 10, 5_000)) {
+  const radiusBlocks = b.radiusBlocks;
+  if (!intInRange(radiusBlocks, 10, 5_000)) {
     return { ok: false, error: 'radiusBlocks must be 10..5000' };
   }
   const payload =
@@ -96,9 +107,9 @@ export function validateEventConfig(
     value: {
       type: b.type as EventTypeName,
       enabled: b.enabled,
-      intervalMinutes: b.intervalMinutes,
-      durationMinutes: b.durationMinutes,
-      radiusBlocks: b.radiusBlocks,
+      intervalMinutes,
+      durationMinutes,
+      radiusBlocks,
       payload,
     },
   };
