@@ -4,9 +4,11 @@ import dev.clancapes.api.PanelClient;
 import dev.clancapes.command.ClanCapeCommand;
 import dev.clancapes.command.ClanChatCommand;
 import dev.clancapes.command.ClanCommand;
+import dev.clancapes.listener.FriendlyFireListener;
 import dev.clancapes.listener.PlayerDeathListener;
 import dev.clancapes.listener.PlayerJoinListener;
 import dev.clancapes.placeholder.ClanCapesExpansion;
+import dev.clancapes.repo.AnnouncementRepository;
 import dev.clancapes.repo.ArmorTrimRepository;
 import dev.clancapes.repo.BannerRepository;
 import dev.clancapes.repo.ClanRepository;
@@ -28,6 +30,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
     private ArmorTrimRepository armorTrimRepository;
     private BannerRepository bannerRepository;
     private SettingsRepository settingsRepository;
+    private AnnouncementRepository announcementRepository;
     private ClanCapesExpansion expansion;
     private final List<BukkitTask> scheduled = new ArrayList<>();
 
@@ -39,10 +42,12 @@ public final class ClanCapesPlugin extends JavaPlugin {
         armorTrimRepository = new ArmorTrimRepository(panelClient, getLogger());
         bannerRepository = new BannerRepository(panelClient, getLogger());
         settingsRepository = new SettingsRepository(panelClient, getLogger());
+        announcementRepository = new AnnouncementRepository(panelClient, getLogger());
 
         registerCommands();
         Bukkit.getPluginManager().registerEvents(new PlayerJoinListener(this), this);
         Bukkit.getPluginManager().registerEvents(new PlayerDeathListener(this), this);
+        Bukkit.getPluginManager().registerEvents(new FriendlyFireListener(this), this);
 
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             expansion = new ClanCapesExpansion(this);
@@ -62,6 +67,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
             armorTrimRepository.refresh();
             bannerRepository.refresh();
             settingsRepository.refresh();
+            announcementRepository.refresh();
         }
     }
 
@@ -101,6 +107,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
         int bannersSec = getConfig().getInt("panel.refresh-banners-sec", 300);
         int trimsSec = getConfig().getInt("panel.refresh-trims-sec", 300);
         int settingsSec = getConfig().getInt("panel.refresh-settings-sec", 600);
+        int announcementsSec = getConfig().getInt("panel.refresh-announcements-sec", 300);
         int heartbeatSec = getConfig().getInt("panel.heartbeat-sec", 30);
 
         scheduled.add(new RefreshTask(this, "clans", () -> clanRepository.refresh())
@@ -111,6 +118,8 @@ public final class ClanCapesPlugin extends JavaPlugin {
                 .runTaskTimerAsynchronously(this, ticksPerSec * trimsSec, ticksPerSec * trimsSec));
         scheduled.add(new RefreshTask(this, "settings", () -> settingsRepository.refresh())
                 .runTaskTimerAsynchronously(this, ticksPerSec * settingsSec, ticksPerSec * settingsSec));
+        scheduled.add(new RefreshTask(this, "announcements", () -> announcementRepository.refresh())
+                .runTaskTimerAsynchronously(this, ticksPerSec * announcementsSec, ticksPerSec * announcementsSec));
         scheduled.add(new HeartbeatTask(this)
                 .runTaskTimerAsynchronously(this, ticksPerSec * heartbeatSec, ticksPerSec * heartbeatSec));
     }
@@ -134,12 +143,14 @@ public final class ClanCapesPlugin extends JavaPlugin {
         armorTrimRepository = new ArmorTrimRepository(panelClient, getLogger());
         bannerRepository = new BannerRepository(panelClient, getLogger());
         settingsRepository = new SettingsRepository(panelClient, getLogger());
+        announcementRepository = new AnnouncementRepository(panelClient, getLogger());
         startScheduledTasks();
         if (panelClient.isConfigured()) {
             clanRepository.refresh();
             armorTrimRepository.refresh();
             bannerRepository.refresh();
             settingsRepository.refresh();
+            announcementRepository.refresh();
         }
     }
 
@@ -148,4 +159,5 @@ public final class ClanCapesPlugin extends JavaPlugin {
     public ArmorTrimRepository getArmorTrimRepository() { return armorTrimRepository; }
     public BannerRepository getBannerRepository() { return bannerRepository; }
     public SettingsRepository getSettingsRepository() { return settingsRepository; }
+    public AnnouncementRepository getAnnouncementRepository() { return announcementRepository; }
 }

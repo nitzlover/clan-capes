@@ -3,6 +3,7 @@ package dev.clancapes.api;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
+import dev.clancapes.api.dto.AnnouncementDto;
 import dev.clancapes.api.dto.ApiError;
 import dev.clancapes.api.dto.BannerDto;
 import dev.clancapes.api.dto.ClanDto;
@@ -125,6 +126,14 @@ public final class PanelClient {
         return sendJson(req, JsonObject.class).thenApply(json -> {
             java.lang.reflect.Type listType = new TypeToken<List<TrimDto>>(){}.getType();
             return gson.fromJson(json.get("trims"), listType);
+        });
+    }
+
+    public CompletableFuture<List<AnnouncementDto>> listAnnouncements() {
+        HttpRequest req = requestBuilder("/api/plugin/announcements").GET().build();
+        return sendJson(req, JsonObject.class).thenApply(json -> {
+            java.lang.reflect.Type listType = new TypeToken<List<AnnouncementDto>>(){}.getType();
+            return gson.fromJson(json.get("announcements"), listType);
         });
     }
 
