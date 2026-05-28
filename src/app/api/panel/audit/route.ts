@@ -12,11 +12,17 @@
  *   ?target=<substring>  ilike on target (clan tag, file name, …)
  *   ?since=<ISO>         ts >= since
  *   ?until=<ISO>         ts <= until
- *   ?limit=<n>           default 200, hard cap 1000
+ *   ?limit=<n>           default 50 (page size), hard cap 1000
+ *   ?offset=<n>          default 0 — pagination cursor; combine with
+ *                        ?limit= to walk older pages
+ *
+ * Response shape includes a `total` count (matching the filter set,
+ * NOT the page) so the UI can render "X / Y" + a working "next is
+ * disabled when offset+limit >= total" check.
  */
 
 import { NextResponse } from 'next/server';
-import { and, desc, eq, gte, ilike, lte, type SQL } from 'drizzle-orm';
+import { and, count, desc, eq, gte, ilike, lte, type SQL } from 'drizzle-orm';
 import { requireAuth } from '@/lib/server/auth';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import { readAudit } from '@/lib/server/storage';
@@ -25,7 +31,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const MAX_LIMIT = 1000;
-const DEFAULT_LIMIT = 200;
+// Smaller default than before — pagination UI now lets the operator
+// walk older pages instead of dumping 200 rows on first paint.
+const DEFAULT_LIMIT = 50;
 
 function parseDate(raw: string | null): Date | null {
   if (!raw) return null;
@@ -49,6 +57,9 @@ export async function GET(req: Request) {
     Number.isInteger(rawLimit) && rawLimit > 0
       ? Math.min(rawLimit, MAX_LIMIT)
       : DEFAULT_LIMIT;
+  const rawOffset = Number(url.searchParams.get('offset'));
+  const offset =
+    Number.isInteger(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
 
   if (dbEnabled()) {
     const db = getDb();
@@ -61,20 +72,30 @@ export async function GET(req: Request) {
 
     const where = conds.length > 0 ? and(...conds) : undefined;
 
-    const rows = await db
-      .select({
-        id: schema.audit.id,
-        ts: schema.audit.ts,
-        serverId: schema.audit.serverId,
-        actor: schema.audit.actor,
-        action: schema.audit.action,
-        target: schema.audit.target,
-        payload: schema.audit.payload,
-      })
-      .from(schema.audit)
-      .where(where ?? undefined)
-      .orderBy(desc(schema.audit.ts))
-      .limit(limit);
+    // Total count + page rows in parallel — `total` powers the
+    // "X of Y" indicator and disables Next on the last page.
+    const [totalRow, rows] = await Promise.all([
+      db
+        .select({ n: count() })
+        .from(schema.audit)
+        .where(where ?? undefined)
+        .then((r) => r[0]),
+      db
+        .select({
+          id: schema.audit.id,
+          ts: schema.audit.ts,
+          serverId: schema.audit.serverId,
+          actor: schema.audit.actor,
+          action: schema.audit.action,
+          target: schema.audit.target,
+          payload: schema.audit.payload,
+        })
+        .from(schema.audit)
+        .where(where ?? undefined)
+        .orderBy(desc(schema.audit.ts))
+        .limit(limit)
+        .offset(offset),
+    ]);
 
     // Distinct actor / action values across the (filtered) result —
     // small lists the UI uses to populate filter dropdowns without
@@ -94,17 +115,25 @@ export async function GET(req: Request) {
         target: r.target,
         payload: r.payload,
       })),
+      total: totalRow.n,
+      limit,
+      offset,
       knownActors,
       knownActions,
     });
   }
 
-  // Legacy file fallback. No filtering on this path — old deploys can
-  // ship until they migrate to DB.
-  const entries = await readAudit(limit);
+  // Legacy file fallback. Reads the tail once + slices in-memory so
+  // pagination still works without a structured store.
+  const all = await readAudit(MAX_LIMIT);
+  const total = all.length;
+  const entries = all.slice(offset, offset + limit);
   return NextResponse.json({
     source: 'file',
     entries,
+    total,
+    limit,
+    offset,
     knownActors: [],
     knownActions: [],
   });

@@ -19,9 +19,14 @@ type AuditEntry = {
 type AuditResponse = {
   source: 'db' | 'file';
   entries: AuditEntry[];
+  total: number;
+  limit: number;
+  offset: number;
   knownActors: string[];
   knownActions: string[];
 };
+
+const PAGE_SIZE = 50;
 
 /**
  * Audit route — full operator trail with filtering.
@@ -45,6 +50,12 @@ export default function AuditPage() {
   const [target, setTarget] = useState('');
   const [since, setSince] = useState('');
   const [until, setUntil] = useState('');
+  // Page cursor — resets to 0 whenever any filter changes so a tighter
+  // query never strands the operator on an empty deep page.
+  const [offset, setOffset] = useState(0);
+  useEffect(() => {
+    setOffset(0);
+  }, [actor, action, target, since, until]);
 
   const buildQuery = useCallback(() => {
     const qs = new URLSearchParams();
@@ -53,9 +64,10 @@ export default function AuditPage() {
     if (target) qs.set('target', target);
     if (since) qs.set('since', new Date(since).toISOString());
     if (until) qs.set('until', new Date(until).toISOString());
-    const s = qs.toString();
-    return s ? `/panel/audit?${s}` : '/panel/audit';
-  }, [actor, action, target, since, until]);
+    qs.set('limit', String(PAGE_SIZE));
+    qs.set('offset', String(offset));
+    return `/panel/audit?${qs.toString()}`;
+  }, [actor, action, target, since, until, offset]);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,7 +135,9 @@ export default function AuditPage() {
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
             receipt_long
           </span>
-          {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
+          {data?.total != null
+            ? `${entries.length} of ${data.total}`
+            : `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`}
         </span>
       </div>
 
@@ -213,6 +227,15 @@ export default function AuditPage() {
           </span>
         </div>
 
+        <PaginationBar
+          total={data?.total ?? 0}
+          offset={offset}
+          pageSize={PAGE_SIZE}
+          loading={loading}
+          onPrev={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
+          onNext={() => setOffset((o) => o + PAGE_SIZE)}
+        />
+
         <div className="max-h-[68vh] overflow-y-auto p-2">
           {loading ? (
             <p className="px-4 py-6 text-sm text-[var(--text-mute)]">Loading…</p>
@@ -282,5 +305,59 @@ function FilterControl({
       <span className="label-mono text-[var(--text-faint)]">{label}</span>
       {children}
     </label>
+  );
+}
+
+/**
+ * Compact prev / next cursor strip between the filter row and the
+ * entry list. Hidden when the total fits on one page so a small
+ * deploy doesn't see pagination chrome for nothing. Disabled-state
+ * buttons keep their visible shape so the strip's height doesn't
+ * jitter as the user pages.
+ */
+function PaginationBar({
+  total,
+  offset,
+  pageSize,
+  loading,
+  onPrev,
+  onNext,
+}: {
+  total: number;
+  offset: number;
+  pageSize: number;
+  loading: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  if (total <= pageSize) return null;
+  const page = Math.floor(offset / pageSize) + 1;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const atFirst = offset <= 0;
+  const atLast = offset + pageSize >= total;
+  return (
+    <div className="flex items-center justify-between border-b border-[var(--rule)] bg-[var(--bg-sink)] px-6 py-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+      <span>
+        Page {page} / {pageCount}
+      </span>
+      <span className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onPrev}
+          disabled={atFirst || loading}
+          className="border border-[var(--rule-strong)] px-2 py-1 transition-colors hover:border-white hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          ◂ Prev
+        </button>
+        <button
+          type="button"
+          onClick={onNext}
+          disabled={atLast || loading}
+          className="border border-[var(--rule-strong)] px-2 py-1 transition-colors hover:border-white hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Next ▸
+        </button>
+      </span>
+    </div>
   );
 }
