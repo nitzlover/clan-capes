@@ -618,6 +618,8 @@ function ClanEditor({
       </ul>
 
       <AddMemberForm clanTag={clan.tag} qs={qs} onAdded={onChange} />
+
+      <ActivityFeed clanTag={clan.tag} />
     </div>
   );
 }
@@ -997,6 +999,149 @@ function FriendlyFireSwitch({
         {value ? 'On — PvP allowed inside clan' : 'Off — clan damage blocked'}
       </button>
     </label>
+  );
+}
+
+/**
+ * Recent operator activity for one clan — last ~10 audit rows where
+ * `target = clan.tag`. Collapsed by default so an operator who just
+ * wants to rename a clan doesn't pay the fetch; expanding lazily
+ * loads the feed.
+ *
+ * Each row mixes the action keyword (CLAN_EDIT, BANNER_SET,
+ * ARMOR_TRIM_SET, ANNOUNCEMENT_EDIT, etc.) with the actor and a
+ * relative time stamp. No filter UI — that's what /dashboard/audit
+ * is for; this is the inline shortcut.
+ */
+type AuditRow = {
+  id?: string;
+  timestamp: string;
+  actor?: string;
+  action?: string;
+  target?: string | null;
+  payload?: unknown;
+  raw?: string;
+};
+
+const ACTION_ICONS: Record<string, string> = {
+  CLAN_CREATE: '+ ',
+  CLAN_EDIT: '~ ',
+  CLAN_DISBAND: '× ',
+  BANNER_SET: '⚑ ',
+  BANNER_CLEAR: '⚑ ',
+  CAPE_UPLOAD: '↑ ',
+  CAPE_DELETE: '× ',
+  ARMOR_TRIM_SET: '◆ ',
+  ARMOR_TRIM_CLEAR: '× ',
+  ANNOUNCEMENT_EDIT: '✎ ',
+  ANNOUNCEMENT_CLEAR: '× ',
+  MEMBER_JOIN: '+ ',
+  MEMBER_LEAVE: '− ',
+  MEMBER_KICK: '× ',
+  MEMBER_ROLE: '~ ',
+  TRANSFER: '⇄ ',
+};
+
+function relativeTime(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return iso;
+  const diff = Date.now() - t;
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 48) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+function ActivityFeed({ clanTag }: { clanTag: string }) {
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<AuditRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!open || loaded) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api<{ entries: AuditRow[] }>(
+          `/panel/audit?target=${encodeURIComponent(clanTag)}&limit=10`,
+        );
+        if (cancelled) return;
+        setRows(res.entries);
+        setLoaded(true);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) return;
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, loaded, clanTag]);
+
+  return (
+    <div className="mt-6">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="mb-2 flex w-full items-center justify-between border-b border-[var(--rule)] pb-2 text-left transition-colors hover:border-[var(--rule-strong)]"
+        aria-expanded={open}
+      >
+        <span className="label-mono">Activity</span>
+        <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-mute)]">
+          {open ? '▾ hide' : '▸ show'}
+        </span>
+      </button>
+      {open && (
+        <div className="space-y-2">
+          {!loaded && !error && (
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+              Loading…
+            </p>
+          )}
+          {error && (
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-white">
+              ! {error}
+            </p>
+          )}
+          {loaded && rows.length === 0 && (
+            <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+              No activity for {clanTag}.
+            </p>
+          )}
+          {loaded && rows.length > 0 && (
+            <ul className="border-t border-[var(--rule)]">
+              {rows.map((r, i) => {
+                const icon = r.action ? ACTION_ICONS[r.action] ?? '· ' : '· ';
+                return (
+                  <li
+                    key={r.id ?? i}
+                    className="grid grid-cols-[auto_1fr_auto] items-baseline gap-3 border-b border-[var(--rule)] py-2 font-mono text-[11px]"
+                  >
+                    <span className="text-[var(--text-mute)]">{icon}</span>
+                    <span className="truncate text-[var(--text-soft)]">
+                      <span className="text-white">{r.action ?? 'EVENT'}</span>
+                      {r.actor ? ` · ${r.actor}` : ''}
+                      {r.raw ? ` · ${r.raw}` : ''}
+                    </span>
+                    <span
+                      className="text-[var(--text-faint)] tabular"
+                      title={new Date(r.timestamp).toLocaleString()}
+                    >
+                      {relativeTime(r.timestamp)}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

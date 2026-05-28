@@ -2,22 +2,37 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { api, type ClanRow, UnauthorizedError } from '@/lib/api';
+import { api, UnauthorizedError } from '@/lib/api';
 import { PluginStatus } from '@/components/PluginStatus';
 
 type AuditEntry = { timestamp: string; raw: string };
 
+/** Counts shape returned by /api/panel/overview. */
+type Overview = {
+  servers: number;
+  clans: number;
+  members: number;
+  killsMtd: number;
+  capesAssigned: number;
+};
+
 /**
  * Overview — the top of the brutalist shell.
  *
- * Cards summarise how many clans are registered, how many have capes
- * applied, and the size of the audit trail. Below the cards a 5-line
- * audit preview hints at recent activity; clicking through goes to the
+ * Five-card KPI grid sourced from /api/panel/overview (single
+ * round-trip): server count, active clan count, member count,
+ * kills-this-month, capes assigned. Below the grid: a 6-line audit
+ * preview + quick-links jump panel. Clicking through goes to the
  * full audit route. No editing happens here — this is a one-glance
  * status surface.
+ *
+ * Per the Wave 4 backlog item, cards are simple <div>s — no
+ * sparkline lib, no recharts. The "live" feeling comes from the
+ * counts themselves moving when the operator refreshes, not from
+ * animated charts.
  */
 export default function DashboardOverviewPage() {
-  const [clans, setClans] = useState<ClanRow[]>([]);
+  const [overview, setOverview] = useState<Overview | null>(null);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -25,13 +40,13 @@ export default function DashboardOverviewPage() {
     let cancelled = false;
     (async () => {
       try {
-        const c = await api<{ clans: ClanRow[] }>('/panel/clans');
-        if (!cancelled) setClans(c.clans);
+        const o = await api<Overview>('/panel/overview');
+        if (!cancelled) setOverview(o);
       } catch (e) {
         if (e instanceof UnauthorizedError) return;
       }
       try {
-        const a = await api<{ entries: AuditEntry[] }>('/panel/audit');
+        const a = await api<{ entries: AuditEntry[] }>('/panel/audit?limit=6');
         if (!cancelled) setAudit(a.entries);
       } catch (e) {
         if (e instanceof UnauthorizedError) return;
@@ -43,15 +58,13 @@ export default function DashboardOverviewPage() {
     };
   }, []);
 
-  const withCape = clans.filter((c) => c.capeUrl).length;
-
   return (
     <div>
       <div className="page-band">
         <div>
           <h1 className="page-title">Overview</h1>
           <p className="page-subtitle">
-            Live counters across clans, capes, and the operator trail.
+            Live counters across servers, clans, members, kills, and capes.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -67,26 +80,40 @@ export default function DashboardOverviewPage() {
 
       {loading ? (
         <p className="eyebrow">Loading…</p>
+      ) : !overview ? (
+        <p className="eyebrow">Overview unavailable.</p>
       ) : (
         <>
-          <div className="grid gap-6 md:grid-cols-3">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            <MetricCard
+              label="Servers"
+              value={overview.servers}
+              icon="dns"
+              hint="Registered"
+            />
             <MetricCard
               label="Clans"
-              value={clans.length}
+              value={overview.clans}
               icon="groups"
-              hint="PowerClans roster"
+              hint="Active"
             />
             <MetricCard
-              label="With cape"
-              value={withCape}
+              label="Members"
+              value={overview.members}
+              icon="person"
+              hint="Across all clans"
+            />
+            <MetricCard
+              label="Kills MTD"
+              value={overview.killsMtd}
+              icon="bolt"
+              hint="Month to date"
+            />
+            <MetricCard
+              label="Capes"
+              value={overview.capesAssigned}
               icon="image"
-              hint={`${clans.length - withCape} pending`}
-            />
-            <MetricCard
-              label="Audit lines"
-              value={audit.length}
-              icon="receipt_long"
-              hint="Operator log"
+              hint={`${overview.clans - overview.capesAssigned} pending`}
             />
           </div>
 
