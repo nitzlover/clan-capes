@@ -98,8 +98,8 @@ export default function EventsConfigPage() {
         <div>
           <h1 className="page-title">Events</h1>
           <p className="page-subtitle">
-            Scheduler config for the in-game PvP events. History + active
-            monitor land here once the plugin&apos;s EventScheduler ships.
+            Scheduler config, live monitor, history, and per-clan
+            leaderboard for the in-game PvP events.
           </p>
         </div>
         <span className="meta-tag">
@@ -109,6 +109,8 @@ export default function EventsConfigPage() {
           {configs.length} types
         </span>
       </div>
+
+      <ActiveMonitor />
 
       {loading ? (
         <p className="eyebrow">Loading…</p>
@@ -124,6 +126,7 @@ export default function EventsConfigPage() {
         </div>
       )}
 
+      <EventLeaderboard />
       <EventHistory />
     </div>
   );
@@ -140,6 +143,140 @@ type EventRun = {
   participantCount: number;
   killCount: number;
 };
+
+const ACTIVE_STATUSES = new Set(['pending', 'prep', 'landing', 'finale', 'active', 'collect']);
+
+/**
+ * Live monitor for an in-flight event. Polls /panel/events every 5 s
+ * and surfaces any run whose status isn't ended/cancelled, with a
+ * pulsing marker. Hides itself when nothing is running so the page
+ * stays quiet between events.
+ */
+function ActiveMonitor() {
+  const [active, setActive] = useState<EventRun[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function poll() {
+      try {
+        const r = await api<{ events: EventRun[] }>('/panel/events?limit=10');
+        if (cancelled) return;
+        setActive(r.events.filter((e) => ACTIVE_STATUSES.has(e.status)));
+      } catch {
+        /* transient — keep prior state */
+      }
+    }
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  if (active.length === 0) return null;
+
+  return (
+    <section className="brutal-card mb-6 border-white p-5">
+      <div className="mb-3 flex items-center gap-2">
+        <span
+          aria-hidden
+          className="inline-block h-2 w-2 rounded-full bg-[#5fd068]"
+          style={{ animation: 'pulse-dot-on 1s ease-out infinite' }}
+        />
+        <p className="label-mono text-white">Live now</p>
+      </div>
+      <ul className="space-y-2">
+        {active.map((e) => (
+          <li
+            key={e.id}
+            className="flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-[11px]"
+          >
+            <span className="uppercase text-white">{e.type}</span>
+            <span className="text-[var(--text-soft)]">{e.status}</span>
+            <span className="text-[var(--text-faint)]">
+              zone {e.zone.x}, {e.zone.z} · r{e.zone.radius}
+            </span>
+            <span className="ml-auto text-[var(--text-soft)]">
+              {e.participantCount}p · {e.killCount}k
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+type LeaderRow = {
+  clanId: number;
+  tag: string;
+  wins: number;
+  events: number;
+  kills: number;
+  deaths: number;
+  kd: number;
+};
+
+/**
+ * Per-clan event leaderboard — wins, events entered, kills/deaths,
+ * K/D. Single fetch on mount; ordered server-side by wins then kills.
+ */
+function EventLeaderboard() {
+  const [rows, setRows] = useState<LeaderRow[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await api<{ rows: LeaderRow[] }>('/panel/events/leaderboard?limit=25');
+        if (!cancelled) setRows(r.rows);
+      } catch {
+        if (!cancelled) setRows([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (rows !== null && rows.length === 0) return null;
+
+  return (
+    <section className="brutal-card mt-10 p-6">
+      <p className="label-mono mb-4">Clan leaderboard</p>
+      {rows === null ? (
+        <p className="text-sm text-[var(--text-mute)]">Loading…</p>
+      ) : (
+        <ul className="font-mono text-[11px]">
+          <li className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 border-b border-[var(--rule-strong)] pb-2 text-[var(--text-faint)] uppercase tracking-[0.18em]">
+            <span>#</span>
+            <span>Clan</span>
+            <span>Wins</span>
+            <span>Events</span>
+            <span>K/D</span>
+          </li>
+          {rows.map((r, i) => (
+            <li
+              key={r.clanId}
+              className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 border-b border-[var(--rule)] py-2"
+            >
+              <span className="text-[var(--text-faint)]">{i + 1}</span>
+              <span className="text-white">{r.tag}</span>
+              <span className="text-[var(--text-soft)]">{r.wins}</span>
+              <span className="text-[var(--text-mute)]">{r.events}</span>
+              <span
+                className="text-[var(--text-soft)]"
+                title={`${r.kills} K · ${r.deaths} D`}
+              >
+                {r.kd.toFixed(2)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 /**
  * Read-only history of past + active event runs, newest first. Polls
