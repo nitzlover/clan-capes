@@ -9,4 +9,19 @@ package dev.clancapes.events;
  */
 public interface RunningEvent {
     boolean isFinished();
+
+    /**
+     * Force-stop the event (operator-initiated abort via /clancape
+     * event stop). Implementations must idempotently tear down the
+     * tick task, barrier, scoreboard, and listener registration and
+     * flip {@link #isFinished()} to true so the scheduler reaps it
+     * on the next tick.
+     */
+    void cancel();
+
+    /** Human-readable type ("airdrop" / "koth") for /clancape event status. */
+    String type();
+
+    /** Current stage label for /clancape event status. */
+    String stageLabel();
 }

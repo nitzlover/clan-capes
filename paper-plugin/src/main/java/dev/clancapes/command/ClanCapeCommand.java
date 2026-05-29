@@ -49,7 +49,8 @@ public final class ClanCapeCommand implements CommandExecutor {
             return true;
         }
         if (args.length == 0) {
-            sender.sendMessage(Component.text("Usage: /clancape <setup|link|reload>", NamedTextColor.RED));
+            sender.sendMessage(Component.text(
+                    "Usage: /clancape <setup|link|reload|event|debug>", NamedTextColor.RED));
             return true;
         }
         String sub = args[0].toLowerCase();
@@ -57,12 +58,113 @@ public final class ClanCapeCommand implements CommandExecutor {
             case "setup" -> doSetup(sender, args);
             case "link" -> doLink(sender, args);
             case "reload" -> doReload(sender);
+            case "event" -> doEvent(sender, args);
+            case "debug" -> doDebug(sender, args);
             default -> {
-                sender.sendMessage(Component.text("Unknown subcommand. Use setup, link, or reload.",
+                sender.sendMessage(Component.text(
+                        "Unknown subcommand. Use setup, link, reload, event, or debug.",
                         NamedTextColor.RED));
                 yield true;
             }
         };
+    }
+
+    /**
+     * Operator-only event harness:
+     *   /clancape event start <airdrop|koth|random>
+     *   /clancape event stop
+     *   /clancape event status
+     *   /clancape event reset
+     *
+     * start bypasses cooldown + threshold guards (forced via
+     * EventScheduler.forceStart). stop calls cancel on the active
+     * event. reset clears the lastFired map so the next regular
+     * tick can fire. status prints active state + per-type cooldown.
+     */
+    private boolean doEvent(CommandSender sender, String[] args) {
+        var sched = plugin.getEventScheduler();
+        if (sched == null) {
+            sender.sendMessage(Component.text("Event scheduler not initialised.", NamedTextColor.RED));
+            return true;
+        }
+        if (args.length < 2) {
+            sender.sendMessage(Component.text(
+                    "Usage: /clancape event <start <airdrop|koth|random>|stop|status|reset>",
+                    NamedTextColor.RED));
+            return true;
+        }
+        String action = args[1].toLowerCase();
+        switch (action) {
+            case "start" -> {
+                if (args.length < 3) {
+                    sender.sendMessage(Component.text(
+                            "Usage: /clancape event start <airdrop|koth|random>",
+                            NamedTextColor.RED));
+                    return true;
+                }
+                String msg = sched.forceStart(args[2]);
+                sender.sendMessage(Component.text("[event] " + msg, NamedTextColor.GREEN));
+            }
+            case "stop" -> {
+                String msg = sched.stopActive();
+                sender.sendMessage(Component.text("[event] " + msg, NamedTextColor.GOLD));
+            }
+            case "status" -> {
+                String snap = sched.describeStatus();
+                for (String line : snap.split("\n")) {
+                    sender.sendMessage(Component.text(line, NamedTextColor.GRAY));
+                }
+            }
+            case "reset" -> {
+                String msg = sched.clearCooldowns();
+                sender.sendMessage(Component.text("[event] " + msg, NamedTextColor.GOLD));
+            }
+            default -> sender.sendMessage(Component.text(
+                    "Unknown event action '" + action + "'. Use start, stop, status, or reset.",
+                    NamedTextColor.RED));
+        }
+        return true;
+    }
+
+    /**
+     * Toggle the logging.debug flag at runtime and persist it.
+     *   /clancape debug on|off|status
+     */
+    private boolean doDebug(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(Component.text(
+                    "Usage: /clancape debug <on|off|status>", NamedTextColor.RED));
+            return true;
+        }
+        String mode = args[1].toLowerCase();
+        switch (mode) {
+            case "on" -> {
+                plugin.getConfig().set("logging.debug", true);
+                plugin.saveConfig();
+                plugin.reloadFromConfig();
+                sender.sendMessage(Component.text(
+                        "[debug] ON — verbose HTTP/refresh/event logs enabled.",
+                        NamedTextColor.GREEN));
+            }
+            case "off" -> {
+                plugin.getConfig().set("logging.debug", false);
+                plugin.saveConfig();
+                plugin.reloadFromConfig();
+                sender.sendMessage(Component.text(
+                        "[debug] OFF — back to warnings only.",
+                        NamedTextColor.GOLD));
+            }
+            case "status" -> {
+                boolean on = plugin.getConfig().getBoolean("logging.debug", false);
+                sender.sendMessage(Component.text(
+                        "[debug] currently " + (on ? "ON" : "OFF"),
+                        NamedTextColor.GRAY));
+            }
+            default -> sender.sendMessage(Component.text(
+                    "Unknown debug mode '" + mode + "'. Use on, off, or status.",
+                    NamedTextColor.RED));
+        }
+        return true;
     }
 
     private boolean doSetup(CommandSender sender, String[] args) {

@@ -218,4 +218,5 @@ public final class ClanCapesPlugin extends JavaPlugin {
     public SettingsRepository getSettingsRepository() { return settingsRepository; }
     public AnnouncementRepository getAnnouncementRepository() { return announcementRepository; }
     public EventConfigRepository getEventConfigRepository() { return eventConfigRepository; }
+    public EventScheduler getEventScheduler() { return eventScheduler; }
 }

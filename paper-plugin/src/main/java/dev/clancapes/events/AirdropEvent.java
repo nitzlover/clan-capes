@@ -78,28 +78,49 @@ public final class AirdropEvent implements Listener, RunningEvent {
         this.scoreboard = new EventScoreboard();
 
         // Stage durations from payload, falling back to a 20/10/5 split
-        // of the events.txt defaults when a knob is missing.
+        // of the events.txt defaults when a knob is missing. The test
+        // block in config.yml can override the whole timing budget into
+        // a 15s/30s/15s run for an operator dry-run; see Plugin Config.
         JsonObject p = cfg.payload;
-        this.prepSec = minutesToSec(p, "prepMinutes", 20);
-        this.landingSec = minutesToSec(p, "landingMinutes", 10);
-        this.collectSec = minutesToSec(p, "lootCollectionMinutes", 5);
+        boolean testFast = plugin.getConfig().getBoolean("test.enabled", false)
+                && plugin.getConfig().getBoolean("test.fast-mode", false);
+        this.prepSec = testFast
+                ? plugin.getConfig().getInt("test.prep-seconds", 15)
+                : minutesToSec(p, "prepMinutes", 20);
+        this.landingSec = testFast
+                ? plugin.getConfig().getInt("test.active-seconds", 60)
+                : minutesToSec(p, "landingMinutes", 10);
+        this.collectSec = testFast
+                ? plugin.getConfig().getInt("test.collect-seconds", 15)
+                : minutesToSec(p, "lootCollectionMinutes", 5);
         int reentrySec = (p != null && p.has("crashCommebackSeconds"))
                 ? p.get("crashCommebackSeconds").getAsInt() : 30;
         this.reentryMs = reentrySec * 1000;
 
         // Pick the zone centre: random point within spawnRadius of
         // world spawn, then the contest circle of cfg.radiusBlocks.
+        // test.zone-radius-blocks > 0 overrides the contest radius
+        // (tiny zones make end-to-end testing tractable).
         int spawnRadius = (p != null && p.has("spawnRadiusBlocks"))
                 ? p.get("spawnRadiusBlocks").getAsInt() : 10_000;
+        if (plugin.getConfig().getBoolean("test.enabled", false)) {
+            int spawnOverride = plugin.getConfig().getInt("test.zone-spawn-radius-blocks", 0);
+            if (spawnOverride > 0) spawnRadius = spawnOverride;
+        }
+        int contestRadius = cfg.radiusBlocks;
+        if (plugin.getConfig().getBoolean("test.enabled", false)) {
+            int radiusOverride = plugin.getConfig().getInt("test.zone-radius-blocks", 0);
+            if (radiusOverride > 0) contestRadius = radiusOverride;
+        }
         Location spawn = world.getSpawnLocation();
         var rng = ThreadLocalRandom.current();
         int cx = spawn.getBlockX() + rng.nextInt(-spawnRadius, spawnRadius + 1);
         int cz = spawn.getBlockZ() + rng.nextInt(-spawnRadius, spawnRadius + 1);
-        this.zone = new Zone(world, cx, cz, cfg.radiusBlocks);
+        this.zone = new Zone(world, cx, cz, contestRadius);
 
         // Drop point: random spot inside the contest circle.
         double ang = rng.nextDouble() * Math.PI * 2;
-        double dist = Math.sqrt(rng.nextDouble()) * cfg.radiusBlocks;
+        double dist = Math.sqrt(rng.nextDouble()) * contestRadius;
         this.dropX = cx + (int) (Math.cos(ang) * dist);
         this.dropZ = cz + (int) (Math.sin(ang) * dist);
     }
@@ -260,7 +281,8 @@ public final class AirdropEvent implements Listener, RunningEvent {
         scoreboard.render(lines);
     }
 
-    private String stageLabel() {
+    @Override
+    public String stageLabel() {
         return switch (stage) {
             case PREP -> "Prep";
             case LANDING -> "Landing";
@@ -306,6 +328,17 @@ public final class AirdropEvent implements Listener, RunningEvent {
         scoreboard.clear();
         HandlerList.unregisterAll(this);
     }
+
+    @Override
+    public void cancel() {
+        if (finished) return;
+        EventChat.announceCancelled("operator stopped the event");
+        plugin.getLogger().info("[airdrop] cancelled by operator at stage " + stageLabel());
+        finish();
+    }
+
+    @Override
+    public String type() { return "airdrop"; }
 
     // ──────────────────────── panel persistence ────────────────────────
 

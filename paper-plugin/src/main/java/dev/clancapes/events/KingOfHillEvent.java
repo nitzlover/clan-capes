@@ -73,23 +73,41 @@ public final class KingOfHillEvent implements Listener, RunningEvent {
         this.scoreboard = new EventScoreboard();
 
         JsonObject p = cfg.payload;
-        this.prepSec = minutesToSec(p, "prepMinutes", 3);
-        // ACTIVE window is the configured duration minus prep + collect.
-        int collectMin = (p != null && p.has("lootCollectionMinutes"))
-                ? p.get("lootCollectionMinutes").getAsInt() : 3;
-        this.collectSec = collectMin * 60;
-        int activeMin = Math.max(1, cfg.durationMinutes - minutesOf(p, "prepMinutes", 3) - collectMin);
-        this.activeSec = activeMin * 60;
+        // Same fast-mode hook as AirdropEvent — when config.yml's
+        // test block is on, swap the whole timing budget for the
+        // test.*-seconds operator dry-run values.
+        boolean testFast = plugin.getConfig().getBoolean("test.enabled", false)
+                && plugin.getConfig().getBoolean("test.fast-mode", false);
+        if (testFast) {
+            this.prepSec = plugin.getConfig().getInt("test.prep-seconds", 15);
+            this.collectSec = plugin.getConfig().getInt("test.collect-seconds", 15);
+            this.activeSec = plugin.getConfig().getInt("test.active-seconds", 60);
+        } else {
+            this.prepSec = minutesToSec(p, "prepMinutes", 3);
+            int collectMin = (p != null && p.has("lootCollectionMinutes"))
+                    ? p.get("lootCollectionMinutes").getAsInt() : 3;
+            this.collectSec = collectMin * 60;
+            int activeMin = Math.max(1,
+                    cfg.durationMinutes - minutesOf(p, "prepMinutes", 3) - collectMin);
+            this.activeSec = activeMin * 60;
+        }
         int reentrySec = (p != null && p.has("crashCommebackSeconds"))
                 ? p.get("crashCommebackSeconds").getAsInt() : 30;
         this.reentryMs = reentrySec * 1000;
 
         // Hill sits at world spawn — the "fixed zone near spawn" from
         // events.txt — with the configured contest radius.
+        // test.zone-radius-blocks > 0 overrides the contest radius
+        // for tractable dry-runs.
+        int contestRadius = cfg.radiusBlocks;
+        if (plugin.getConfig().getBoolean("test.enabled", false)) {
+            int radiusOverride = plugin.getConfig().getInt("test.zone-radius-blocks", 0);
+            if (radiusOverride > 0) contestRadius = radiusOverride;
+        }
         Location spawn = world.getSpawnLocation();
         this.hillX = spawn.getBlockX();
         this.hillZ = spawn.getBlockZ();
-        this.zone = new Zone(world, hillX, hillZ, cfg.radiusBlocks);
+        this.zone = new Zone(world, hillX, hillZ, contestRadius);
     }
 
     private static int minutesOf(JsonObject p, String key, int def) {
@@ -260,13 +278,25 @@ public final class KingOfHillEvent implements Listener, RunningEvent {
         scoreboard.render(lines);
     }
 
-    private String stageLabel() {
+    @Override
+    public String stageLabel() {
         return switch (stage) {
             case PREP -> "Converge";
             case ACTIVE -> "Contest";
             case COLLECT -> "Loot";
             case ENDED -> "Ended";
         };
+    }
+
+    @Override
+    public String type() { return "koth"; }
+
+    @Override
+    public void cancel() {
+        if (finished) return;
+        EventChat.announceCancelled("operator stopped the event");
+        plugin.getLogger().info("[koth] cancelled by operator at stage " + stageLabel());
+        finish();
     }
 
     private long stageRemaining(long elapsed) {

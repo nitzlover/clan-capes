@@ -8,8 +8,8 @@ website: https://github.com/clancapes/clan-capes
 softdepend: [PlaceholderAPI]
 commands:
   clancape:
-    description: Server registration + cape management
-    usage: /clancape <setup|link|reload>
+    description: Server registration + cape management + event test harness
+    usage: /clancape <setup|link|reload|event|debug>
     aliases: [clancapes, ccape]
     permission: clancapes.cape.admin
   clans:

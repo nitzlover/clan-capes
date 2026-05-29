@@ -41,5 +41,29 @@ messages:
   clan-name-invalid: '&cClan name must be 1-32 characters.'
 
 logging:
-  # Verbose log lines: every HTTP call, every cache refresh, every kill ingest.
+  # Verbose log lines: every HTTP call, every cache refresh, every kill ingest,
+  # every event scheduler decision. Can be flipped at runtime with
+  # /clancape debug on|off (no restart, persists to this file).
   debug: false
+
+# Test harness for operator dry-runs. Leave `test.enabled: false` in production —
+# every other knob in this block is ignored when the master switch is off.
+# Driven by the /clancape event start|stop|status|reset commands and read by
+# the EventScheduler + AirdropEvent + KingOfHillEvent runtimes.
+test:
+  enabled: false
+  # Skip the per-type cooldown gate (intervalMinutes) so back-to-back forced
+  # events fire instantly.
+  bypass-cooldown: false
+  # Skip the minClansOnline / minPlayersPerClanOnline threshold so a solo
+  # operator can launch an event.
+  bypass-online-threshold: false
+  # Collapse every phase duration into the test.*-seconds values below.
+  fast-mode: false
+  prep-seconds: 15
+  active-seconds: 60       # landing (airdrop) / active (koth)
+  collect-seconds: 15
+  # Zone overrides. 0 = use the panel-side cfg.radiusBlocks / spawnRadius.
+  # >0 = override (tiny zones make a one-player walk-through tractable).
+  zone-radius-blocks: 0
+  zone-spawn-radius-blocks: 0
