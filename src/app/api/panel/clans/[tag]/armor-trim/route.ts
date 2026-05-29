@@ -6,31 +6,16 @@
  */
 
 import { NextResponse } from 'next/server';
-import { desc } from 'drizzle-orm';
+
 import { requireAuth } from '@/lib/server/auth';
 import { getArmorTrimsForClan } from '@/lib/server/armor-trim-repo';
 import { getClanByTag } from '@/lib/server/clan-repo';
 import { normaliseTag } from '@/lib/server/clan-validators';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
+import { resolveServerId } from '@/lib/server/resolve-server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-async function resolveServerId(req: Request): Promise<number | null> {
-  const url = new URL(req.url);
-  const raw = url.searchParams.get('serverId');
-  if (raw) {
-    const n = Number(raw);
-    if (Number.isInteger(n) && n > 0) return n;
-  }
-  const db = getDb();
-  const [first] = await db
-    .select({ id: schema.servers.id })
-    .from(schema.servers)
-    .orderBy(desc(schema.servers.createdAt))
-    .limit(1);
-  return first?.id ?? null;
-}
 
 export async function GET(
   req: Request,

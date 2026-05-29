@@ -14,6 +14,7 @@ import { NextResponse } from 'next/server';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { requireAuth } from '@/lib/server/auth';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
+import { resolveServerId } from '@/lib/server/resolve-server';
 import { EVENT_TYPES, type EventTypeName } from '@/lib/server/event-config';
 
 export const runtime = 'nodejs';
@@ -22,21 +23,6 @@ export const dynamic = 'force-dynamic';
 const MAX_LIMIT = 200;
 const DEFAULT_LIMIT = 50;
 
-async function resolveServerId(req: Request): Promise<number | null> {
-  const url = new URL(req.url);
-  const raw = url.searchParams.get('serverId');
-  if (raw) {
-    const n = Number(raw);
-    if (Number.isInteger(n) && n > 0) return n;
-  }
-  const db = getDb();
-  const [first] = await db
-    .select({ id: schema.servers.id })
-    .from(schema.servers)
-    .orderBy(desc(schema.servers.createdAt))
-    .limit(1);
-  return first?.id ?? null;
-}
 
 export async function GET(req: Request) {
   const user = requireAuth(req);

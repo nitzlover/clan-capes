@@ -25,7 +25,6 @@ import { validateAndNormalizePng } from '@/lib/server/capeValidate';
 import { getClanByTag } from '@/lib/server/clan-repo';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import { CDN_PUBLIC_URL, MAX_UPLOAD_KB } from '@/lib/server/env';
-import * as mc from '@/lib/server/minecraft';
 import { capeFilePath, ensureDirs } from '@/lib/server/storage';
 import { getRequestId } from '@/lib/server/request-id';
 
@@ -110,7 +109,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ tag: string }>
     const v = Date.now();
     const publicUrl = `${CDN_PUBLIC_URL}/${tag}.png?v=${v}`;
     const actor = user.sub;
-    await mc.setClanCape(tag, publicUrl, actor);
+    // The Fabric mod reads the cape straight off the CDN URL (mtime
+    // cache-buster) and the plugin polls /api/plugin/clans — neither
+    // needs a push from here, so there's no plugin round-trip on save.
 
     const db = getDb();
     await db.insert(schema.audit).values({
@@ -146,7 +147,6 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ tag: string 
   const serverId = await resolveServerId();
   const rid = getRequestId(req);
   try {
-    await mc.deleteClanCape(tag);
     await fs.unlink(capeFilePath(tag)).catch(() => undefined);
     if (serverId) {
       const db = getDb();

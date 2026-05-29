@@ -12,9 +12,6 @@ export const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? 'admin';
 export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'admin';
 export const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH ?? '';
 
-export const MINECRAFT_API_URL = (process.env.MINECRAFT_API_URL ?? 'http://127.0.0.1:8080').replace(/\/$/, '');
-export const MINECRAFT_API_TOKEN = process.env.MINECRAFT_API_TOKEN ?? '';
-
 export const UPLOAD_DIR = process.env.UPLOAD_DIR ?? './data/capes';
 export const AUDIT_LOG = process.env.AUDIT_LOG ?? './data/audit.log';
 export const MAX_UPLOAD_KB = Number(process.env.MAX_UPLOAD_KB) || 256;

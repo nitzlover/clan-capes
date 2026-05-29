@@ -20,11 +20,12 @@
  */
 
 import { NextResponse } from 'next/server';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { requireAuth } from '@/lib/server/auth';
 import { getClanByTag } from '@/lib/server/clan-repo';
 import { normaliseTag } from '@/lib/server/clan-validators';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
+import { resolveServerId } from '@/lib/server/resolve-server';
 import {
   isUniqueViolation,
   uniqueConstraintHint,
@@ -37,22 +38,6 @@ export const dynamic = 'force-dynamic';
 const UUID_RE =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const VALID_ROLES = new Set(['leader', 'deputy', 'member']);
-
-async function resolveServerId(req: Request): Promise<number | null> {
-  const url = new URL(req.url);
-  const raw = url.searchParams.get('serverId');
-  if (raw) {
-    const n = Number(raw);
-    if (Number.isInteger(n) && n > 0) return n;
-  }
-  const db = getDb();
-  const [first] = await db
-    .select({ id: schema.servers.id })
-    .from(schema.servers)
-    .orderBy(desc(schema.servers.createdAt))
-    .limit(1);
-  return first?.id ?? null;
-}
 
 export async function POST(
   req: Request,

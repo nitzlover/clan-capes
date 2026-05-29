@@ -15,6 +15,12 @@ data/
 paper-plugin/
 .github/
 
+# Transfer-bundle artifacts — session docs + a prod snapshot that
+# carries data.db + config.yml secrets. Must never land in git.
+backup-*/
+HANDOFF_*.md
+taste-skill/
+
 # OS
 .DS_Store
 Thumbs.db

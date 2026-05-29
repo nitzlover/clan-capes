@@ -1,18 +1,14 @@
 /**
- * DB-backed banner CRUD with a plugin-side mirror.
+ * DB-backed banner CRUD.
  *
- * Reads come straight off `clan_banners` so the editor works even
- * when the plugin is unreachable.
- *
- * Writes hit the DB first (durable), then best-effort sync to the
- * plugin REST so currently-held shields repaint in-game without
- * waiting for the next plugin restart. A plugin-side failure is
- * logged but does not roll the DB write back — the panel is the
- * source of truth.
+ * `clan_banners` is the single source of truth. The plugin consumes
+ * this API — it polls `/api/plugin/banners` and repaints held shields
+ * on its own refresh cadence — so these handlers never push to a
+ * plugin REST port.
  */
 
 import { NextResponse } from 'next/server';
-import { desc } from 'drizzle-orm';
+
 import { requireAuth } from '@/lib/server/auth';
 import { getClanByTag } from '@/lib/server/clan-repo';
 import {
@@ -22,7 +18,7 @@ import {
   type BannerPattern,
 } from '@/lib/server/banner-repo';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
-import * as mc from '@/lib/server/minecraft';
+import { resolveServerId } from '@/lib/server/resolve-server';
 import { getRequestId } from '@/lib/server/request-id';
 import { getServerSettings } from '@/lib/server/settings-repo';
 
@@ -33,22 +29,6 @@ export const dynamic = 'force-dynamic';
 // real ceiling is pulled per-request from `settings.bannerMaxLayers`
 // so an operator can extend (or tighten) without redeploying.
 const FALLBACK_MAX_LAYERS = 6;
-
-async function resolveServerId(req: Request): Promise<number | null> {
-  const url = new URL(req.url);
-  const raw = url.searchParams.get('serverId');
-  if (raw) {
-    const n = Number(raw);
-    if (Number.isInteger(n) && n > 0) return n;
-  }
-  const db = getDb();
-  const [first] = await db
-    .select({ id: schema.servers.id })
-    .from(schema.servers)
-    .orderBy(desc(schema.servers.createdAt))
-    .limit(1);
-  return first?.id ?? null;
-}
 
 export async function GET(req: Request, ctx: { params: Promise<{ tag: string }> }) {
   const user = requireAuth(req);
@@ -77,17 +57,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ tag: string }> 
     }
   }
 
-  // Fallback: plugin proxy for the legacy / no-DB path.
-  try {
-    const dto = await mc.fetchClanBanner(tag);
-    if (!dto) return NextResponse.json({ error: 'not found' }, { status: 404 });
-    return NextResponse.json(dto);
-  } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'plugin unreachable' },
-      { status: 502 },
-    );
-  }
+  // No DB row (or DB disabled) → no banner. The plugin polls
+  // /api/plugin/banners for the live spec; nothing to proxy here.
+  return NextResponse.json({ error: 'not found' }, { status: 404 });
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ tag: string }> }) {
@@ -145,19 +117,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ tag: string }>
 
   const rid = getRequestId(req);
 
-  // 1) Durable write
+  // Durable write. The plugin polls /api/plugin/banners and re-paints
+  // held shields on its own refresh cadence — no push needed here.
   const record = await upsertBanner(clan.id, baseColor, patterns, user.sub);
-  // 2) Best-effort plugin mirror so held shields re-paint immediately.
-  //    Forward our request id so the plugin can log-correlate.
-  let pluginMirrored = true;
-  let pluginErr: string | null = null;
-  try {
-    await mc.setClanBanner(tag, baseColor, patterns, user.sub, rid);
-  } catch (e) {
-    pluginMirrored = false;
-    pluginErr = e instanceof Error ? e.message : String(e);
-  }
-  // 3) Audit
   const db = getDb();
   await db.insert(schema.audit).values({
     serverId,
@@ -167,8 +129,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ tag: string }>
     payload: {
       baseColor,
       layers: patterns.length,
-      pluginMirrored,
-      pluginErr,
       _rid: rid,
     },
   });
@@ -180,7 +140,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ tag: string }>
       patterns: record.patterns,
       updatedAt: record.updatedAt,
       updatedBy: record.updatedBy,
-      pluginMirrored,
       _rid: rid,
     },
     { headers: { 'x-request-id': rid } },
@@ -207,11 +166,6 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ tag: string 
 
   const rid = getRequestId(req);
   await deleteBanner(clan.id);
-  try {
-    await mc.deleteClanBanner(tag, rid);
-  } catch {
-    // Plugin mirror failure is logged via audit payload, not fatal.
-  }
   const db = getDb();
   await db.insert(schema.audit).values({
     serverId,

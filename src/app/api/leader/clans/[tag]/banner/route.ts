@@ -13,7 +13,6 @@ import {
 } from '@/lib/server/banner-repo';
 import { getDb, schema } from '@/lib/server/db';
 import { requireLeaderScope } from '@/lib/server/leader-scope';
-import * as mc from '@/lib/server/minecraft';
 import { getRequestId } from '@/lib/server/request-id';
 import { getServerSettings } from '@/lib/server/settings-repo';
 
@@ -68,15 +67,9 @@ export async function POST(
   }
 
   const rid = getRequestId(req);
+  // Durable write only — the plugin polls /api/plugin/banners and
+  // re-paints on its refresh cadence, so there's no push from here.
   const record = await upsertBanner(clan.id, baseColor, patterns, `leader:${session.sub}`);
-  let pluginMirrored = true;
-  let pluginErr: string | null = null;
-  try {
-    await mc.setClanBanner(clan.tag, baseColor, patterns, `leader:${session.sub}`, rid);
-  } catch (e) {
-    pluginMirrored = false;
-    pluginErr = e instanceof Error ? e.message : String(e);
-  }
   const db = getDb();
   await db.insert(schema.audit).values({
     serverId: session.serverId,
@@ -86,8 +79,6 @@ export async function POST(
     payload: {
       baseColor,
       layers: patterns.length,
-      pluginMirrored,
-      pluginErr,
       _rid: rid,
     },
   });
@@ -99,7 +90,6 @@ export async function POST(
       patterns: record.patterns,
       updatedAt: record.updatedAt,
       updatedBy: record.updatedBy,
-      pluginMirrored,
       _rid: rid,
     },
     { headers: { 'x-request-id': rid } },
@@ -117,12 +107,6 @@ export async function DELETE(
 
   const rid = getRequestId(req);
   await deleteBanner(clan.id);
-  try {
-    await mc.deleteClanBanner(clan.tag, rid);
-  } catch {
-    // Mirror failure is non-fatal; audit captures it implicitly via
-    // the next BannerRepository refresh diff.
-  }
   const db = getDb();
   await db.insert(schema.audit).values({
     serverId: session.serverId,

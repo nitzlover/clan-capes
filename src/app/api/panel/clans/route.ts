@@ -19,7 +19,6 @@ import { requireAuth } from '@/lib/server/auth';
 import { listClansForServer } from '@/lib/server/clan-repo';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import { CDN_PUBLIC_URL, UPLOAD_DIR } from '@/lib/server/env';
-import * as mc from '@/lib/server/minecraft';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -88,23 +87,17 @@ export async function GET(req: Request) {
   }
 
   // Legacy fallback — one row per *.png. Kept so pre-migration deploys
-  // (no DB, or DB empty) still see the uploaded capes on the page.
-  const clans = await Promise.all(
-    [...capeIndex.entries()].map(async ([tag, info]) => {
-      let remote: { updatedAt?: number; updatedBy?: string } | null = null;
-      try {
-        remote = await mc.fetchClan(tag);
-      } catch {
-        /* ignore — local CDN still serves it */
-      }
-      const v = Math.floor(info.mtimeMs);
-      return {
-        tag,
-        capeUrl: `${cdn}/${tag}.png?v=${v}`,
-        updatedAt: remote?.updatedAt ?? info.mtimeMs,
-        updatedBy: remote?.updatedBy ?? 'panel',
-      };
-    }),
-  );
+  // (no DB, or DB empty) still see the uploaded capes on the page. The
+  // CDN serves each file directly; mtime is the only metadata we have
+  // without a DB row.
+  const clans = [...capeIndex.entries()].map(([tag, info]) => {
+    const v = Math.floor(info.mtimeMs);
+    return {
+      tag,
+      capeUrl: `${cdn}/${tag}.png?v=${v}`,
+      updatedAt: info.mtimeMs,
+      updatedBy: 'panel',
+    };
+  });
   return NextResponse.json({ source: 'files', clans });
 }

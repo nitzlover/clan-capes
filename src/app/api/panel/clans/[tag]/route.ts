@@ -1,19 +1,18 @@
 /**
- * Admin clan endpoints — GET (legacy plugin proxy + DB lookup) plus
- * PATCH (edit name / colour) and DELETE (disband). All three accept
+ * Admin clan endpoints — GET (DB lookup) plus PATCH (edit name /
+ * colour / friendly-fire) and DELETE (disband). All three accept
  * admin JWT and read the target server id from the `?serverId=…`
  * query parameter (defaults to the most-recently-registered server
  * to match how /dashboard/clans selects).
  *
- * DB writes mirror the rules enforced by the plugin Bearer endpoints
- * — colour collision rejection, soft-disband semantics, audit row
- * per mutation — but the actor on each audit entry is
- * `admin:<username>` instead of `plugin:<server-name>` so admin
- * actions stay greppable.
+ * DB is the single source of truth — the plugin consumes this API,
+ * it doesn't serve a proxy. Audit rows use the `admin:<username>`
+ * actor prefix (vs `plugin:<server-name>`) so admin actions stay
+ * greppable.
  */
 
 import { NextResponse } from 'next/server';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { requireAuth } from '@/lib/server/auth';
 import { getClanByTag } from '@/lib/server/clan-repo';
 import {
@@ -22,7 +21,7 @@ import {
   normaliseTag,
 } from '@/lib/server/clan-validators';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
-import * as mc from '@/lib/server/minecraft';
+import { resolveServerId } from '@/lib/server/resolve-server';
 import {
   isUniqueViolation,
   uniqueConstraintHint,
@@ -32,45 +31,24 @@ import { getRequestId } from '@/lib/server/request-id';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/**
- * Pull the operative server id off the request: explicit
- * `?serverId=N`, falling back to the most-recently-registered
- * server. Returns null when DB is unset.
- */
-async function resolveServerId(req: Request): Promise<number | null> {
-  const url = new URL(req.url);
-  const raw = url.searchParams.get('serverId');
-  if (raw) {
-    const n = Number(raw);
-    if (Number.isInteger(n) && n > 0) return n;
-  }
-  const db = getDb();
-  const [first] = await db
-    .select({ id: schema.servers.id })
-    .from(schema.servers)
-    .orderBy(desc(schema.servers.createdAt))
-    .limit(1);
-  return first?.id ?? null;
-}
-
 export async function GET(req: Request, ctx: { params: Promise<{ tag: string }> }) {
   const user = requireAuth(req);
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   const { tag } = await ctx.params;
 
-  // Prefer the DB row when DB has anything for the chosen server;
-  // fall back to the plugin proxy so the legacy /dashboard/capes +
-  // /dashboard/banners flows keep working on a pre-migration deploy.
-  if (dbEnabled()) {
-    const serverId = await resolveServerId(req);
-    if (serverId) {
-      const dto = await getClanByTag(serverId, tag.toUpperCase());
-      if (dto) return NextResponse.json({ source: 'db', clan: dto });
-    }
+  // DB is the only source of truth now — the plugin is a consumer of
+  // this API, not a producer, so there's no plugin proxy to fall back
+  // to.
+  if (!dbEnabled()) {
+    return NextResponse.json({ error: 'db disabled' }, { status: 503 });
   }
-  const data = await mc.fetchClan(tag.toUpperCase());
-  if (!data) return NextResponse.json({ error: 'not found' }, { status: 404 });
-  return NextResponse.json({ source: 'plugin', ...data });
+  const serverId = await resolveServerId(req);
+  if (!serverId) {
+    return NextResponse.json({ error: 'no servers registered' }, { status: 409 });
+  }
+  const dto = await getClanByTag(serverId, tag.toUpperCase());
+  if (!dto) return NextResponse.json({ error: 'not found' }, { status: 404 });
+  return NextResponse.json({ source: 'db', clan: dto });
 }
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ tag: string }> }) {
