@@ -395,9 +395,9 @@ function MembersSection({
           return (
             <li
               key={m.playerUuid}
-              className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-4 border-b border-[var(--rule)] px-5 py-3 last:border-b-0"
+              className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--rule)] px-5 py-3 last:border-b-0"
             >
-              <span>
+              <span className="min-w-0 flex-1 basis-full sm:basis-auto">
                 <span className="block text-sm text-white">{m.playerName}</span>
                 <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
                   {m.playerUuid.slice(0, 8)}…

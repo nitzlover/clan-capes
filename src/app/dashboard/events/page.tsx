@@ -32,6 +32,30 @@ type ConfigResponse = {
   configs: EventConfig[];
 };
 
+// Humanise camelCase payload keys for the advanced editor + a hint
+// per known knob. Unknown keys fall back to a spaced-out label.
+const PAYLOAD_HINTS: Record<string, string> = {
+  prepMinutes: 'Travel window before the drop lands.',
+  landingMinutes: 'PvP window after the drop lands.',
+  finaleMinutes: 'Sudden-death cap after landing.',
+  lootCollectionMinutes: 'Winner-only window to loot the chest.',
+  spawnRadiusBlocks: 'Zone centre is random within this of spawn.',
+  crashCommebackSeconds: 'Re-entry grace after a crash / zone exit.',
+  teammateCommebackMinutes: 'Grace for teammates of the last member in.',
+  minClansOnline: 'Distinct clans required to fire the event.',
+  minPlayersPerClanOnline: 'Online members per clan to count it.',
+};
+
+function payloadLabel(key: string): string {
+  const spaced = key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/\bMinutes\b/, '(min)')
+    .replace(/\bSeconds\b/, '(s)')
+    .replace(/\bBlocks\b/, '(blocks)')
+    .trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
 const LABELS: Record<EventTypeName, { title: string; subtitle: string }> = {
   airdrop: {
     title: 'Airdrop',
@@ -211,14 +235,29 @@ function EventConfigEditor({
   const [interval, setIntervalMin] = useState(initial.intervalMinutes);
   const [duration, setDuration] = useState(initial.durationMinutes);
   const [radius, setRadius] = useState(initial.radiusBlocks);
+  // Editable copy of the variant-specific payload. Only the numeric
+  // knobs get input fields; non-numeric keys (e.g. koth structureId)
+  // ride along untouched so a save doesn't drop them.
+  const [payload, setPayload] = useState<Record<string, unknown>>(
+    () => ({ ...initial.payload }),
+  );
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  const numericPayloadKeys = Object.keys(initial.payload).filter(
+    (k) => typeof initial.payload[k] === 'number',
+  );
 
   const dirty =
     enabled !== initial.enabled
     || interval !== initial.intervalMinutes
     || duration !== initial.durationMinutes
-    || radius !== initial.radiusBlocks;
+    || radius !== initial.radiusBlocks
+    || JSON.stringify(payload) !== JSON.stringify(initial.payload);
+
+  function setPayloadKey(key: string, n: number) {
+    setPayload((prev) => ({ ...prev, [key]: n }));
+  }
 
   async function save() {
     if (!dirty || busy) return;
@@ -234,7 +273,7 @@ function EventConfigEditor({
           intervalMinutes: interval,
           durationMinutes: duration,
           radiusBlocks: radius,
-          payload: initial.payload,
+          payload,
         }),
       });
       setMsg({ kind: 'ok', text: 'Saved.' });
@@ -307,6 +346,27 @@ function EventConfigEditor({
           hint="Zone radius on the XZ plane."
         />
       </div>
+
+      {numericPayloadKeys.length > 0 && (
+        <details className="mt-5 border-t border-[var(--rule)] pt-4">
+          <summary className="label-mono cursor-pointer text-[var(--text-faint)] hover:text-white">
+            Advanced — stage timing & thresholds
+          </summary>
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            {numericPayloadKeys.map((k) => (
+              <NumberField
+                key={k}
+                label={payloadLabel(k)}
+                value={Number(payload[k] ?? 0)}
+                onChange={(n) => setPayloadKey(k, n)}
+                min={0}
+                max={100_000}
+                hint={PAYLOAD_HINTS[k]}
+              />
+            ))}
+          </div>
+        </details>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button

@@ -651,8 +651,8 @@ function MemberRow({
   const dotTitle =
     online === null ? 'No fresh heartbeat' : online ? 'Online now' : 'Offline';
   return (
-    <li className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-4 border-b border-[var(--rule)] py-3 last:border-b-0">
-      <span className="flex items-center gap-3">
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--rule)] py-3 last:border-b-0">
+      <span className="flex min-w-0 flex-1 basis-full items-center gap-3 sm:basis-auto">
         <span
           aria-label={dotTitle}
           title={dotTitle}
