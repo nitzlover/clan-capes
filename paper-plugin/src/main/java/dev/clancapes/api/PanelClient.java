@@ -97,6 +97,12 @@ public final class PanelClient {
 
     // ──────────────────────────── reads ────────────────────────────
 
+    /** Latest published plugin version + download URL, for update nag. */
+    public CompletableFuture<JsonObject> getPluginVersion() {
+        HttpRequest req = requestBuilder("/api/plugin/version").GET().build();
+        return sendJson(req, JsonObject.class);
+    }
+
     public CompletableFuture<List<ClanDto>> listClans() {
         HttpRequest req = requestBuilder("/api/plugin/clans").GET().build();
         java.lang.reflect.Type envelope = new TypeToken<JsonObject>(){}.getType();

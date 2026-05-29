@@ -48,6 +48,7 @@ public final class ClanCommand implements CommandExecutor {
             case "transfer" -> doTransfer(sender, args);
             case "color" -> doColor(sender, args);
             case "panel" -> doPanel(sender);
+            case "menu" -> doMenu(sender);
             case "invite", "accept", "decline" -> {
                 sender.sendMessage(Component.text(
                         "Invites are not implemented in this build. Ask an admin to add you via /dashboard/clans.",
@@ -69,6 +70,14 @@ public final class ClanCommand implements CommandExecutor {
         sender.sendMessage(Component.text("  transfer <player>     transfer leadership", NamedTextColor.GRAY));
         sender.sendMessage(Component.text("  color <#RRGGBB>       set clan colour", NamedTextColor.GRAY));
         sender.sendMessage(Component.text("  panel                 open web management panel", NamedTextColor.GRAY));
+        sender.sendMessage(Component.text("  menu                  open the clan chest GUI", NamedTextColor.GRAY));
+        return true;
+    }
+
+    private boolean doMenu(CommandSender sender) {
+        Player player = requirePlayer(sender);
+        if (player == null) return true;
+        ClanMenu.open(player);
         return true;
     }
 

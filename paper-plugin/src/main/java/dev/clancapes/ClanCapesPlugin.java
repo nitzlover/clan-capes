@@ -6,6 +6,7 @@ import dev.clancapes.command.ClanChatCommand;
 import dev.clancapes.command.ClanCommand;
 import dev.clancapes.events.EventScheduler;
 import dev.clancapes.listener.BoundaryListener;
+import dev.clancapes.listener.ClanMenuListener;
 import dev.clancapes.listener.FriendlyFireListener;
 import dev.clancapes.listener.PlayerDeathListener;
 import dev.clancapes.listener.PlayerJoinListener;
@@ -38,6 +39,11 @@ public final class ClanCapesPlugin extends JavaPlugin {
     private EventScheduler eventScheduler;
     private ClanCapesExpansion expansion;
     private final List<BukkitTask> scheduled = new ArrayList<>();
+    // Self-update nag state — populated by checkForUpdate(), surfaced to
+    // admins on join. Never auto-downloads (Bukkit hot-swap is unsafe).
+    private volatile boolean updateAvailable;
+    private volatile String latestVersion = "";
+    private volatile String updateUrl = "";
 
     @Override
     public void onEnable() {
@@ -55,6 +61,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new PlayerDeathListener(this), this);
         Bukkit.getPluginManager().registerEvents(new FriendlyFireListener(this), this);
         Bukkit.getPluginManager().registerEvents(new BoundaryListener(), this);
+        Bukkit.getPluginManager().registerEvents(new ClanMenuListener(), this);
 
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             expansion = new ClanCapesExpansion(this);
@@ -76,6 +83,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
             settingsRepository.refresh();
             announcementRepository.refresh();
             eventConfigRepository.refresh();
+            checkForUpdate();
         }
 
         // Boot the scheduler — its own tick gates on EventConfigRepository
@@ -175,6 +183,33 @@ public final class ClanCapesPlugin extends JavaPlugin {
             eventConfigRepository.refresh();
         }
     }
+
+    /**
+     * One-shot async version check against the panel. Sets the
+     * update-nag flags + logs a WARNING when the panel advertises a
+     * version different from the running one. Never downloads — a
+     * Bukkit hot-swap is unsafe, so the operator pulls the jar
+     * manually (the URL is in the warning + the admin join nag).
+     */
+    private void checkForUpdate() {
+        String current = getPluginMeta().getVersion();
+        panelClient.getPluginVersion().thenAccept(json -> {
+            if (json == null || !json.has("latest")) return;
+            String latest = json.get("latest").getAsString();
+            if (latest == null || latest.isEmpty() || latest.equals(current)) return;
+            updateAvailable = true;
+            latestVersion = latest;
+            updateUrl = json.has("downloadUrl") && !json.get("downloadUrl").isJsonNull()
+                    ? json.get("downloadUrl").getAsString() : "";
+            getLogger().warning("Update available: " + current + " -> " + latest
+                    + (updateUrl.isEmpty() ? "" : " (" + updateUrl + ")")
+                    + ". Manual install — never hot-swap a live jar.");
+        }).exceptionally(t -> null);
+    }
+
+    public boolean isUpdateAvailable() { return updateAvailable; }
+    public String getLatestVersion() { return latestVersion; }
+    public String getUpdateUrl() { return updateUrl; }
 
     public PanelClient getPanelClient() { return panelClient; }
     public ClanRepository getClanRepository() { return clanRepository; }
