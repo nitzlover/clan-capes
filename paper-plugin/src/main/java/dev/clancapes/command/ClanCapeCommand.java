@@ -4,6 +4,8 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import dev.clancapes.ClanCapesPlugin;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -91,13 +93,29 @@ public final class ClanCapeCommand implements CommandExecutor {
                     if (res.statusCode() == 200 || res.statusCode() == 201) {
                         plugin.getConfig().set("panel.server-name", finalServerName);
                         plugin.saveConfig();
+                        // Mirror the token to the server console so an operator
+                        // without clipboard access in the JE chat (or running an
+                        // older client) can still copy it from the Apex web log.
+                        plugin.getLogger().info(
+                                "Setup token issued for '" + finalServerName + "': "
+                                        + token
+                                        + " — paste into /dashboard/servers within 15 min.");
                         sender.sendMessage(Component.text(
-                                "Setup token (paste into /dashboard/servers, valid 15 min):",
+                                "Setup token (click to copy — paste into /dashboard/servers, valid 15 min):",
                                 NamedTextColor.GREEN));
-                        sender.sendMessage(Component.text(token, NamedTextColor.YELLOW));
+                        sender.sendMessage(Component.text(token, NamedTextColor.YELLOW)
+                                .clickEvent(ClickEvent.copyToClipboard(token))
+                                .hoverEvent(HoverEvent.showText(Component.text(
+                                        "Click to copy token", NamedTextColor.GRAY))));
+                        String linkHint = "/clancape link <api-key-from-panel>";
                         sender.sendMessage(Component.text(
-                                "Then run: /clancape link <api-key-from-panel>",
-                                NamedTextColor.GRAY));
+                                "Then click here to prefill: ", NamedTextColor.GRAY)
+                                .append(Component.text(linkHint, NamedTextColor.AQUA)
+                                        .clickEvent(ClickEvent.suggestCommand(
+                                                "/clancape link "))
+                                        .hoverEvent(HoverEvent.showText(Component.text(
+                                                "Click to open chat prefilled with the link command",
+                                                NamedTextColor.GRAY)))));
                     } else {
                         sender.sendMessage(Component.text(
                                 "Panel rejected setup: " + res.statusCode() + " " + res.body(),

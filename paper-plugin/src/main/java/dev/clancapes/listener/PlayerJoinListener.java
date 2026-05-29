@@ -2,6 +2,8 @@ package dev.clancapes.listener;
 
 import dev.clancapes.ClanCapesPlugin;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -41,7 +43,11 @@ public final class PlayerJoinListener implements Listener {
                     NamedTextColor.GOLD));
             String url = plugin.getUpdateUrl();
             if (!url.isEmpty()) {
-                p.sendMessage(Component.text("  " + url, NamedTextColor.GRAY));
+                p.sendMessage(Component.text("  " + url, NamedTextColor.GRAY)
+                        .clickEvent(ClickEvent.openUrl(url))
+                        .hoverEvent(HoverEvent.showText(Component.text(
+                                "Click to open download page",
+                                NamedTextColor.GRAY))));
             }
             p.sendMessage(Component.text(
                     "  Manual install only — do not hot-swap a live jar.",

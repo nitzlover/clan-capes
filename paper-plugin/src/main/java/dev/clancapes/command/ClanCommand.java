@@ -4,6 +4,8 @@ import com.google.gson.JsonObject;
 import dev.clancapes.ClanCapesPlugin;
 import dev.clancapes.api.dto.ClanDto;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
@@ -361,11 +363,24 @@ public final class ClanCommand implements CommandExecutor {
                         player.sendMessage(Component.text(
                                 "Open your clan panel (valid " + (ttl / 60) + " min):",
                                 NamedTextColor.GOLD));
-                        player.sendMessage(Component.text(url, NamedTextColor.AQUA));
+                        // Click → open browser. Shift-click would normally paste
+                        // the URL into chat (vanilla behaviour), so we also wire
+                        // a hover hint pointing at the action.
+                        player.sendMessage(Component.text(url, NamedTextColor.AQUA)
+                                .clickEvent(ClickEvent.openUrl(url))
+                                .hoverEvent(HoverEvent.showText(Component.text(
+                                        "Click to open in browser",
+                                        NamedTextColor.GRAY))));
                     } else if (token != null) {
                         player.sendMessage(Component.text(
-                                "Token (paste at /clan-panel):", NamedTextColor.GOLD));
-                        player.sendMessage(Component.text(token, NamedTextColor.YELLOW));
+                                "Token (click to copy — paste at /clan-panel):",
+                                NamedTextColor.GOLD));
+                        final String t = token;
+                        player.sendMessage(Component.text(t, NamedTextColor.YELLOW)
+                                .clickEvent(ClickEvent.copyToClipboard(t))
+                                .hoverEvent(HoverEvent.showText(Component.text(
+                                        "Click to copy token",
+                                        NamedTextColor.GRAY))));
                     }
                 }));
         return true;
