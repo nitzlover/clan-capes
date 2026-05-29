@@ -43,7 +43,7 @@ public final class EventScheduler {
     private final Map<String, Long> lastFired = new HashMap<>();
     private BukkitTask task;
     /** The single in-flight event, if any. One event runs at a time. */
-    private AirdropEvent activeEvent;
+    private RunningEvent activeEvent;
 
     public EventScheduler(ClanCapesPlugin plugin) {
         this.plugin = plugin;
@@ -125,15 +125,21 @@ public final class EventScheduler {
             return false;
         }
         if ("airdrop".equalsIgnoreCase(cfg.type)) {
-            log.info("[event-scheduler] launching airdrop"
-                    + " (radius=" + cfg.radiusBlocks + ")");
+            log.info("[event-scheduler] launching airdrop (radius="
+                    + cfg.radiusBlocks + ")");
             AirdropEvent ev = new AirdropEvent(plugin, world, cfg);
             ev.start();
             activeEvent = ev;
             return true;
         }
-        // koth + future types: not yet implemented — log + skip so the
-        // scheduler keeps cadence without crashing.
+        if ("koth".equalsIgnoreCase(cfg.type)) {
+            log.info("[event-scheduler] launching koth (radius="
+                    + cfg.radiusBlocks + ")");
+            KingOfHillEvent ev = new KingOfHillEvent(plugin, world, cfg);
+            ev.start();
+            activeEvent = ev;
+            return true;
+        }
         log.info("[event-scheduler] type " + cfg.type + " not yet implemented");
         return false;
     }
