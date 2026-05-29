@@ -30,7 +30,7 @@ public final class HeartbeatTask extends BukkitRunnable {
         }
 
         JsonObject payload = new JsonObject();
-        payload.addProperty("pluginVersion", plugin.getDescription().getVersion());
+        payload.addProperty("pluginVersion", plugin.getPluginMeta().getVersion());
         payload.addProperty("paperVersion", Bukkit.getVersion());
         payload.addProperty("onlineCount", uuids.size());
         payload.add("onlinePlayerUuids", uuids);

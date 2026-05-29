@@ -8,7 +8,13 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Reports PvP kills to the panel. Only fires when the killer is
@@ -58,15 +64,52 @@ public final class PlayerDeathListener implements Listener {
                 });
     }
 
+    /**
+     * Prefix clan tags onto the player names inside the vanilla death
+     * message.
+     *
+     * <p>Done as a single whole-word pass over the original string so
+     * that:
+     * <ul>
+     *   <li>a name that's a substring of the other (e.g. "Stev" vs
+     *       "Steve") can't be replaced inside the longer one — the
+     *       {@code \b} word boundaries require a full-token match;</li>
+     *   <li>an inserted "[TAG] name" is never re-scanned, so the
+     *       killer pass can't match the victim name we just injected
+     *       (the old two-pass {@code String.replace} corrupted these).</li>
+     * </ul>
+     * Names are matched longest-first so the alternation prefers the
+     * more specific token when one contains the other.
+     */
     private static String decorate(String base, ClanDto killerClan, ClanDto victimClan,
                                    String killerName, String victimName) {
-        String result = base;
-        if (victimClan != null) {
-            result = result.replace(victimName, "[" + victimClan.tag + "] " + victimName);
+        Map<String, String> repl = new LinkedHashMap<>();
+        if (victimClan != null && victimClan.tag != null) {
+            repl.put(victimName, "[" + victimClan.tag + "] " + victimName);
         }
-        if (killerClan != null) {
-            result = result.replace(killerName, "[" + killerClan.tag + "] " + killerName);
+        if (killerClan != null && killerClan.tag != null) {
+            repl.put(killerName, "[" + killerClan.tag + "] " + killerName);
         }
-        return result;
+        if (repl.isEmpty()) return base;
+
+        // Longest name first so "Steve" wins over "Stev" in the
+        // alternation when both could match at a position.
+        List<String> names = new ArrayList<>(repl.keySet());
+        names.sort((a, b) -> b.length() - a.length());
+
+        StringBuilder alt = new StringBuilder();
+        for (String n : names) {
+            if (alt.length() > 0) alt.append('|');
+            alt.append(Pattern.quote(n));
+        }
+        Pattern p = Pattern.compile("\\b(?:" + alt + ")\\b");
+        Matcher m = p.matcher(base);
+        StringBuilder out = new StringBuilder();
+        while (m.find()) {
+            String hit = m.group();
+            m.appendReplacement(out, Matcher.quoteReplacement(repl.getOrDefault(hit, hit)));
+        }
+        m.appendTail(out);
+        return out.toString();
     }
 }
