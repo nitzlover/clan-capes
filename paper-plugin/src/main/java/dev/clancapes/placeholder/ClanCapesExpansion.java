@@ -26,8 +26,11 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>{@code %clancapes_clan_role%} — leader/deputy/member</li>
  *   <li>{@code %clancapes_clan_size%} — member count</li>
  *   <li>{@code %clancapes_online_ratio%} — "3/12" online of total</li>
+ *   <li>{@code %clancapes_online_percent%} — online as 0-100 percent</li>
  *   <li>{@code %clancapes_kd_season%} — season K/D ratio</li>
  *   <li>{@code %clancapes_kd_lifetime%} — lifetime K/D ratio (cached, async)</li>
+ *   <li>{@code %clancapes_clan_kills_season%} — season clan kills</li>
+ *   <li>{@code %clancapes_clan_deaths_season%} — season clan deaths</li>
  *   <li>{@code %clancapes_trim_<slot>_material%} — head/chest/legs/feet</li>
  *   <li>{@code %clancapes_trim_<slot>_pattern%}</li>
  * </ul>
@@ -82,13 +85,35 @@ public final class ClanCapesExpansion extends PlaceholderExpansion {
                     .map(c -> c.members == null ? "0" : String.valueOf(c.members.size()))
                     .orElse("0");
             case "online_ratio" -> onlineRatio(clanOpt.orElse(null));
+            case "online_percent" -> onlinePercent(clanOpt.orElse(null));
             case "kd_season" -> clanOpt
                     .map(c -> c.stats == null ? "0.00"
                             : String.format(Locale.ROOT, "%.2f", c.stats.kd))
                     .orElse("0.00");
             case "kd_lifetime" -> kdLifetime(uuid);
+            case "clan_kills_season" -> clanOpt
+                    .map(c -> c.stats == null ? "0" : String.valueOf(c.stats.kills))
+                    .orElse("0");
+            case "clan_deaths_season" -> clanOpt
+                    .map(c -> c.stats == null ? "0" : String.valueOf(c.stats.deaths))
+                    .orElse("0");
             default -> "";
         };
+    }
+
+    /** Online members as a whole-number percent of the roster (0-100). */
+    private String onlinePercent(ClanDto clan) {
+        if (clan == null || clan.members == null || clan.members.isEmpty()) return "0";
+        int online = 0;
+        for (var m : clan.members) {
+            if (m.playerUuid == null) continue;
+            try {
+                Player p = Bukkit.getPlayer(UUID.fromString(m.playerUuid));
+                if (p != null && p.isOnline()) online++;
+            } catch (IllegalArgumentException ignore) {
+            }
+        }
+        return String.valueOf(Math.round(online * 100.0 / clan.members.size()));
     }
 
     private String trimValue(ClanDto clan, String key) {

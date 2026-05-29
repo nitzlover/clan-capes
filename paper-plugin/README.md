@@ -77,18 +77,21 @@ not in a clan or the data is not yet cached.
 | `%clancapes_clan_role%` | `leader` / `deputy` / `member` | `leader` |
 | `%clancapes_clan_size%` | Member count | `7` |
 
-### Activity (1)
+### Activity (2)
 
 | Placeholder | Returns | Example |
 |---|---|---|
 | `%clancapes_online_ratio%` | `online/total` online of total members | `3/7` |
+| `%clancapes_online_percent%` | Online as a 0-100 percent of roster | `43` |
 
-### Combat (2)
+### Combat (4)
 
 | Placeholder | Returns | Notes |
 |---|---|---|
 | `%clancapes_kd_season%` | Clan season K/D, two decimals | `1.42` |
 | `%clancapes_kd_lifetime%` | Calling player's lifetime K/D | First call returns `0.00`; subsequent calls hit the cache populated by an async panel fetch |
+| `%clancapes_clan_kills_season%` | Clan season kill total | `128` |
+| `%clancapes_clan_deaths_season%` | Clan season death total | `94` |
 
 ### Armour trims (8)
 
@@ -106,7 +109,7 @@ for that slot or empty if unset.
 | `%clancapes_trim_feet_material%` | Boots material |
 | `%clancapes_trim_feet_pattern%` | Boots pattern |
 
-**Total: 16 placeholders.**
+**Total: 19 placeholders.**
 
 ### Quick test
 
@@ -132,6 +135,7 @@ for that slot or empty if unset.
 
 Not yet implemented — see `TODO_FEATURES.md` Wave 1 plugin section:
 
-- `%clancapes_online_percent%` → `26`
-- `%clancapes_clan_kills_season%` / `%clancapes_clan_deaths_season%`
-- `%clancapes_last_action%` → relative timestamp of the latest audit row for the clan
+- `%clancapes_last_action%` → relative timestamp of the latest audit
+  row for the clan. Needs a `lastActionAt` field on the panel's
+  `/api/plugin/clans` payload (the plugin has no audit feed of its
+  own), so it's deferred until that DTO field lands.
