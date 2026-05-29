@@ -117,6 +117,10 @@ public final class AirdropEvent implements Listener {
         Bukkit.getPluginManager().registerEvents(this, plugin);
         barrier = new BarrierRenderer(plugin, zone, Color.fromRGB(255, 170, 0));
         barrier.start();
+        // Register the zone with the boundary enforcer (open — not
+        // sealed until finale). The particle wall is visible the whole
+        // time; the hard seal only kicks in for the decisive phase.
+        EventBoundary.open(zone);
         enterStage(Stage.PREP);
         // POST start to panel (fire-and-forget). eventId comes back for
         // the matching end call; null on failure leaves end unscored.
@@ -140,10 +144,19 @@ public final class AirdropEvent implements Listener {
                 EventChat.announceStage("AIRDROP LANDED",
                         "Loot at " + coords + " — fight!");
             }
-            case FINALE -> EventChat.announceStage("LAST CLAN STANDING",
-                    "Hold the zone!");
-            case COLLECT -> EventChat.announceStage("ZONE SECURED",
-                    "[" + winnerTag + "] — " + (collectSec / 60) + "m to loot");
+            case FINALE -> {
+                // Seal the wall: no new entrants, no pearling in, no
+                // block-bridging in. Current participants stay exempt.
+                EventBoundary.seal(tracker.all().keySet());
+                EventChat.announceStage("LAST CLAN STANDING", "Hold the zone!");
+            }
+            case COLLECT -> {
+                // Keep it sealed through loot collection so outsiders
+                // can't crash the winner's chest run.
+                EventBoundary.seal(tracker.all().keySet());
+                EventChat.announceStage("ZONE SECURED",
+                        "[" + winnerTag + "] — " + (collectSec / 60) + "m to loot");
+            }
             case ENDED -> { /* cleanup handled in finish() */ }
         }
     }
@@ -288,6 +301,7 @@ public final class AirdropEvent implements Listener {
         stage = Stage.ENDED;
         if (tickTask != null) tickTask.cancel();
         if (barrier != null) barrier.stop();
+        EventBoundary.clear();
         scoreboard.clear();
         HandlerList.unregisterAll(this);
     }

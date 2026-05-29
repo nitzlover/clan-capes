@@ -5,6 +5,7 @@ import dev.clancapes.command.ClanCapeCommand;
 import dev.clancapes.command.ClanChatCommand;
 import dev.clancapes.command.ClanCommand;
 import dev.clancapes.events.EventScheduler;
+import dev.clancapes.listener.BoundaryListener;
 import dev.clancapes.listener.FriendlyFireListener;
 import dev.clancapes.listener.PlayerDeathListener;
 import dev.clancapes.listener.PlayerJoinListener;
@@ -53,6 +54,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new PlayerJoinListener(this), this);
         Bukkit.getPluginManager().registerEvents(new PlayerDeathListener(this), this);
         Bukkit.getPluginManager().registerEvents(new FriendlyFireListener(this), this);
+        Bukkit.getPluginManager().registerEvents(new BoundaryListener(), this);
 
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             expansion = new ClanCapesExpansion(this);
