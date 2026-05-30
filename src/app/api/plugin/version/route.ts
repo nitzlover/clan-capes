@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic';
 // Matches the current shipped plugin version. Bump via the
 // PLUGIN_LATEST_VERSION env var to announce a new build without a
 // redeploy of the panel.
-const DEFAULT_VERSION = '1.0.2';
+const DEFAULT_VERSION = '1.0.3';
 
 export async function GET(req: Request) {
   const ctx = await requirePluginAuth(req);
