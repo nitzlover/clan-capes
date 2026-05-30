@@ -153,9 +153,20 @@ public final class ClanCommand implements CommandExecutor {
             player.sendMessage(Component.text("Only the leader can disband.", NamedTextColor.RED));
             return true;
         }
-        player.sendMessage(Component.text(
-                "Disband is admin-only in this build. Use /dashboard/clans → Disband.",
-                NamedTextColor.GRAY));
+        final String tag = clan.tag;
+        final String name = clan.name;
+        plugin.getPanelClient().deleteClan(tag, player.getUniqueId())
+                .whenComplete((res, err) -> back(() -> {
+                    if (err != null) {
+                        player.sendMessage(Component.text(
+                                "Could not disband: " + msg(err), NamedTextColor.RED));
+                    } else {
+                        player.sendMessage(Component.text(
+                                "Clan [" + tag + "] " + name + " disbanded.",
+                                NamedTextColor.YELLOW));
+                        plugin.getClanRepository().refresh();
+                    }
+                }));
         return true;
     }
 
@@ -289,10 +300,47 @@ public final class ClanCommand implements CommandExecutor {
             player.sendMessage(Component.text("Only the leader can change roles.", NamedTextColor.RED));
             return true;
         }
-        player.sendMessage(Component.text(
-                "Role changes are admin-only in this build. Use /dashboard/clans → " + role + ".",
-                NamedTextColor.GRAY));
+        OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
+        if (!target.hasPlayedBefore() && !target.isOnline()) {
+            player.sendMessage(Component.text(
+                    "Unknown player — never seen on this server.", NamedTextColor.RED));
+            return true;
+        }
+        UUID targetUuid = target.getUniqueId();
+        // Refuse to promote/demote yourself or the existing leader — the
+        // panel route would 400/409 anyway but echoing the rule locally
+        // keeps the error message in the player's vocabulary.
+        if (targetUuid.equals(player.getUniqueId())) {
+            player.sendMessage(Component.text(
+                    "Cannot change your own role.", NamedTextColor.RED));
+            return true;
+        }
+        if (!isMemberOfClan(clan, targetUuid)) {
+            player.sendMessage(Component.text(
+                    target.getName() + " is not in your clan.", NamedTextColor.RED));
+            return true;
+        }
+        final String targetName = target.getName() == null ? args[1] : target.getName();
+        plugin.getPanelClient().updateMemberRole(clan.tag, targetUuid, role, player.getUniqueId())
+                .whenComplete((res, err) -> back(() -> {
+                    if (err != null) {
+                        player.sendMessage(Component.text(
+                                "Could not update role: " + msg(err), NamedTextColor.RED));
+                    } else {
+                        player.sendMessage(Component.text(
+                                targetName + " is now " + role + ".",
+                                NamedTextColor.GREEN));
+                        plugin.getClanRepository().refresh();
+                    }
+                }));
         return true;
+    }
+
+    /** True if the target uuid appears in the cached clan member list. */
+    private boolean isMemberOfClan(ClanDto clan, UUID uuid) {
+        if (clan.members == null) return false;
+        String s = uuid.toString();
+        return clan.members.stream().anyMatch(m -> s.equalsIgnoreCase(m.playerUuid));
     }
 
     private boolean doTransfer(CommandSender sender, String[] args) {
@@ -331,10 +379,44 @@ public final class ClanCommand implements CommandExecutor {
         return true;
     }
 
+    private static final java.util.regex.Pattern HEX_RE =
+            java.util.regex.Pattern.compile("^#?[0-9a-fA-F]{6}$");
+
     private boolean doColor(CommandSender sender, String[] args) {
-        sender.sendMessage(Component.text(
-                "Colour changes are admin-only in this build. Use /dashboard/clans → recolour.",
-                NamedTextColor.GRAY));
+        Player player = requirePlayer(sender);
+        if (player == null) return true;
+        if (args.length < 2) {
+            player.sendMessage(Component.text(
+                    "Usage: /clan color <#RRGGBB>", NamedTextColor.RED));
+            return true;
+        }
+        ClanDto clan = requireOwnClan(player);
+        if (clan == null) return true;
+        if (!isLeaderOrDeputy(clan, player.getUniqueId())) {
+            player.sendMessage(Component.text(
+                    "Only leader or deputy can change the clan colour.", NamedTextColor.RED));
+            return true;
+        }
+        String raw = args[1].trim();
+        if (!HEX_RE.matcher(raw).matches()) {
+            player.sendMessage(Component.text(
+                    "Colour must look like #RRGGBB (e.g. #ff8800).", NamedTextColor.RED));
+            return true;
+        }
+        // Normalise to upper-case with the leading '#' so the panel
+        // receives the same shape the admin UI sends.
+        String hex = "#" + (raw.startsWith("#") ? raw.substring(1) : raw).toUpperCase(Locale.ROOT);
+        plugin.getPanelClient().updateClan(clan.tag, null, hex, player.getUniqueId())
+                .whenComplete((res, err) -> back(() -> {
+                    if (err != null) {
+                        player.sendMessage(Component.text(
+                                "Could not update colour: " + msg(err), NamedTextColor.RED));
+                    } else {
+                        player.sendMessage(Component.text(
+                                "Clan colour set to " + hex + ".", NamedTextColor.GREEN));
+                        plugin.getClanRepository().refresh();
+                    }
+                }));
         return true;
     }
 

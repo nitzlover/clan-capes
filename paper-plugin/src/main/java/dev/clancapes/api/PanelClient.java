@@ -230,6 +230,59 @@ public final class PanelClient {
                 gson.fromJson(json.get("clan"), ClanDto.class));
     }
 
+    /**
+     * Change a member's role to "deputy" or "member" via the existing
+     * PATCH /api/plugin/clans/[tag]/members/[uuid] route. Leader promotion
+     * uses {@link #transferLeadership} instead — the panel route enforces
+     * that distinction.
+     */
+    public CompletableFuture<JsonObject> updateMemberRole(String tag, UUID uuid,
+                                                          String role, UUID actorUuid) {
+        java.util.HashMap<String, Object> body = new java.util.HashMap<>();
+        body.put("role", role);
+        if (actorUuid != null) body.put("actorUuid", actorUuid.toString());
+        HttpRequest req = requestBuilder(
+                "/api/plugin/clans/" + urlEncode(tag) + "/members/" + uuid)
+                .header("Content-Type", "application/json")
+                .method("PATCH", jsonBody(gson, body))
+                .build();
+        return sendJson(req, JsonObject.class);
+    }
+
+    /**
+     * Patch a clan's name and/or color. Pass null to leave a field
+     * unchanged. Panel rejects an empty body with 400 so callers must
+     * supply at least one update.
+     */
+    public CompletableFuture<JsonObject> updateClan(String tag, String name,
+                                                    String colorHex, UUID actorUuid) {
+        java.util.HashMap<String, Object> body = new java.util.HashMap<>();
+        if (name != null) body.put("name", name);
+        if (colorHex != null) body.put("colorHex", colorHex);
+        if (actorUuid != null) body.put("actorUuid", actorUuid.toString());
+        HttpRequest req = requestBuilder("/api/plugin/clans/" + urlEncode(tag))
+                .header("Content-Type", "application/json")
+                .method("PATCH", jsonBody(gson, body))
+                .build();
+        return sendJson(req, JsonObject.class);
+    }
+
+    /**
+     * Disband a clan — cascades to members, banners, trims, announcements
+     * server-side. The plugin treats this as terminal: the local clan
+     * cache is refreshed on success so the leader's /clan info instantly
+     * reports they are no longer in a clan.
+     */
+    public CompletableFuture<JsonObject> deleteClan(String tag, UUID actorUuid) {
+        HttpRequest req = requestBuilder("/api/plugin/clans/" + urlEncode(tag))
+                .header("Content-Type", "application/json")
+                .method("DELETE", actorUuid != null
+                        ? jsonBody(gson, Map.of("actorUuid", actorUuid.toString()))
+                        : HttpRequest.BodyPublishers.noBody())
+                .build();
+        return sendJson(req, JsonObject.class);
+    }
+
     public CompletableFuture<JsonObject> removeMember(String tag, UUID uuid, UUID actorUuid) {
         String path = "/api/plugin/clans/" + urlEncode(tag) + "/members/" + uuid;
         HttpRequest req = requestBuilder(path)
