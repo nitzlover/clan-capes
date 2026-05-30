@@ -3,6 +3,7 @@ package dev.clancapes.command;
 import com.google.gson.JsonObject;
 import dev.clancapes.ClanCapesPlugin;
 import dev.clancapes.api.dto.ClanDto;
+import dev.clancapes.api.dto.InvitationDto;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -51,12 +52,9 @@ public final class ClanCommand implements CommandExecutor {
             case "color" -> doColor(sender, args);
             case "panel" -> doPanel(sender);
             case "menu" -> doMenu(sender);
-            case "invite", "accept", "decline" -> {
-                sender.sendMessage(Component.text(
-                        "Invites are not implemented in this build. Ask an admin to add you via /dashboard/clans.",
-                        NamedTextColor.GRAY));
-                yield true;
-            }
+            case "invite" -> doInvite(sender, args);
+            case "accept" -> doAccept(sender, args);
+            case "decline" -> doDecline(sender, args);
             default -> showHelp(sender);
         };
     }
@@ -71,6 +69,9 @@ public final class ClanCommand implements CommandExecutor {
         sender.sendMessage(Component.text("  promote/demote <p>    change role (leader only)", NamedTextColor.GRAY));
         sender.sendMessage(Component.text("  transfer <player>     transfer leadership", NamedTextColor.GRAY));
         sender.sendMessage(Component.text("  color <#RRGGBB>       set clan colour", NamedTextColor.GRAY));
+        sender.sendMessage(Component.text("  invite <player>       invite player to clan (leader/deputy)", NamedTextColor.GRAY));
+        sender.sendMessage(Component.text("  accept [tag]          accept pending invite (omit tag to see list)", NamedTextColor.GRAY));
+        sender.sendMessage(Component.text("  decline [tag]         decline pending invite", NamedTextColor.GRAY));
         sender.sendMessage(Component.text("  panel                 open web management panel", NamedTextColor.GRAY));
         sender.sendMessage(Component.text("  menu                  open the clan chest GUI", NamedTextColor.GRAY));
         return true;
@@ -482,6 +483,218 @@ public final class ClanCommand implements CommandExecutor {
             return TextColor.color(Integer.parseInt(h, 16));
         } catch (NumberFormatException e) {
             return NamedTextColor.WHITE;
+        }
+    }
+
+    // ─────────────────────── invitations (1.0.5) ───────────────────────
+
+    /**
+     * /clan invite <player> — leader or deputy mints an invitation
+     * that the invitee then accepts/declines via /clan accept|decline.
+     * Default TTL = 24h, configurable via {@code invites.ttl-seconds}.
+     */
+    private boolean doInvite(CommandSender sender, String[] args) {
+        Player player = requirePlayer(sender);
+        if (player == null) return true;
+        if (args.length < 2) {
+            player.sendMessage(Component.text("Usage: /clan invite <player>", NamedTextColor.RED));
+            return true;
+        }
+        ClanDto clan = requireOwnClan(player);
+        if (clan == null) return true;
+        if (!isLeaderOrDeputy(clan, player.getUniqueId())) {
+            player.sendMessage(Component.text(
+                    "Only leader or deputy can invite.", NamedTextColor.RED));
+            return true;
+        }
+        OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
+        if (!target.hasPlayedBefore() && !target.isOnline()) {
+            player.sendMessage(Component.text(
+                    "Unknown player — never seen on this server.", NamedTextColor.RED));
+            return true;
+        }
+        UUID targetUuid = target.getUniqueId();
+        if (targetUuid.equals(player.getUniqueId())) {
+            player.sendMessage(Component.text(
+                    "Cannot invite yourself.", NamedTextColor.RED));
+            return true;
+        }
+        if (isMemberOfClan(clan, targetUuid)) {
+            player.sendMessage(Component.text(
+                    target.getName() + " is already in your clan.", NamedTextColor.RED));
+            return true;
+        }
+        final String targetName = target.getName() == null ? args[1] : target.getName();
+        Integer ttl = plugin.getConfig().getInt("invites.ttl-seconds", 86_400);
+        plugin.getPanelClient()
+                .createInvite(clan.tag, targetUuid, targetName, player.getUniqueId(), ttl)
+                .whenComplete((invite, err) -> back(() -> {
+                    if (err != null || invite == null) {
+                        player.sendMessage(Component.text(
+                                "Could not invite: " + (err == null ? "unknown" : msg(err)),
+                                NamedTextColor.RED));
+                        return;
+                    }
+                    player.sendMessage(Component.text(
+                            "Invited " + targetName + " to [" + clan.tag + "]. "
+                                    + "Expires in " + (ttl / 60) + " min.",
+                            NamedTextColor.GREEN));
+                    Player invitee = Bukkit.getPlayer(targetUuid);
+                    if (invitee != null && invitee.isOnline()) {
+                        notifyInvitee(invitee, invite);
+                    }
+                }));
+        return true;
+    }
+
+    /**
+     * Tell an online invitee about an invitation. Clickable accept /
+     * decline hints save them the typing.
+     */
+    private static void notifyInvitee(Player invitee, InvitationDto invite) {
+        invitee.sendMessage(Component.text(
+                "You have been invited to clan [" + invite.clanTag + "] " + invite.clanName + ".",
+                NamedTextColor.GOLD));
+        Component accept = Component.text("[Accept]", NamedTextColor.GREEN)
+                .clickEvent(ClickEvent.runCommand("/clan accept " + invite.clanTag))
+                .hoverEvent(HoverEvent.showText(Component.text(
+                        "Click to join [" + invite.clanTag + "]", NamedTextColor.GRAY)));
+        Component decline = Component.text("[Decline]", NamedTextColor.RED)
+                .clickEvent(ClickEvent.runCommand("/clan decline " + invite.clanTag))
+                .hoverEvent(HoverEvent.showText(Component.text(
+                        "Click to reject the invitation", NamedTextColor.GRAY)));
+        invitee.sendMessage(Component.text("  ", NamedTextColor.GRAY)
+                .append(accept).append(Component.text("  ", NamedTextColor.GRAY)).append(decline));
+    }
+
+    /**
+     * /clan accept [tag] — accept a pending invitation. With no
+     * argument, lists every pending clan + a clickable accept hint
+     * for each.
+     */
+    private boolean doAccept(CommandSender sender, String[] args) {
+        Player player = requirePlayer(sender);
+        if (player == null) return true;
+        ClanDto existing = plugin.getClanRepository().getByPlayer(player.getUniqueId()).orElse(null);
+        if (existing != null) {
+            player.sendMessage(Component.text(
+                    "You are already in [" + existing.tag + "]. /clan leave first.",
+                    NamedTextColor.RED));
+            return true;
+        }
+        plugin.getPanelClient().listPlayerInvites(player.getUniqueId())
+                .whenComplete((invites, err) -> back(() -> {
+                    if (err != null) {
+                        player.sendMessage(Component.text(
+                                "Could not load invites: " + msg(err), NamedTextColor.RED));
+                        return;
+                    }
+                    if (invites == null || invites.isEmpty()) {
+                        player.sendMessage(Component.text(
+                                "You have no pending invitations.", NamedTextColor.GRAY));
+                        return;
+                    }
+                    if (args.length < 2) {
+                        renderInviteList(player, invites);
+                        return;
+                    }
+                    String wanted = args[1];
+                    InvitationDto match = invites.stream()
+                            .filter(i -> i.clanTag != null && i.clanTag.equalsIgnoreCase(wanted))
+                            .findFirst().orElse(null);
+                    if (match == null) {
+                        player.sendMessage(Component.text(
+                                "No pending invitation from [" + wanted + "].",
+                                NamedTextColor.RED));
+                        renderInviteList(player, invites);
+                        return;
+                    }
+                    plugin.getPanelClient()
+                            .acceptInvite(match.id, player.getUniqueId(), player.getName())
+                            .whenComplete((res, e2) -> back(() -> {
+                                if (e2 != null) {
+                                    player.sendMessage(Component.text(
+                                            "Could not accept: " + msg(e2), NamedTextColor.RED));
+                                    return;
+                                }
+                                player.sendMessage(Component.text(
+                                        "Joined clan [" + match.clanTag + "] "
+                                                + match.clanName + ".", NamedTextColor.GREEN));
+                                plugin.getClanRepository().refresh();
+                            }));
+                }));
+        return true;
+    }
+
+    /**
+     * /clan decline [tag] — decline one pending invitation, or list
+     * them when no tag is supplied.
+     */
+    private boolean doDecline(CommandSender sender, String[] args) {
+        Player player = requirePlayer(sender);
+        if (player == null) return true;
+        plugin.getPanelClient().listPlayerInvites(player.getUniqueId())
+                .whenComplete((invites, err) -> back(() -> {
+                    if (err != null) {
+                        player.sendMessage(Component.text(
+                                "Could not load invites: " + msg(err), NamedTextColor.RED));
+                        return;
+                    }
+                    if (invites == null || invites.isEmpty()) {
+                        player.sendMessage(Component.text(
+                                "You have no pending invitations.", NamedTextColor.GRAY));
+                        return;
+                    }
+                    if (args.length < 2) {
+                        renderInviteList(player, invites);
+                        return;
+                    }
+                    String wanted = args[1];
+                    InvitationDto match = invites.stream()
+                            .filter(i -> i.clanTag != null && i.clanTag.equalsIgnoreCase(wanted))
+                            .findFirst().orElse(null);
+                    if (match == null) {
+                        player.sendMessage(Component.text(
+                                "No pending invitation from [" + wanted + "].",
+                                NamedTextColor.RED));
+                        renderInviteList(player, invites);
+                        return;
+                    }
+                    plugin.getPanelClient().declineInvite(match.id, player.getUniqueId())
+                            .whenComplete((res, e2) -> back(() -> {
+                                if (e2 != null) {
+                                    player.sendMessage(Component.text(
+                                            "Could not decline: " + msg(e2), NamedTextColor.RED));
+                                    return;
+                                }
+                                player.sendMessage(Component.text(
+                                        "Declined invitation from [" + match.clanTag + "].",
+                                        NamedTextColor.YELLOW));
+                            }));
+                }));
+        return true;
+    }
+
+    /**
+     * Render a list of pending invitations with clickable accept /
+     * decline hints. Used both by /clan accept and /clan decline when
+     * called without a tag, and by the on-join listener.
+     */
+    private static void renderInviteList(Player player, java.util.List<InvitationDto> invites) {
+        player.sendMessage(Component.text(
+                "Pending invitations (" + invites.size() + "):", NamedTextColor.GOLD));
+        for (InvitationDto i : invites) {
+            Component accept = Component.text("[Accept]", NamedTextColor.GREEN)
+                    .clickEvent(ClickEvent.runCommand("/clan accept " + i.clanTag))
+                    .hoverEvent(HoverEvent.showText(Component.text(
+                            "Click to join [" + i.clanTag + "]", NamedTextColor.GRAY)));
+            Component decline = Component.text("[Decline]", NamedTextColor.RED)
+                    .clickEvent(ClickEvent.runCommand("/clan decline " + i.clanTag))
+                    .hoverEvent(HoverEvent.showText(Component.text(
+                            "Click to reject", NamedTextColor.GRAY)));
+            player.sendMessage(Component.text(
+                    "  [" + i.clanTag + "] " + i.clanName + "  ", NamedTextColor.GRAY)
+                    .append(accept).append(Component.text(" ", NamedTextColor.GRAY)).append(decline));
         }
     }
 

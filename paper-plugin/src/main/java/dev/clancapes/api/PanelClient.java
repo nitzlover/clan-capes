@@ -8,6 +8,7 @@ import dev.clancapes.api.dto.ApiError;
 import dev.clancapes.api.dto.BannerDto;
 import dev.clancapes.api.dto.ClanDto;
 import dev.clancapes.api.dto.EventConfigDto;
+import dev.clancapes.api.dto.InvitationDto;
 import dev.clancapes.api.dto.SettingsDto;
 import dev.clancapes.api.dto.TrimDto;
 
@@ -273,6 +274,68 @@ public final class PanelClient {
      * cache is refreshed on success so the leader's /clan info instantly
      * reports they are no longer in a clan.
      */
+    /**
+     * Mint a clan invitation. Plugin-side caller already gated on the
+     * inviter being a leader or deputy and the invitee being a
+     * never-disbanded player on this server; the panel re-verifies
+     * both rules before persisting.
+     */
+    public CompletableFuture<InvitationDto> createInvite(String tag, UUID inviteeUuid,
+                                                         String inviteeName, UUID inviterUuid,
+                                                         Integer ttlSeconds) {
+        java.util.HashMap<String, Object> body = new java.util.HashMap<>();
+        body.put("inviteeUuid", inviteeUuid.toString());
+        body.put("inviteeName", inviteeName);
+        body.put("inviterUuid", inviterUuid.toString());
+        if (ttlSeconds != null) body.put("ttlSeconds", ttlSeconds);
+        HttpRequest req = requestBuilder("/api/plugin/clans/" + urlEncode(tag) + "/invites")
+                .header("Content-Type", "application/json")
+                .POST(jsonBody(gson, body))
+                .build();
+        return sendJson(req, JsonObject.class).thenApply(json ->
+                gson.fromJson(json.get("invitation"), InvitationDto.class));
+    }
+
+    /**
+     * List the pending invitations for a player on this server. The
+     * panel filters on {@code status='pending' AND expires_at>now()}
+     * server-side so the plugin doesn't have to re-check expiry.
+     */
+    public CompletableFuture<List<InvitationDto>> listPlayerInvites(UUID playerUuid) {
+        HttpRequest req = requestBuilder(
+                "/api/plugin/players/" + playerUuid + "/invites").GET().build();
+        return sendJson(req, JsonObject.class).thenApply(json -> {
+            java.lang.reflect.Type t = new TypeToken<List<InvitationDto>>(){}.getType();
+            return gson.fromJson(json.get("invitations"), t);
+        });
+    }
+
+    /** Accept a pending invitation; panel inserts the member row. */
+    public CompletableFuture<JsonObject> acceptInvite(int inviteId, UUID playerUuid,
+                                                      String playerName) {
+        java.util.HashMap<String, Object> body = new java.util.HashMap<>();
+        body.put("playerUuid", playerUuid.toString());
+        body.put("playerName", playerName);
+        body.put("actorUuid", playerUuid.toString());
+        HttpRequest req = requestBuilder("/api/plugin/invites/" + inviteId + "/accept")
+                .header("Content-Type", "application/json")
+                .POST(jsonBody(gson, body))
+                .build();
+        return sendJson(req, JsonObject.class);
+    }
+
+    /** Decline a pending invitation. */
+    public CompletableFuture<JsonObject> declineInvite(int inviteId, UUID playerUuid) {
+        java.util.HashMap<String, Object> body = new java.util.HashMap<>();
+        body.put("playerUuid", playerUuid.toString());
+        body.put("actorUuid", playerUuid.toString());
+        HttpRequest req = requestBuilder("/api/plugin/invites/" + inviteId + "/decline")
+                .header("Content-Type", "application/json")
+                .POST(jsonBody(gson, body))
+                .build();
+        return sendJson(req, JsonObject.class);
+    }
+
     public CompletableFuture<JsonObject> deleteClan(String tag, UUID actorUuid) {
         HttpRequest req = requestBuilder("/api/plugin/clans/" + urlEncode(tag))
                 .header("Content-Type", "application/json")

@@ -1,14 +1,20 @@
 package dev.clancapes.listener;
 
 import dev.clancapes.ClanCapesPlugin;
+import dev.clancapes.api.dto.InvitationDto;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
+
+import java.util.List;
+import java.util.UUID;
 
 /**
  * Triggers cache warm-up if the plugin has been linked but the
@@ -53,5 +59,43 @@ public final class PlayerJoinListener implements Listener {
                     "  Manual install only — do not hot-swap a live jar.",
                     NamedTextColor.GRAY));
         }
+
+        // Pending-invite nag — surface the invitee's open invitations
+        // with clickable accept/decline hints. Skip if the player is
+        // already in a clan (the panel would 409 anyway).
+        if (!plugin.getPanelClient().isConfigured()) return;
+        Player joining = event.getPlayer();
+        UUID uuid = joining.getUniqueId();
+        if (plugin.getClanRepository().getByPlayer(uuid).isPresent()) return;
+        plugin.getPanelClient().listPlayerInvites(uuid)
+                .whenComplete((invites, err) -> Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (err != null || invites == null || invites.isEmpty()) return;
+                    if (!joining.isOnline()) return;
+                    joining.sendMessage(Component.text(
+                            "You have " + invites.size() + " pending clan invitation"
+                                    + (invites.size() == 1 ? "" : "s") + ":",
+                            NamedTextColor.GOLD));
+                    for (InvitationDto i : invites) {
+                        renderInvite(joining, i);
+                    }
+                    joining.sendMessage(Component.text(
+                            "  Use /clan accept <TAG> or /clan decline <TAG>.",
+                            NamedTextColor.GRAY));
+                }));
+    }
+
+    /** Per-invitation line with clickable accept / decline. */
+    private static void renderInvite(Player p, InvitationDto i) {
+        Component accept = Component.text("[Accept]", NamedTextColor.GREEN)
+                .clickEvent(ClickEvent.runCommand("/clan accept " + i.clanTag))
+                .hoverEvent(HoverEvent.showText(Component.text(
+                        "Click to join [" + i.clanTag + "]", NamedTextColor.GRAY)));
+        Component decline = Component.text("[Decline]", NamedTextColor.RED)
+                .clickEvent(ClickEvent.runCommand("/clan decline " + i.clanTag))
+                .hoverEvent(HoverEvent.showText(Component.text(
+                        "Click to reject", NamedTextColor.GRAY)));
+        p.sendMessage(Component.text(
+                "  [" + i.clanTag + "] " + i.clanName + "  ", NamedTextColor.GRAY)
+                .append(accept).append(Component.text(" ", NamedTextColor.GRAY)).append(decline));
     }
 }

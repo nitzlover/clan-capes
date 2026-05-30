@@ -29,6 +29,11 @@ leader-panel:
   # TTL of the /clan panel single-use token in seconds.
   token-ttl-sec: 600
 
+invites:
+  # /clan invite TTL in seconds. Panel clamps to 60..604800 (1 min..7 days).
+  # Default 86400 (24h) matches the events.txt design note.
+  ttl-seconds: 86400
+
 messages:
   prefix: '&8[&6ClanCapes&8] &7'
   no-clan: '&cYou are not in a clan.'
