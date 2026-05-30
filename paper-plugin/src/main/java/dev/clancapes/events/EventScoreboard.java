@@ -27,15 +27,16 @@ import java.util.List;
  */
 public final class EventScoreboard {
 
-    private static final String TITLE = "§6§lAIRDROP";
-
     private final Scoreboard board;
     private final Objective objective;
 
-    public EventScoreboard() {
+    /**
+     * @param title legacy-colored title string ("§6§lAIRDROP" / "§b§lKING OF THE HILL")
+     */
+    public EventScoreboard(String title) {
         this.board = Bukkit.getScoreboardManager().getNewScoreboard();
         this.objective = board.registerNewObjective("ccevent", Criteria.DUMMY,
-                net.kyori.adventure.text.Component.text(TITLE));
+                net.kyori.adventure.text.Component.text(title));
         this.objective.setDisplaySlot(DisplaySlot.SIDEBAR);
     }
 

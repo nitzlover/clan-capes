@@ -48,11 +48,19 @@ public final class ClanChatCommand implements CommandExecutor {
                 .append(Component.text(player.getName() + ": ", NamedTextColor.WHITE))
                 .append(Component.text(message, NamedTextColor.GRAY));
 
+        // Echo to the sender unconditionally — the cached clan.members
+        // snapshot can be up to refresh-clans-sec stale, so a just-joined
+        // leader otherwise wouldn't see their own message and assume it
+        // didn't send.
+        player.sendMessage(line);
+
         if (clan.members == null) return true;
+        UUID self = player.getUniqueId();
         for (var m : clan.members) {
             if (m.playerUuid == null) continue;
             try {
                 UUID uuid = UUID.fromString(m.playerUuid);
+                if (uuid.equals(self)) continue; // already echoed above
                 Player member = Bukkit.getPlayer(uuid);
                 if (member != null && member.isOnline()) {
                     member.sendMessage(line);

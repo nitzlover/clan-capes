@@ -123,8 +123,14 @@ public final class EventScheduler {
                         + " — online threshold not met");
                 continue;
             }
-            lastFired.put(cfg.type, now);
-            if (launch(cfg)) return; // one launch per tick
+            // Only consume the cooldown if the launch actually succeeded
+            // — otherwise a transient launch failure (no overworld,
+            //   unimplemented type) burns the whole interval before the
+            //   operator can retry.
+            if (launch(cfg)) {
+                lastFired.put(cfg.type, now);
+                return; // one launch per tick
+            }
         }
     }
 

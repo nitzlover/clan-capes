@@ -1,7 +1,6 @@
 package dev.clancapes.command;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonObject;
 import dev.clancapes.ClanCapesPlugin;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -254,7 +253,9 @@ public final class ClanCapeCommand implements CommandExecutor {
     private boolean doReload(CommandSender sender) {
         plugin.reloadConfig();
         plugin.reloadFromConfig();
-        sender.sendMessage(Component.text("Plugin reloaded.", NamedTextColor.GREEN));
+        sender.sendMessage(Component.text(
+                "Plugin reloaded (config.yml only — plugin.yml requires server restart).",
+                NamedTextColor.GREEN));
         return true;
     }
 
@@ -267,13 +268,5 @@ public final class ClanCapeCommand implements CommandExecutor {
 
     private static String stripTrailing(String s) {
         return s.endsWith("/") ? s.substring(0, s.length() - 1) : s;
-    }
-
-    private JsonObject parseJson(String body) {
-        try {
-            return GSON.fromJson(body, JsonObject.class);
-        } catch (Exception e) {
-            return new JsonObject();
-        }
     }
 }

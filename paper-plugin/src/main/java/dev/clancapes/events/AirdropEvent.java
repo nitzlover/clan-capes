@@ -75,7 +75,7 @@ public final class AirdropEvent implements Listener, RunningEvent {
         this.plugin = plugin;
         this.world = world;
         this.tracker = new ParticipantTracker(plugin);
-        this.scoreboard = new EventScoreboard();
+        this.scoreboard = new EventScoreboard("§6§lAIRDROP");
 
         // Stage durations from payload, falling back to a 20/10/5 split
         // of the events.txt defaults when a knob is missing. The test
@@ -93,8 +93,14 @@ public final class AirdropEvent implements Listener, RunningEvent {
         this.collectSec = testFast
                 ? plugin.getConfig().getInt("test.collect-seconds", 15)
                 : minutesToSec(p, "lootCollectionMinutes", 5);
-        int reentrySec = (p != null && p.has("crashCommebackSeconds"))
-                ? p.get("crashCommebackSeconds").getAsInt() : 30;
+        // Accept both the original payload typo and the corrected key so
+        // a future panel rename to "crashComebackSeconds" doesn't
+        // silently fall back to the 30 s default.
+        int reentrySec = 30;
+        if (p != null) {
+            if (p.has("crashComebackSeconds")) reentrySec = p.get("crashComebackSeconds").getAsInt();
+            else if (p.has("crashCommebackSeconds")) reentrySec = p.get("crashCommebackSeconds").getAsInt();
+        }
         this.reentryMs = reentrySec * 1000;
 
         // Pick the zone centre: random point within spawnRadius of
@@ -106,6 +112,14 @@ public final class AirdropEvent implements Listener, RunningEvent {
         if (plugin.getConfig().getBoolean("test.enabled", false)) {
             int spawnOverride = plugin.getConfig().getInt("test.zone-spawn-radius-blocks", 0);
             if (spawnOverride > 0) spawnRadius = spawnOverride;
+        }
+        // Clamp so a negative panel value (configured by accident) can't
+        // crash the constructor via ThreadLocalRandom.nextInt's bounds
+        // check. Zero is fine — picks the spawn itself.
+        if (spawnRadius < 0) {
+            plugin.getLogger().warning("[airdrop] spawnRadius=" + spawnRadius
+                    + " < 0 — clamped to 0");
+            spawnRadius = 0;
         }
         int contestRadius = cfg.radiusBlocks;
         if (plugin.getConfig().getBoolean("test.enabled", false)) {
@@ -236,7 +250,11 @@ public final class AirdropEvent implements Listener, RunningEvent {
                 tracker.markLeftZone(p.getUniqueId(), now);
             }
         }
-        tracker.expireAbsent(now, reentryMs);
+        for (var expired : tracker.expireAbsent(now, reentryMs)) {
+            String name = Bukkit.getOfflinePlayer(expired.uuid).getName();
+            EventChat.broadcast("§7" + (name == null ? "A participant" : name)
+                    + " [" + expired.clanTag + "] left the zone and was eliminated.");
+        }
     }
 
     /**
@@ -258,8 +276,16 @@ public final class AirdropEvent implements Listener, RunningEvent {
 
     private void declareWinner(int clanId) {
         var sample = tracker.soleSurvivingClanSample();
-        winnerTag = sample != null ? sample.clanTag : "?";
-        EventChat.announceWinner(winnerTag);
+        if (sample == null) {
+            plugin.getLogger().warning("[airdrop] winner resolution failed (clanId="
+                    + clanId + " — no surviving sample); cancelling instead of "
+                    + "broadcasting '?'");
+            EventChat.announceCancelled("winner resolution failed");
+            finish();
+            return;
+        }
+        winnerTag = sample.clanTag;
+        EventChat.announceWinner("AIRDROP", "drop", winnerTag);
         postEnd(clanId);
         enterStage(Stage.COLLECT);
     }
@@ -296,6 +322,10 @@ public final class AirdropEvent implements Listener, RunningEvent {
         return switch (stage) {
             case PREP -> Math.max(0, prepSec - elapsed);
             case LANDING -> Math.max(0, landingSec - elapsed);
+            // FINALE is sudden-death with a 10 min hard cap (see tick()).
+            // Surfacing the countdown lets players see why the round will
+            // end even if no one secures the zone.
+            case FINALE -> Math.max(0, 600 - elapsed);
             case COLLECT -> Math.max(0, collectSec - elapsed);
             default -> -1;
         };

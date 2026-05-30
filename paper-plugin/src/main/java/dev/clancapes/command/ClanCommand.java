@@ -133,7 +133,7 @@ public final class ClanCommand implements CommandExecutor {
         plugin.getPanelClient().createClan(tag, name, player.getUniqueId(), player.getName(), null)
                 .whenComplete((dto, err) -> back(() -> {
                     if (err != null) {
-                        player.sendMessage(Component.text("Could not create clan: " + err.getMessage(),
+                        player.sendMessage(Component.text("Could not create clan: " + msg(err),
                                 NamedTextColor.RED));
                     } else {
                         player.sendMessage(Component.text("Clan [" + dto.tag + "] " + dto.name + " created.",
@@ -229,7 +229,7 @@ public final class ClanCommand implements CommandExecutor {
                 .whenComplete((res, err) -> back(() -> {
                     if (err != null) {
                         player.sendMessage(Component.text(
-                                "Could not leave: " + err.getMessage(), NamedTextColor.RED));
+                                "Could not leave: " + msg(err), NamedTextColor.RED));
                     } else {
                         player.sendMessage(Component.text("You left [" + clan.tag + "].",
                                 NamedTextColor.YELLOW));
@@ -253,15 +253,20 @@ public final class ClanCommand implements CommandExecutor {
             return true;
         }
         OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
-        if (target.getUniqueId() == null) {
-            player.sendMessage(Component.text("Unknown player.", NamedTextColor.RED));
+        // OfflinePlayer.getUniqueId() never returns null — Bukkit hashes
+        // the name into an offline-mode UUID even when Mojang has never
+        // seen the player. Gate on hasPlayedBefore() / isOnline() so a
+        // typo can't kick a player who has never joined this server.
+        if (!target.hasPlayedBefore() && !target.isOnline()) {
+            player.sendMessage(Component.text(
+                    "Unknown player — never seen on this server.", NamedTextColor.RED));
             return true;
         }
         plugin.getPanelClient().removeMember(clan.tag, target.getUniqueId(), player.getUniqueId())
                 .whenComplete((res, err) -> back(() -> {
                     if (err != null) {
                         player.sendMessage(Component.text(
-                                "Could not kick: " + err.getMessage(), NamedTextColor.RED));
+                                "Could not kick: " + msg(err), NamedTextColor.RED));
                     } else {
                         player.sendMessage(Component.text("Kicked " + target.getName() + ".",
                                 NamedTextColor.YELLOW));
@@ -304,16 +309,18 @@ public final class ClanCommand implements CommandExecutor {
             return true;
         }
         OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
-        UUID targetUuid = target.getUniqueId();
-        if (targetUuid == null) {
-            player.sendMessage(Component.text("Unknown player.", NamedTextColor.RED));
+        // See kick() — OfflinePlayer.getUniqueId() never returns null.
+        if (!target.hasPlayedBefore() && !target.isOnline()) {
+            player.sendMessage(Component.text(
+                    "Unknown player — never seen on this server.", NamedTextColor.RED));
             return true;
         }
+        UUID targetUuid = target.getUniqueId();
         plugin.getPanelClient().transferLeadership(clan.tag, targetUuid, player.getUniqueId())
                 .whenComplete((res, err) -> back(() -> {
                     if (err != null) {
                         player.sendMessage(Component.text(
-                                "Could not transfer: " + err.getMessage(), NamedTextColor.RED));
+                                "Could not transfer: " + msg(err), NamedTextColor.RED));
                     } else {
                         player.sendMessage(Component.text(
                                 "Leadership transferred to " + target.getName() + ".",
@@ -351,7 +358,7 @@ public final class ClanCommand implements CommandExecutor {
                     if (err != null || json == null) {
                         player.sendMessage(Component.text(
                                 "Could not issue panel link: "
-                                        + (err == null ? "unknown" : err.getMessage()),
+                                        + (err == null ? "unknown" : msg(err)),
                                 NamedTextColor.RED));
                         return;
                     }
@@ -399,5 +406,25 @@ public final class ClanCommand implements CommandExecutor {
     /** Hop a callback back to the Bukkit main thread before touching API. */
     private void back(Runnable r) {
         Bukkit.getScheduler().runTask(plugin, r);
+    }
+
+    /**
+     * Unwrap a CompletableFuture failure to its useful message.
+     *
+     * <p>{@link java.util.concurrent.CompletionException} wraps the
+     * actual cause and its own {@code getMessage()} is null — so the
+     * naive {@code msg(err)} prints {@code "Could not X: null"}
+     * to the player. Walk down to the first non-CompletionException
+     * cause and prefer its message; fall back to the class name when
+     * the cause itself has no message.
+     */
+    private static String msg(Throwable err) {
+        Throwable cur = err;
+        while (cur instanceof java.util.concurrent.CompletionException
+                && cur.getCause() != null) {
+            cur = cur.getCause();
+        }
+        String m = cur.getMessage();
+        return m == null ? cur.getClass().getSimpleName() : m;
     }
 }

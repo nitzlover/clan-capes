@@ -174,6 +174,14 @@ public final class ClanCapesPlugin extends JavaPlugin {
         announcementRepository = new AnnouncementRepository(panelClient, getLogger());
         eventConfigRepository = new EventConfigRepository(panelClient, getLogger());
         startScheduledTasks();
+        // Bounce the event scheduler so its tick task and the surrounding
+        // repo/client state are consistent for the next tick. Leaves any
+        // in-flight event running — operator can /clancape event stop if
+        // they want a clean slate.
+        if (eventScheduler != null) {
+            eventScheduler.stop();
+            eventScheduler.start();
+        }
         if (panelClient.isConfigured()) {
             clanRepository.refresh();
             armorTrimRepository.refresh();

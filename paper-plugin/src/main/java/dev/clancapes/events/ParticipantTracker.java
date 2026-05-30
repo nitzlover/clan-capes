@@ -4,8 +4,10 @@ import dev.clancapes.ClanCapesPlugin;
 import dev.clancapes.api.dto.ClanDto;
 import org.bukkit.entity.Player;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -114,14 +116,21 @@ public final class ParticipantTracker {
     /**
      * Eliminate anyone whose out-of-zone clock exceeded the re-entry
      * window. Call once per tick with the current time + window.
+     *
+     * @return the newly-eliminated entries (empty if none) so the
+     *   caller can broadcast them in event chat — silent eliminations
+     *   used to make it look like clans were vanishing for no reason.
      */
-    public void expireAbsent(long nowMs, long reentryMs) {
+    public List<Entry> expireAbsent(long nowMs, long reentryMs) {
+        List<Entry> expired = new ArrayList<>();
         for (Entry e : entries.values()) {
             if (e.eliminated || e.leftZoneAt == 0) continue;
             if (nowMs - e.leftZoneAt >= reentryMs) {
                 e.eliminated = true;
+                expired.add(e);
             }
         }
+        return expired;
     }
 
     /** Distinct clan ids that still have a non-eliminated member. */

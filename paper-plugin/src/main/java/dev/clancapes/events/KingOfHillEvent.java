@@ -70,7 +70,7 @@ public final class KingOfHillEvent implements Listener, RunningEvent {
         this.plugin = plugin;
         this.world = world;
         this.tracker = new ParticipantTracker(plugin);
-        this.scoreboard = new EventScoreboard();
+        this.scoreboard = new EventScoreboard("§b§lKING OF THE HILL");
 
         JsonObject p = cfg.payload;
         // Same fast-mode hook as AirdropEvent — when config.yml's
@@ -87,12 +87,24 @@ public final class KingOfHillEvent implements Listener, RunningEvent {
             int collectMin = (p != null && p.has("lootCollectionMinutes"))
                     ? p.get("lootCollectionMinutes").getAsInt() : 3;
             this.collectSec = collectMin * 60;
-            int activeMin = Math.max(1,
-                    cfg.durationMinutes - minutesOf(p, "prepMinutes", 3) - collectMin);
-            this.activeSec = activeMin * 60;
+            int prepMin = minutesOf(p, "prepMinutes", 3);
+            int computedActive = cfg.durationMinutes - prepMin - collectMin;
+            if (computedActive <= 0) {
+                plugin.getLogger().warning("[koth] durationMinutes=" + cfg.durationMinutes
+                        + " < prepMinutes(" + prepMin + ") + lootCollectionMinutes("
+                        + collectMin + ") — ACTIVE phase clamped to 1 min. "
+                        + "Raise durationMinutes in /dashboard/events.");
+            }
+            this.activeSec = Math.max(1, computedActive) * 60;
         }
-        int reentrySec = (p != null && p.has("crashCommebackSeconds"))
-                ? p.get("crashCommebackSeconds").getAsInt() : 30;
+        // Accept both the original payload typo and the corrected key so
+        // a future panel rename to "crashComebackSeconds" doesn't
+        // silently fall back to the 30 s default.
+        int reentrySec = 30;
+        if (p != null) {
+            if (p.has("crashComebackSeconds")) reentrySec = p.get("crashComebackSeconds").getAsInt();
+            else if (p.has("crashCommebackSeconds")) reentrySec = p.get("crashCommebackSeconds").getAsInt();
+        }
         this.reentryMs = reentrySec * 1000;
 
         // Hill sits at world spawn — the "fixed zone near spawn" from
@@ -219,7 +231,11 @@ public final class KingOfHillEvent implements Listener, RunningEvent {
                 tracker.markLeftZone(p.getUniqueId(), now);
             }
         }
-        tracker.expireAbsent(now, reentryMs);
+        for (var expired : tracker.expireAbsent(now, reentryMs)) {
+            String name = Bukkit.getOfflinePlayer(expired.uuid).getName();
+            EventChat.broadcast("§7" + (name == null ? "A participant" : name)
+                    + " [" + expired.clanTag + "] left the hill and was eliminated.");
+        }
     }
 
     private Integer checkWinner() {
@@ -254,10 +270,24 @@ public final class KingOfHillEvent implements Listener, RunningEvent {
     }
 
     private void declareWinner(int clanId) {
+        // Prefer a still-alive sample so the tag reflects a victor rather
+        // than a casualty in edge cases where the survivor map is empty.
         var sample = tracker.all().values().stream()
-                .filter(e -> e.clanId == clanId).findFirst().orElse(null);
-        winnerTag = sample != null ? sample.clanTag : "?";
-        EventChat.announceWinner(winnerTag);
+                .filter(e -> e.clanId == clanId && !e.eliminated)
+                .findFirst()
+                .or(() -> tracker.all().values().stream()
+                        .filter(e -> e.clanId == clanId)
+                        .findFirst())
+                .orElse(null);
+        if (sample == null) {
+            plugin.getLogger().warning("[koth] winner resolution failed (clanId="
+                    + clanId + "); cancelling instead of broadcasting '?'");
+            EventChat.announceCancelled("winner resolution failed");
+            finish();
+            return;
+        }
+        winnerTag = sample.clanTag;
+        EventChat.announceWinner("KING OF THE HILL", "hill", winnerTag);
         postEnd(clanId);
         enterStage(Stage.COLLECT);
     }

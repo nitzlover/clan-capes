@@ -157,19 +157,6 @@ public final class PanelClient {
         return sendJson(req, SettingsDto.class);
     }
 
-    public CompletableFuture<String> getPlayerClanTag(UUID playerUuid) {
-        HttpRequest req = requestBuilder(
-                "/api/plugin/players/" + playerUuid + "/clan"
-        ).GET().build();
-        return sendJson(req, JsonObject.class).thenApply(json -> {
-            if (json.has("clan") && !json.get("clan").isJsonNull()) {
-                JsonObject c = json.getAsJsonObject("clan");
-                return c.has("tag") ? c.get("tag").getAsString() : null;
-            }
-            return null;
-        });
-    }
-
     public CompletableFuture<JsonObject> getPlayerStats(UUID playerUuid) {
         HttpRequest req = requestBuilder(
                 "/api/plugin/stats/player/" + playerUuid
@@ -241,20 +228,6 @@ public final class PanelClient {
                 .build();
         return sendJson(req, JsonObject.class).thenApply(json ->
                 gson.fromJson(json.get("clan"), ClanDto.class));
-    }
-
-    public CompletableFuture<JsonObject> addMember(String tag, UUID uuid, String name,
-                                                   String role, UUID actorUuid) {
-        java.util.HashMap<String, Object> body = new java.util.HashMap<>();
-        body.put("playerUuid", uuid.toString());
-        body.put("playerName", name);
-        body.put("role", role);
-        if (actorUuid != null) body.put("actorUuid", actorUuid.toString());
-        HttpRequest req = requestBuilder("/api/plugin/clans/" + urlEncode(tag) + "/members")
-                .header("Content-Type", "application/json")
-                .POST(jsonBody(gson, body))
-                .build();
-        return sendJson(req, JsonObject.class);
     }
 
     public CompletableFuture<JsonObject> removeMember(String tag, UUID uuid, UUID actorUuid) {

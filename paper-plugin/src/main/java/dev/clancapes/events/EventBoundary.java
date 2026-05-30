@@ -40,11 +40,21 @@ public final class EventBoundary {
     /**
      * Seal the boundary. {@code allowed} are the UUIDs exempt from the
      * crossing / pearl / block rules (the enrolled participants).
+     *
+     * <p>Uses compareAndSet so a concurrent {@link #clear()} or
+     * {@link #open(Zone)} from a different event can't be silently
+     * overwritten. If we lose the CAS we retry once against the new
+     * state; a second null read means the event we were sealing has
+     * already been cleared, in which case we no-op.
      */
     public static void seal(Set<UUID> allowed) {
-        State cur = STATE.get();
-        if (cur == null) return;
-        STATE.set(new State(cur.zone(), true, Set.copyOf(allowed)));
+        Set<UUID> snapshot = Set.copyOf(allowed);
+        for (int attempt = 0; attempt < 2; attempt++) {
+            State cur = STATE.get();
+            if (cur == null) return;
+            State next = new State(cur.zone(), true, snapshot);
+            if (STATE.compareAndSet(cur, next)) return;
+        }
     }
 
     /** Drop the registration entirely (event ended). */

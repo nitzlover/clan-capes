@@ -38,15 +38,21 @@ public final class EventChat {
         broadcast(title + " — " + subtitle);
     }
 
-    /** Winner banner — green title + fanfare. */
-    public static void announceWinner(String clanTag) {
-        Component t = Component.text("AIRDROP WON", NamedTextColor.GREEN, TextDecoration.BOLD);
-        Component s = Component.text("[" + clanTag + "] claims the drop", NamedTextColor.WHITE);
+    /**
+     * Winner banner — green title + fanfare. {@code typeLabel} appears
+     * on the title card so a KotH winner doesn't get told they won an
+     * airdrop. {@code subjectLabel} is the noun in the broadcast
+     * ("drop" / "hill").
+     */
+    public static void announceWinner(String typeLabel, String subjectLabel, String clanTag) {
+        Component t = Component.text(typeLabel + " WON", NamedTextColor.GREEN, TextDecoration.BOLD);
+        Component s = Component.text("[" + clanTag + "] claims the " + subjectLabel,
+                NamedTextColor.WHITE);
         for (Player p : Bukkit.getOnlinePlayers()) {
             p.showTitle(net.kyori.adventure.title.Title.title(t, s));
             p.playSound(p.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
         }
-        broadcast("§a[" + clanTag + "] won the airdrop!");
+        broadcast("§a[" + clanTag + "] won the " + subjectLabel + "!");
     }
 
     /** Cancellation notice (threshold lost mid-event, operator abort). */

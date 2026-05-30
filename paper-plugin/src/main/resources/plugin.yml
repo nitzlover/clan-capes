@@ -32,3 +32,6 @@ permissions:
   clancapes.clan.admin:
     description: Override clan ownership checks (admin moderation)
     default: op
+  clancapes.admin:
+    description: Receive plugin update nag on join (clickable download URL)
+    default: op
