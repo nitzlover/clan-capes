@@ -16,23 +16,32 @@ public final class ClanCapesConfig {
     private static ClanCapesConfig INSTANCE;
 
     /**
-     * Default plugin REST endpoint baked into the jar so a freshly-
+     * Default panel REST endpoint baked into the jar so a freshly-
      * installed mod works without any manual config edit on first launch.
-     * Tracks the production Paper plugin running alongside the MC server.
+     * Tracks the production Railway-hosted Next.js panel (the legacy
+     * embedded Paper REST API at 23.109.45.71:5897 was retired with the
+     * panel-consumer plugin rewrite — see Obsidian / Decision Log).
      */
-    public static final String DEFAULT_API_BASE_URL = "http://23.109.45.71:5897";
+    public static final String DEFAULT_API_BASE_URL =
+            "https://clan-capes-production.up.railway.app";
 
     /**
      * Any config still pointing at one of these legacy/dev defaults is
-     * silently rewritten to {@link #DEFAULT_API_BASE_URL} on load. This is
-     * how older shipped builds (which defaulted to localhost) self-heal
-     * after the user updates the jar — no manual cleanup required.
+     * silently rewritten to {@link #DEFAULT_API_BASE_URL} on load. This
+     * is how older shipped builds self-heal after the user updates the
+     * jar — no manual cleanup required.
+     *
+     * <p>{@code http://23.109.45.71:5897} is the retired Paper embedded
+     * REST API the plugin used pre-rewrite; left here so anyone still
+     * running fabric-mod 1.0.0 gets their config migrated the first
+     * time they boot 1.0.1+.
      */
     private static final String[] STALE_DEFAULT_URLS = {
             "http://127.0.0.1:8080",
             "http://localhost:8080",
             "http://127.0.0.1:5897",
             "http://localhost:5897",
+            "http://23.109.45.71:5897",
     };
 
     public String apiBaseUrl = DEFAULT_API_BASE_URL;
