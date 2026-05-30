@@ -14,7 +14,7 @@ commands:
     permission: clancapes.cape.admin
   clans:
     description: Clan management
-    usage: /clan <create|disband|info|list|invite|accept|decline|leave|kick|promote|demote|transfer|color|panel>
+    usage: /clan <create|disband|info|list|invite|accept|decline|leave|kick|promote|demote|transfer|color|panel|menu|shield>
     aliases: [clan, cl, myclan]
     permission: clancapes.clan.use
   clanc:

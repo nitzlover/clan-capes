@@ -6,6 +6,7 @@ import dev.clancapes.command.ClanChatCommand;
 import dev.clancapes.command.ClanCommand;
 import dev.clancapes.events.EventScheduler;
 import dev.clancapes.listener.BoundaryListener;
+import dev.clancapes.listener.ClanArmorListener;
 import dev.clancapes.listener.ClanMenuListener;
 import dev.clancapes.listener.FriendlyFireListener;
 import dev.clancapes.listener.PlayerDeathListener;
@@ -37,6 +38,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
     private AnnouncementRepository announcementRepository;
     private EventConfigRepository eventConfigRepository;
     private EventScheduler eventScheduler;
+    private ClanArmorListener clanArmorListener;
     private ClanCapesExpansion expansion;
     private final List<BukkitTask> scheduled = new ArrayList<>();
     // Self-update nag state — populated by checkForUpdate(), surfaced to
@@ -62,6 +64,8 @@ public final class ClanCapesPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new FriendlyFireListener(this), this);
         Bukkit.getPluginManager().registerEvents(new BoundaryListener(), this);
         Bukkit.getPluginManager().registerEvents(new ClanMenuListener(), this);
+        clanArmorListener = new ClanArmorListener(this);
+        Bukkit.getPluginManager().registerEvents(clanArmorListener, this);
 
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             expansion = new ClanCapesExpansion(this);
@@ -227,4 +231,16 @@ public final class ClanCapesPlugin extends JavaPlugin {
     public AnnouncementRepository getAnnouncementRepository() { return announcementRepository; }
     public EventConfigRepository getEventConfigRepository() { return eventConfigRepository; }
     public EventScheduler getEventScheduler() { return eventScheduler; }
+    public ClanArmorListener getClanArmorListener() { return clanArmorListener; }
+
+    /**
+     * Emit a debug-level log line only when {@code logging.debug} is on.
+     * Takes a {@link java.util.function.Supplier} so callers pay the
+     * string-formatting cost only when debug is actually enabled.
+     */
+    public void debugLog(java.util.function.Supplier<String> messageSupplier) {
+        if (getConfig().getBoolean("logging.debug", false)) {
+            getLogger().info(messageSupplier.get());
+        }
+    }
 }

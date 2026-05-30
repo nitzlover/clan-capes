@@ -41,6 +41,15 @@ public final class PlayerJoinListener implements Listener {
             plugin.getClanRepository().refresh();
         }
 
+        // Re-evaluate the trims on whatever armour the player is already
+        // wearing. PlayerArmorChangeEvent fires for every subsequent swap,
+        // but doesn't fire for the initial join — without this, a player
+        // who was wearing trimmed armour at logout would render bare
+        // until they swapped a piece.
+        if (plugin.getClanArmorListener() != null) {
+            plugin.getClanArmorListener().scheduleJoinReconcile(event.getPlayer());
+        }
+
         if (plugin.isUpdateAvailable()
                 && event.getPlayer().hasPermission("clancapes.admin")) {
             var p = event.getPlayer();
