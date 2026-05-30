@@ -5,8 +5,7 @@
   "client": [
     "AvatarRendererMixin",
     "AbstractClientPlayerMixin",
-    "LivingEntityRendererMixin",
-    "HumanoidArmorLayerMixin"
+    "LivingEntityRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 0

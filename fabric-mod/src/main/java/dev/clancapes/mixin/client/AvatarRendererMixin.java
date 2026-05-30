@@ -1,18 +1,32 @@
 package dev.clancapes.mixin.client;
 
 import dev.clancapes.ClanCapesClient;
+import dev.clancapes.api.PlayerTrimResponse;
 import dev.clancapes.cape.CapeManager;
 import dev.clancapes.config.ClanCapesConfig;
+import dev.clancapes.trim.TrimManager;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.entity.player.AvatarRenderer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.core.ClientAsset;
+import net.minecraft.core.Holder;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.Registry;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.Avatar;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.equipment.trim.ArmorTrim;
+import net.minecraft.world.item.equipment.trim.TrimMaterial;
+import net.minecraft.world.item.equipment.trim.TrimPattern;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import java.util.Optional;
 
 /**
  * Hooks {@link AvatarRenderer#extractRenderState(Avatar, AvatarRenderState, float)}
@@ -97,6 +111,97 @@ public abstract class AvatarRendererMixin {
                         "AvatarRendererMixin cape force-apply failed for {}: {}",
                         player.getName().getString(), t.toString());
             }
+        }
+    }
+
+    /**
+     * Second injection at the same TAIL hook: mutate the four armour
+     * slots' ItemStacks in the render state to attach a synthetic
+     * {@link ArmorTrim} data component. State-based rendering means
+     * {@code HumanoidArmorLayer.submit(...)} reads the trim straight
+     * off these stacks each frame, so once the component is in place
+     * the vanilla overlay pipeline draws it without any further
+     * mixin into the layer itself.
+     *
+     * <p>Replaces the old (and silently broken since the 26.1 state-
+     * based render refactor) {@code HumanoidArmorLayerMixin} hook on
+     * {@code renderArmorPiece(... LivingEntity ... HumanoidModel)V} —
+     * that signature was deleted by Mojang, our @Inject had
+     * require=0/expect=0 so it failed silently, and clan trims
+     * stopped showing on every viewer.
+     */
+    @Inject(
+            method = "extractRenderState(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V",
+            at = @At("TAIL"),
+            require = 0,
+            expect = 0
+    )
+    private void clancapes$applyClanTrims(
+            Avatar avatar,
+            AvatarRenderState state,
+            float partialTicks,
+            CallbackInfo ci
+    ) {
+        if (!(avatar instanceof AbstractClientPlayer player)) return;
+        try {
+            HolderLookup.Provider provider = player.level().registryAccess();
+            state.headEquipment = withTrim(state.headEquipment, "head", player, provider);
+            state.chestEquipment = withTrim(state.chestEquipment, "chest", player, provider);
+            state.legsEquipment = withTrim(state.legsEquipment, "legs", player, provider);
+            state.feetEquipment = withTrim(state.feetEquipment, "feet", player, provider);
+        } catch (Throwable t) {
+            if (ClanCapesConfig.get().debugLogging) {
+                ClanCapesClient.LOGGER.debug("Trim state mutation failed: {}", t.toString());
+            }
+        }
+    }
+
+    /**
+     * Copy the worn stack and stamp the clan trim component on the
+     * copy. The state's reference is then swapped to the copy so the
+     * mutation can't leak back to the live entity inventory the
+     * client mirrors from the server.
+     */
+    private static ItemStack withTrim(ItemStack original, String slot,
+                                      AbstractClientPlayer player,
+                                      HolderLookup.Provider provider) {
+        if (original == null || original.isEmpty()) return original;
+        Optional<PlayerTrimResponse.SlotTrim> spec = TrimManager.get().getSlot(player, slot);
+        if (spec.isEmpty()) return original;
+        Optional<Holder.Reference<TrimMaterial>> material = resolve(
+                provider, Registries.TRIM_MATERIAL, spec.get().material());
+        Optional<Holder.Reference<TrimPattern>> pattern = resolve(
+                provider, Registries.TRIM_PATTERN, spec.get().pattern());
+        if (material.isEmpty() || pattern.isEmpty()) return original;
+        ItemStack copy = original.copy();
+        copy.set(DataComponents.TRIM, new ArmorTrim(material.get(), pattern.get()));
+        if (ClanCapesConfig.get().debugLogging && (debugTickCounter % 200 == 0)) {
+            ClanCapesClient.LOGGER.info(
+                    "Applied trim {}/{} on {}'s {} slot",
+                    spec.get().material(), spec.get().pattern(),
+                    player.getName().getString(), slot);
+        }
+        return copy;
+    }
+
+    /**
+     * Resolve a panel-supplied string id (e.g. {@code "diamond"} or
+     * {@code "minecraft:sentry"}) to a registry holder. {@code minecraft:}
+     * is inferred when no namespace is given. Unknown ids return empty
+     * — caller treats that as "no trim for this slot".
+     */
+    private static <T> Optional<Holder.Reference<T>> resolve(
+            HolderLookup.Provider provider,
+            ResourceKey<Registry<T>> registry,
+            String id
+    ) {
+        if (id == null || id.isBlank()) return Optional.empty();
+        try {
+            Identifier rid = id.contains(":") ? Identifier.parse(id)
+                    : Identifier.parse("minecraft:" + id);
+            return provider.lookupOrThrow(registry).get(ResourceKey.create(registry, rid));
+        } catch (Throwable t) {
+            return Optional.empty();
         }
     }
 
