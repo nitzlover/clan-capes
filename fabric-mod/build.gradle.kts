@@ -43,22 +43,22 @@ repositories {
     maven("https://maven.fabricmc.net/") { name = "Fabric" }
 }
 
-loom {
-    // Client-only mod — split source sets keep server-only API
-    // references from sneaking into the client jar via auto-complete.
-    // The `client` source set holds everything the player runs; the
-    // empty `main` set is kept around so loom's mod-id registration
-    // can name both halves without "missing source set" warnings on
-    // future server-side additions.
-    splitEnvironmentSourceSets()
-
-    mods {
-        register("clancapes") {
-            sourceSet(sourceSets["main"])
-            sourceSet(sourceSets["client"])
-        }
-    }
-}
+// NOTE 1.0.2: split-env source sets removed.
+//
+// Loom 1.16.x adds `Fabric-Loom-Client-Only-Entries` to the jar
+// manifest when `splitEnvironmentSourceSets()` is used. Older
+// FabricLoader installations (≤0.18 / ≤0.19.x in some launchers)
+// mishandle that header: every listed entry is filtered out of the
+// classpath under the assumption that we're in server mode, which
+// strips the mixin classes from where the mixin processor looks for
+// them. The on-disk class is there, the manifest header makes it
+// invisible.
+//
+// This mod is entirely client-side (fabric.mod.json `environment:
+// client`), so the split was bookkeeping rather than a real
+// constraint — all the code lives in `src/main/java` again and the
+// produced jar is a single-environment client mod that any current
+// FabricLoader recognises without ceremony.
 
 dependencies {
     minecraft("com.mojang:minecraft:$minecraftVersion")
