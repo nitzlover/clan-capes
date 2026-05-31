@@ -19,29 +19,31 @@
 
 import fs from 'node:fs/promises';
 import { NextResponse } from 'next/server';
-import { desc } from 'drizzle-orm';
 import { requireAuth } from '@/lib/server/auth';
 import { validateAndNormalizePng } from '@/lib/server/capeValidate';
 import { getClanByTag } from '@/lib/server/clan-repo';
-import { dbEnabled, getDb, schema } from '@/lib/server/db';
+import { dbEnabled } from '@/lib/server/db';
 import { CDN_PUBLIC_URL, MAX_UPLOAD_KB } from '@/lib/server/env';
 import { capeFilePath, ensureDirs } from '@/lib/server/storage';
 import { getRequestId } from '@/lib/server/request-id';
+import { resolveServerId as sharedResolveServerId } from '@/lib/server/resolve-server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const TAG_RE = /^[A-Z0-9]{2,6}$/;
 
-async function resolveServerId(): Promise<number | null> {
+/**
+ * 1.0.13 — replace the route's own "default to newest server" helper
+ * with the shared {@link sharedResolveServerId} so this route honours
+ * the dashboard's `?serverId=N` query the same way every other admin
+ * route does. Audit H3 fired here: with two registered servers the
+ * cape upload silently targeted the newest, not the one the operator
+ * had picked in the dashboard's server dropdown.
+ */
+async function resolveServerId(req: Request): Promise<number | null> {
   if (!dbEnabled()) return null;
-  const db = getDb();
-  const [first] = await db
-    .select({ id: schema.servers.id })
-    .from(schema.servers)
-    .orderBy(desc(schema.servers.createdAt))
-    .limit(1);
-  return first?.id ?? null;
+  return sharedResolveServerId(req);
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ tag: string }> }) {
@@ -80,7 +82,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ tag: string }>
 
   // Gate against the DB clan roster — replaces the legacy PowerClans
   // list lookup that no longer exists.
-  const serverId = await resolveServerId();
+  const serverId = await resolveServerId(req);
   if (!serverId) {
     return NextResponse.json({ error: 'no servers registered' }, { status: 409 });
   }
@@ -144,7 +146,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ tag: string 
   if (!TAG_RE.test(tag)) {
     return NextResponse.json({ error: 'invalid tag' }, { status: 400 });
   }
-  const serverId = await resolveServerId();
+  const serverId = await resolveServerId(req);
   const rid = getRequestId(req);
   try {
     await fs.unlink(capeFilePath(tag)).catch(() => undefined);

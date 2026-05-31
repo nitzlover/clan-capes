@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { PluginStatus } from '@/components/PluginStatus';
+import { ServerPicker } from '@/components/ServerPicker';
+import { SelectedServerProvider } from '@/lib/selected-server';
 import { getToken } from '@/lib/api';
 
 /**
@@ -112,12 +114,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex min-h-[100dvh] flex-col md:flex-row">
-      <Sidebar pathname={pathname} onLogout={logout} />
-      <main className="min-w-0 flex-1 overflow-x-hidden px-6 py-10 md:px-10 md:py-12">
-        {children}
-      </main>
-    </div>
+    <Suspense fallback={null}>
+      <SelectedServerProvider>
+        <div className="flex min-h-[100dvh] flex-col md:flex-row">
+          <Sidebar pathname={pathname} onLogout={logout} />
+          <div className="flex min-w-0 flex-1 flex-col">
+            {/* Global server picker — single source of truth that every
+                dashboard page reads via useSelectedServer(). Replaces the
+                per-page <select> implementations 1.0.0..1.0.12 had grown. */}
+            <div className="flex items-center justify-between gap-3 border-b-2 border-[var(--rule-strong)] bg-[var(--bg)] px-6 py-3 md:px-10">
+              <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+                Scope
+              </span>
+              <ServerPicker />
+            </div>
+            <main className="min-w-0 flex-1 overflow-x-hidden px-6 py-10 md:px-10 md:py-12">
+              {children}
+            </main>
+          </div>
+        </div>
+      </SelectedServerProvider>
+    </Suspense>
   );
 }
 

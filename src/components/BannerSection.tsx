@@ -11,7 +11,9 @@ import {
 } from '@/lib/api';
 import { BannerEditor } from '@/components/BannerEditor';
 import { BannerPreview } from '@/components/BannerPreview';
+import { SelectServerPrompt } from '@/components/ServerPicker';
 import { EMPTY_SPEC, type BannerSpec } from '@/lib/banners';
+import { useSelectedServer } from '@/lib/selected-server';
 
 /**
  * Lists every PowerClans clan and lets the admin set a shield banner for
@@ -22,6 +24,8 @@ import { EMPTY_SPEC, type BannerSpec } from '@/lib/banners';
  * with Promise.all), then incremental updates as the admin saves.
  */
 export function BannerSection() {
+  const { value: serverId } = useSelectedServer();
+  const scopeId = typeof serverId === 'number' ? serverId : null;
   const [clans, setClans] = useState<ClanOption[]>([]);
   const [banners, setBanners] = useState<Record<string, ClanBannerDto | null>>({});
   const [openTag, setOpenTag] = useState<string | null>(null);
@@ -31,14 +35,20 @@ export function BannerSection() {
   const [editorError, setEditorError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
+    if (scopeId === null) {
+      setLoadState('ok');
+      setClans([]);
+      setBanners({});
+      return;
+    }
     setLoadState('loading');
     setLoadError('');
     try {
-      const { clans } = await fetchClanOptions();
+      const { clans } = await fetchClanOptions(scopeId);
       setClans(clans);
       const tags = clans.map((c) => c.tag);
       const entries = await Promise.all(
-        tags.map(async (t) => [t, await fetchClanBanner(t).catch(() => null)] as const)
+        tags.map(async (t) => [t, await fetchClanBanner(t, scopeId).catch(() => null)] as const)
       );
       setBanners(Object.fromEntries(entries));
       setLoadState('ok');
@@ -48,17 +58,18 @@ export function BannerSection() {
       setClans([]);
       setBanners({});
     }
-  }, []);
+  }, [scopeId]);
 
   useEffect(() => {
     reload();
   }, [reload]);
 
   async function save(tag: string, spec: BannerSpec) {
+    if (scopeId === null) return;
     setBusyTag(tag);
     setEditorError(null);
     try {
-      const dto = await saveClanBanner(tag, spec.baseColor, spec.patterns);
+      const dto = await saveClanBanner(tag, spec.baseColor, spec.patterns, scopeId);
       setBanners((b) => ({ ...b, [tag]: dto }));
       setOpenTag(null);
     } catch (e) {
@@ -69,11 +80,12 @@ export function BannerSection() {
   }
 
   async function remove(tag: string) {
+    if (scopeId === null) return;
     if (!confirm(`Remove banner for ${tag}?`)) return;
     setBusyTag(tag);
     setEditorError(null);
     try {
-      await deleteClanBanner(tag);
+      await deleteClanBanner(tag, scopeId);
       setBanners((b) => ({ ...b, [tag]: null }));
       setOpenTag(null);
     } catch (e) {
@@ -81,6 +93,16 @@ export function BannerSection() {
     } finally {
       setBusyTag(null);
     }
+  }
+
+  if (scopeId === null) {
+    return (
+      <SelectServerPrompt>
+        <p className="text-sm text-[var(--text-faint)]">
+          Banner specs are per-server. Pick one above to load the editor.
+        </p>
+      </SelectServerPrompt>
+    );
   }
 
   return (

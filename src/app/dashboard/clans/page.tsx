@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { SelectServerPrompt } from '@/components/ServerPicker';
+import { useSelectedServer } from '@/lib/selected-server';
 import { api, UnauthorizedError } from '@/lib/api';
 import { nearestVanilla } from '@/lib/vanilla-color';
 import {
@@ -39,8 +41,14 @@ type ServerOpt = { id: number; name: string };
  * an `admin:<username>` audit row.
  */
 export default function ClansPage() {
+  // 1.0.13 — drop the page-local server picker. The dashboard layout
+  // mounts a global <ServerPicker> that this page now reads via
+  // useSelectedServer; the old in-page <select> would compete with
+  // the global one and confuse the operator.
+  const { value: globalServerId } = useSelectedServer();
   const [servers, setServers] = useState<ServerOpt[]>([]);
-  const [serverId, setServerId] = useState<number | null>(null);
+  const serverId: number | null =
+    typeof globalServerId === 'number' ? globalServerId : null;
   const [clans, setClans] = useState<Clan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -67,28 +75,37 @@ export default function ClansPage() {
   // "unknown" dot. Polled every 30s in lockstep with the panel cache.
   const [onlineUuids, setOnlineUuids] = useState<Set<string> | null>(null);
 
-  const load = useCallback(async (id: number | null) => {
-    setLoading(true);
-    setError('');
-    try {
-      const qs = id ? `?serverId=${id}` : '';
-      const res = await api<{ clans: Clan[]; servers: ServerOpt[]; serverId?: number }>(
-        `/panel/clans-list${qs}`,
-      );
-      setServers(res.servers);
-      setClans(res.clans);
-      if (res.serverId) setServerId(res.serverId);
-    } catch (e) {
-      if (e instanceof UnauthorizedError) return;
-      setError(e instanceof Error ? e.message : 'Failed to load');
-      setClans([]);
-    }
-    setLoading(false);
-  }, []);
+  const load = useCallback(
+    async (id: number | null) => {
+      if (id === null) {
+        setServers([]);
+        setClans([]);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError('');
+      try {
+        const res = await api<{
+          clans: Clan[];
+          servers: ServerOpt[];
+          serverId?: number;
+        }>(`/panel/clans-list?serverId=${id}`);
+        setServers(res.servers);
+        setClans(res.clans);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) return;
+        setError(e instanceof Error ? e.message : 'Failed to load');
+        setClans([]);
+      }
+      setLoading(false);
+    },
+    [],
+  );
 
   useEffect(() => {
-    load(null);
-  }, [load]);
+    load(serverId);
+  }, [load, serverId]);
 
   // Poll the in-memory online cache so the green dots stay live without
   // refreshing the whole clan list. Cheap (single endpoint, no DB hit
@@ -173,23 +190,8 @@ export default function ClansPage() {
               ⟳ Refresh names
             </button>
           )}
-          {servers.length > 0 && (
-            <select
-              value={serverId ?? ''}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                setServerId(v);
-                load(v);
-              }}
-              className="input max-w-[240px]"
-            >
-              {servers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          )}
+          {/* 1.0.13 — local server <select> removed. Global ServerPicker
+              in the dashboard layout drives this page now. */}
         </div>
       </div>
 

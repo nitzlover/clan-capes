@@ -7,6 +7,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { SelectServerPrompt } from '@/components/ServerPicker';
+import { useSelectedServer } from '@/lib/selected-server';
 import { api, UnauthorizedError } from '@/lib/api';
 import { LeaderboardPodium } from '@/components/LeaderboardPodium';
 
@@ -37,15 +39,25 @@ type LeaderboardResponse = {
 };
 
 export default function LeaderboardPage() {
+  const { value: serverId } = useSelectedServer();
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [resetting, setResetting] = useState(false);
 
   const reload = useCallback(async () => {
+    if (serverId === null) {
+      setData(null);
+      setLoading(false);
+      setError('');
+      return;
+    }
     setLoading(true);
     try {
-      const resp = await api<LeaderboardResponse>('/panel/leaderboard');
+      const qs = typeof serverId === 'number'
+        ? `?serverId=${serverId}`
+        : serverId === 'all' ? '?serverId=all' : '';
+      const resp = await api<LeaderboardResponse>(`/panel/leaderboard${qs}`);
       setData(resp);
       setError('');
     } catch (e) {
@@ -54,7 +66,7 @@ export default function LeaderboardPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [serverId]);
 
   useEffect(() => {
     void reload();
@@ -95,6 +107,20 @@ export default function LeaderboardPage() {
     } finally {
       setResetting(false);
     }
+  }
+
+  if (serverId === null) {
+    return (
+      <div>
+        <div className="page-band">
+          <div>
+            <h1 className="page-title">Leaderboard</h1>
+            <p className="page-subtitle">K/D rankings, per season.</p>
+          </div>
+        </div>
+        <SelectServerPrompt />
+      </div>
+    );
   }
 
   return (

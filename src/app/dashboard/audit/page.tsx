@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, UnauthorizedError } from '@/lib/api';
+import { SelectServerPrompt } from '@/components/ServerPicker';
+import { useSelectedServer } from '@/lib/selected-server';
 
 type AuditEntry = {
   id?: string;
@@ -40,6 +42,7 @@ const PAGE_SIZE = 50;
  * typist doesn't hammer the endpoint mid-word.
  */
 export default function AuditPage() {
+  const { value: serverId } = useSelectedServer();
   const [data, setData] = useState<AuditResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -64,12 +67,22 @@ export default function AuditPage() {
     if (target) qs.set('target', target);
     if (since) qs.set('since', new Date(since).toISOString());
     if (until) qs.set('until', new Date(until).toISOString());
+    // 1.0.13 — server scope from global picker. 'all' aggregates;
+    // numeric pins; null bails before the fetch even runs (see effect).
+    if (typeof serverId === 'number') qs.set('serverId', String(serverId));
+    else if (serverId === 'all') qs.set('serverId', 'all');
     qs.set('limit', String(PAGE_SIZE));
     qs.set('offset', String(offset));
     return `/panel/audit?${qs.toString()}`;
-  }, [actor, action, target, since, until, offset]);
+  }, [actor, action, target, since, until, offset, serverId]);
 
   useEffect(() => {
+    if (serverId === null) {
+      setData(null);
+      setLoading(false);
+      setError('');
+      return;
+    }
     let cancelled = false;
     // Debounce text inputs so each keystroke doesn't refetch
     const handle = setTimeout(async () => {
@@ -120,6 +133,27 @@ export default function AuditPage() {
     setTarget('');
     setSince('');
     setUntil('');
+  }
+
+  if (serverId === null) {
+    return (
+      <div>
+        <div className="page-band">
+          <div>
+            <h1 className="page-title">Audit</h1>
+            <p className="page-subtitle">
+              Every action recorded by the plugin and the panel.
+            </p>
+          </div>
+        </div>
+        <SelectServerPrompt>
+          <p className="text-sm text-[var(--text-faint)]">
+            Pick a server above (or &ldquo;All servers&rdquo; for an
+            aggregated trail) to load entries.
+          </p>
+        </SelectServerPrompt>
+      </div>
+    );
   }
 
   return (

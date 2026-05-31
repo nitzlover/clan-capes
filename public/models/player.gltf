@@ -1,0 +1,410 @@
+{
+  "asset": {
+    "generator": "Khronos glTF Blender I/O v4.0.44",
+    "version": "2.0"
+  },
+  "extensionsUsed": ["KHR_materials_specular", "KHR_materials_ior"],
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [15]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Head",
+      "rotation": [
+        5.421009803636338e-16, 2.3283064365386963e-8, 2.3283062589030123e-8, 1
+      ],
+      "translation": [0, 0.5999999046325684, -1.0587911840678754e-22]
+    },
+    {
+      "name": "Arm:Left:Lower",
+      "rotation": [
+        -3.772946903767829e-15, 5.221483689865636e-8, -2.9802322387695312e-8, 1
+      ],
+      "translation": [
+        3.4491634437472385e-8, 0.39999982714653015, -2.613581145125346e-15
+      ]
+    },
+    {
+      "children": [1],
+      "name": "Arm:Left:Upper",
+      "rotation": [
+        -1, 5.1285197978287716e-23, 7.549790126404332e-8, 2.2204464727667867e-15
+      ],
+      "translation": [
+        0.6000000238418579, 0.3999998867511749, -1.0932780902805916e-8
+      ]
+    },
+    {
+      "name": "Arm:Right:Lower",
+      "rotation": [
+        -3.772946480251355e-15, 5.221483689865636e-8, -2.9802322387695312e-8, 1
+      ],
+      "translation": [
+        3.4491634437472385e-8, 0.3999998867511749, -9.719008502726348e-15
+      ]
+    },
+    {
+      "children": [3],
+      "name": "Arm:Right:Upper",
+      "rotation": [
+        -1, 5.1285197978287716e-23, 7.549790126404332e-8, 2.220447108041497e-15
+      ],
+      "translation": [
+        -0.6000000238418579, 0.39999982714653015, 1.0932782679162756e-8
+      ]
+    },
+    {
+      "children": [0, 2, 4],
+      "name": "Chest",
+      "rotation": [
+        -5.421009803636338e-16, -2.3283064365386963e-8, -2.3283060812673284e-8,
+        1
+      ],
+      "translation": [0, 0.6000000238418579, 0]
+    },
+    {
+      "children": [5],
+      "name": "Body",
+      "rotation": [0.7071067690849304, 0, 0, 0.7071067690849304]
+    },
+    {
+      "name": "Leg:Right:Lower",
+      "rotation": [0, -7.549790126404332e-8, 0, 1],
+      "translation": [
+        2.7006175074006933e-14, 0.5999997854232788, 7.105427357601002e-15
+      ]
+    },
+    {
+      "children": [7],
+      "name": "Leg:Right:Upper",
+      "rotation": [
+        -0.7071067690849304, 5.338507591545749e-8, -5.338507591545749e-8,
+        0.7071067690849304
+      ],
+      "translation": [-0.20000004768371582, -1.7881393432617188e-7, 0]
+    },
+    {
+      "name": "Leg:Left:Lower",
+      "rotation": [0, -7.549790126404332e-8, 0, 1],
+      "translation": [
+        -4.499178807293447e-14, 0.5999997854232788, -7.105427357601002e-15
+      ]
+    },
+    {
+      "children": [9],
+      "name": "Leg:Left:Upper",
+      "rotation": [
+        -0.7071067690849304, 5.338507591545749e-8, -5.338507591545749e-8,
+        0.7071067690849304
+      ],
+      "translation": [0.20000004768371582, 2.980232238769531e-7, 0]
+    },
+    {
+      "children": [6, 8, 10],
+      "name": "center",
+      "translation": [0, 0, 1.6119829416275024]
+    },
+    {
+      "children": [11],
+      "name": "MAIN",
+      "rotation": [-0.7071067690849304, 0, 0, 0.7071067690849304],
+      "translation": [0, -0.3926849365234375, 0]
+    },
+    {
+      "mesh": 0,
+      "name": "SimplePlayer.Body.Layer1",
+      "skin": 0
+    },
+    {
+      "mesh": 1,
+      "name": "SimplePlayer.Body.Layer2",
+      "skin": 0
+    },
+    {
+      "children": [13, 14, 12],
+      "name": "SimplePlayer.arma",
+      "scale": [0.6203539967536926, 0.6203539967536926, 0.6203539967536926]
+    }
+  ],
+  "materials": [
+    {
+      "alphaMode": "OPAQUE",
+      "doubleSided": true,
+      "extensions": {
+        "KHR_materials_specular": {
+          "specularFactor": 0
+        },
+        "KHR_materials_ior": {
+          "ior": 1.4500000476837158
+        }
+      },
+      "name": "char",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.5, 0.5, 0.5, 1],
+        "baseColorTexture": {
+          "index": 0
+        },
+        "metallicFactor": 0,
+        "roughnessFactor": 0.699999988079071
+      }
+    },
+    {
+      "alphaMode": "BLEND",
+      "doubleSided": true,
+      "extensions": {
+        "KHR_materials_specular": {
+          "specularFactor": 0
+        },
+        "KHR_materials_ior": {
+          "ior": 1.4500000476837158
+        }
+      },
+      "name": "char_alpha",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [0.5, 0.5, 0.5, 1],
+        "baseColorTexture": {
+          "index": 1
+        },
+        "metallicFactor": 0,
+        "roughnessFactor": 0.699999988079071
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.001",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "JOINTS_0": 3,
+            "WEIGHTS_0": 4
+          },
+          "indices": 5,
+          "material": 0
+        }
+      ]
+    },
+    {
+      "name": "Cube.005",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 7,
+            "NORMAL": 8,
+            "TEXCOORD_0": 9,
+            "JOINTS_0": 10,
+            "WEIGHTS_0": 11
+          },
+          "indices": 12,
+          "material": 1
+        }
+      ]
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0
+    },
+    {
+      "sampler": 0,
+      "source": 0
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/png",
+      "name": "steve",
+      "uri": "steve.png"
+    }
+  ],
+  "skins": [
+    {
+      "inverseBindMatrices": 6,
+      "joints": [12, 11, 6, 5, 0, 2, 1, 4, 3, 8, 7, 10, 9],
+      "name": "SimplePlayer.arma"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 2660,
+      "max": [0.4964029788970947, 1.997973918914795, 0.24814198911190033],
+      "min": [-0.4962921440601349, 0.011973707005381584, -0.248141810297966],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 2660,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 2660,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5121,
+      "count": 2660,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5126,
+      "count": 2660,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 5,
+      "componentType": 5123,
+      "count": 12096,
+      "type": "SCALAR"
+    },
+    {
+      "bufferView": 6,
+      "componentType": 5126,
+      "count": 13,
+      "type": "MAT4"
+    },
+    {
+      "bufferView": 7,
+      "componentType": 5126,
+      "count": 2660,
+      "max": [0.5026065707206726, 2.01937198638916, 0.26667696237564087],
+      "min": [-0.5024956464767456, 0.004529443569481373, -0.2687835693359375],
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 8,
+      "componentType": 5126,
+      "count": 2660,
+      "type": "VEC3"
+    },
+    {
+      "bufferView": 9,
+      "componentType": 5126,
+      "count": 2660,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 10,
+      "componentType": 5121,
+      "count": 2660,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 11,
+      "componentType": 5126,
+      "count": 2660,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 12,
+      "componentType": 5123,
+      "count": 12096,
+      "type": "SCALAR"
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 31920,
+      "byteOffset": 0,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 31920,
+      "byteOffset": 31920,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 21280,
+      "byteOffset": 63840,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 10640,
+      "byteOffset": 85120,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 42560,
+      "byteOffset": 95760,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 24192,
+      "byteOffset": 138320,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteLength": 832,
+      "byteOffset": 162512
+    },
+    {
+      "buffer": 0,
+      "byteLength": 31920,
+      "byteOffset": 163344,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 31920,
+      "byteOffset": 195264,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 21280,
+      "byteOffset": 227184,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 10640,
+      "byteOffset": 248464,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 42560,
+      "byteOffset": 259104,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteLength": 24192,
+      "byteOffset": 301664,
+      "target": 34963
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9728,
+      "minFilter": 9984
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 325856,
+      "uri": "player.bin"
+    }
+  ]
+}

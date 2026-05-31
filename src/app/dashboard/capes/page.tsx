@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { UploadSection } from '@/components/UploadSection';
 import { PlayerCapeView3D } from '@/components/PlayerCapeView3D';
+import { SelectServerPrompt } from '@/components/ServerPicker';
 import { api, type ClanRow, getToken, UnauthorizedError } from '@/lib/api';
+import { useSelectedServer, serverQueryString } from '@/lib/selected-server';
 
 /**
  * Capes route.
@@ -16,6 +18,7 @@ import { api, type ClanRow, getToken, UnauthorizedError } from '@/lib/api';
  * other surfaces.
  */
 export default function CapesPage() {
+  const { value: serverId } = useSelectedServer();
   const [clans, setClans] = useState<ClanRow[]>([]);
   const [tag, setTag] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -25,15 +28,22 @@ export default function CapesPage() {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
+    if (serverId === null || serverId === 'all') {
+      setClans([]);
+      setLoading(false);
+      return;
+    }
     try {
-      const c = await api<{ clans: ClanRow[] }>('/panel/clans');
+      const c = await api<{ clans: ClanRow[] }>(
+        `/panel/clans${serverQueryString(serverId)}`,
+      );
       setClans(c.clans);
     } catch (e) {
       if (e instanceof UnauthorizedError) return;
       setClans([]);
     }
     setLoading(false);
-  }, []);
+  }, [serverId]);
 
   useEffect(() => {
     load();
@@ -52,15 +62,22 @@ export default function CapesPage() {
   async function uploadPng(e: React.FormEvent) {
     e.preventDefault();
     if (!tag || !file) return;
+    if (serverId === null || serverId === 'all') {
+      setMessage('Pick a single server before uploading a cape.');
+      return;
+    }
     setMessage('');
     const fd = new FormData();
     fd.append('cape', file);
     const token = getToken();
-    const res = await fetch(`/api/panel/clans/${tag.toUpperCase()}/cape`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: fd,
-    });
+    const res = await fetch(
+      `/api/panel/clans/${tag.toUpperCase()}/cape${serverQueryString(serverId)}`,
+      {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd,
+      },
+    );
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       setMessage((err as { error?: string }).error ?? 'Upload failed');
@@ -74,9 +91,39 @@ export default function CapesPage() {
   }
 
   async function removeCape(clanTag: string) {
+    if (serverId === null || serverId === 'all') {
+      setMessage('Pick a single server to remove a cape.');
+      return;
+    }
     if (!confirm(`Remove cape for ${clanTag}?`)) return;
-    await api(`/panel/clans/${clanTag}/cape`, { method: 'DELETE' });
+    await api(`/panel/clans/${clanTag}/cape${serverQueryString(serverId)}`, {
+      method: 'DELETE',
+    });
     load();
+  }
+
+  // No-selection / aggregate empty-state — show the prompt instead of
+  // the upload form so the operator can't accidentally target the
+  // wrong server (audit H3).
+  if (serverId === null || serverId === 'all') {
+    return (
+      <div>
+        <div className="page-band">
+          <div>
+            <h1 className="page-title">Capes</h1>
+            <p className="page-subtitle">
+              Upload a 64×32 (or 128×64) PNG and pin it to a clan tag.
+            </p>
+          </div>
+        </div>
+        <SelectServerPrompt>
+          <p className="text-sm text-[var(--text-faint)]">
+            Cape uploads are server-scoped — the clan tag namespace is
+            per-server, so this page needs you to pick one.
+          </p>
+        </SelectServerPrompt>
+      </div>
+    );
   }
 
   return (

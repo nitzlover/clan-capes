@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api, UnauthorizedError } from '@/lib/api';
 import { PluginStatus } from '@/components/PluginStatus';
+import { SelectServerPrompt } from '@/components/ServerPicker';
+import { useSelectedServer } from '@/lib/selected-server';
 
 // 1.0.10: real audit shape from /api/panel/audit. The 1.0.0..1.0.9
 // dashboard typed this as { timestamp, raw } and rendered `r.raw`,
@@ -43,21 +45,37 @@ type Overview = {
  * animated charts.
  */
 export default function DashboardOverviewPage() {
+  const { value: serverId } = useSelectedServer();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (serverId === null) {
+      setOverview(null);
+      setAudit([]);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
+    // Build the scope query once per fetch. 'all' aggregates across
+    // every registered server, numeric pins to one. The panel routes
+    // were already serverId-aware, the picker just feeds them.
+    const scope =
+      serverId === 'all' ? '?serverId=all' : `?serverId=${serverId}`;
+    setLoading(true);
     (async () => {
       try {
-        const o = await api<Overview>('/panel/overview');
+        const o = await api<Overview>(`/panel/overview${scope}`);
         if (!cancelled) setOverview(o);
       } catch (e) {
         if (e instanceof UnauthorizedError) return;
       }
       try {
-        const a = await api<{ entries: AuditEntry[] }>('/panel/audit?limit=6');
+        const sep = scope ? '&' : '?';
+        const a = await api<{ entries: AuditEntry[] }>(
+          `/panel/audit${scope}${sep}limit=6`,
+        );
         if (!cancelled) setAudit(a.entries);
       } catch (e) {
         if (e instanceof UnauthorizedError) return;
@@ -67,7 +85,7 @@ export default function DashboardOverviewPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [serverId]);
 
   return (
     <div>
@@ -89,7 +107,14 @@ export default function DashboardOverviewPage() {
         </div>
       </div>
 
-      {loading ? (
+      {serverId === null ? (
+        <SelectServerPrompt>
+          <p className="text-sm text-[var(--text-faint)]">
+            Pick a server in the top bar (or &ldquo;All servers&rdquo; for an
+            aggregated view) to load counters.
+          </p>
+        </SelectServerPrompt>
+      ) : loading ? (
         <p className="eyebrow">Loading…</p>
       ) : !overview ? (
         <p className="eyebrow">Overview unavailable.</p>

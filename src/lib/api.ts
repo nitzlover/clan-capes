@@ -78,8 +78,21 @@ export type ClanOption = {
   hasCape: boolean;
 };
 
-export async function fetchClanOptions() {
-  return api<{ clans: ClanOption[] }>('/panel/clans/options');
+/**
+ * Centralised builder for the `?serverId=N` query suffix every admin
+ * helper here has to add. 1.0.13 made every endpoint server-scoped
+ * (previously some defaulted to "newest server" silently — see audit
+ * H3 for the cape-upload-to-wrong-server bug). Helpers accept an
+ * optional serverId; when missing or non-numeric the query is empty
+ * and the caller is expected to handle the resulting 4xx.
+ */
+function scopeQuery(serverId?: number | null): string {
+  if (typeof serverId !== 'number' || !Number.isFinite(serverId)) return '';
+  return `?serverId=${serverId}`;
+}
+
+export async function fetchClanOptions(serverId?: number | null) {
+  return api<{ clans: ClanOption[] }>(`/panel/clans/options${scopeQuery(serverId)}`);
 }
 
 export type ClanBannerDto = {
@@ -90,11 +103,17 @@ export type ClanBannerDto = {
   updatedBy: string;
 };
 
-export async function fetchClanBanner(tag: string): Promise<ClanBannerDto | null> {
+export async function fetchClanBanner(
+  tag: string,
+  serverId?: number | null,
+): Promise<ClanBannerDto | null> {
   const token = getToken();
-  const res = await fetch(`/api/panel/clans/${encodeURIComponent(tag)}/banner`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const res = await fetch(
+    `/api/panel/clans/${encodeURIComponent(tag)}/banner${scopeQuery(serverId)}`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    },
+  );
   if (res.status === 404) return null;
   if (res.status === 401) throw new UnauthorizedError();
   if (!res.ok) {
@@ -107,17 +126,24 @@ export async function fetchClanBanner(tag: string): Promise<ClanBannerDto | null
 export async function saveClanBanner(
   tag: string,
   baseColor: number,
-  patterns: Array<{ color: number; pattern: string }>
+  patterns: Array<{ color: number; pattern: string }>,
+  serverId?: number | null,
 ): Promise<ClanBannerDto> {
-  return api<ClanBannerDto>(`/panel/clans/${encodeURIComponent(tag)}/banner`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ baseColor, patterns }),
-  });
+  return api<ClanBannerDto>(
+    `/panel/clans/${encodeURIComponent(tag)}/banner${scopeQuery(serverId)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseColor, patterns }),
+    },
+  );
 }
 
-export async function deleteClanBanner(tag: string) {
-  return api<{ ok: boolean }>(`/panel/clans/${encodeURIComponent(tag)}/banner`, {
-    method: 'DELETE',
-  });
+export async function deleteClanBanner(tag: string, serverId?: number | null) {
+  return api<{ ok: boolean }>(
+    `/panel/clans/${encodeURIComponent(tag)}/banner${scopeQuery(serverId)}`,
+    {
+      method: 'DELETE',
+    },
+  );
 }

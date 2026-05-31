@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { SelectServerPrompt } from '@/components/ServerPicker';
+import { useSelectedServer } from '@/lib/selected-server';
 import { api, UnauthorizedError } from '@/lib/api';
 
 /**
@@ -70,14 +72,23 @@ const LABELS: Record<EventTypeName, { title: string; subtitle: string }> = {
 };
 
 export default function EventsConfigPage() {
+  const { value: globalServerId } = useSelectedServer();
+  const serverId: number | null =
+    typeof globalServerId === 'number' ? globalServerId : null;
   const [configs, setConfigs] = useState<EventConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
+    if (serverId === null) {
+      setConfigs([]);
+      setLoading(false);
+      setError('');
+      return;
+    }
     setLoading(true);
     try {
-      const r = await api<ConfigResponse>('/panel/events/config');
+      const r = await api<ConfigResponse>(`/panel/events/config?serverId=${serverId}`);
       setConfigs(r.configs);
       setError('');
     } catch (e) {
@@ -86,11 +97,29 @@ export default function EventsConfigPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [serverId]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  if (serverId === null) {
+    return (
+      <div>
+        <div className="page-band">
+          <div>
+            <h1 className="page-title">Events</h1>
+            <p className="page-subtitle">PvP event scheduler + leaderboard.</p>
+          </div>
+        </div>
+        <SelectServerPrompt>
+          <p className="text-sm text-[var(--text-faint)]">
+            Events run on a single server at a time — pick one above.
+          </p>
+        </SelectServerPrompt>
+      </div>
+    );
+  }
 
   return (
     <div>

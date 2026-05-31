@@ -10,6 +10,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { SelectServerPrompt } from '@/components/ServerPicker';
+import { useSelectedServer } from '@/lib/selected-server';
 import { api, UnauthorizedError } from '@/lib/api';
 import { nearestVanilla } from '@/lib/vanilla-color';
 
@@ -24,7 +26,15 @@ type SettingsResponse = { serverId: number; settings: Settings };
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
 export default function SettingsPage() {
-  const [serverId, setServerId] = useState<number | null>(null);
+  // 1.0.13: settings are per-server only — pulled from the global
+  // picker, not a local copy. The 'all' option is meaningless here
+  // (you can't merge palettes / cooldowns) so the picker we render
+  // disables it. Pages that follow the same rule pass allowAll=false
+  // to <ServerPicker> in the layout — TODO: pull the prop from a
+  // page-level config object once we have a second page like this.
+  const { value: globalServerId } = useSelectedServer();
+  const serverId: number | null =
+    typeof globalServerId === 'number' ? globalServerId : null;
   const [server, setServer] = useState<Settings | null>(null);
 
   const [palette, setPalette] = useState<string[]>([]);
@@ -37,10 +47,15 @@ export default function SettingsPage() {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   const reload = useCallback(async () => {
+    if (serverId === null) {
+      setServer(null);
+      setLoading(false);
+      setError('');
+      return;
+    }
     setLoading(true);
     try {
-      const resp = await api<SettingsResponse>('/panel/settings');
-      setServerId(resp.serverId);
+      const resp = await api<SettingsResponse>(`/panel/settings?serverId=${serverId}`);
       setServer(resp.settings);
       setPalette(resp.settings.palette);
       setCooldownMin(Math.round(resp.settings.createCooldownMs / 60000));
@@ -52,7 +67,7 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [serverId]);
 
   useEffect(() => {
     void reload();
@@ -120,6 +135,27 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  if (serverId === null) {
+    return (
+      <div>
+        <div className="page-band">
+          <div>
+            <h1 className="page-title">Settings</h1>
+            <p className="page-subtitle">
+              Per-server operator knobs. Plugin polls these every ~5 min.
+            </p>
+          </div>
+        </div>
+        <SelectServerPrompt>
+          <p className="text-sm text-[var(--text-faint)]">
+            Settings are per-server only — &ldquo;All&rdquo; aggregation
+            doesn&apos;t apply here. Pick one server above.
+          </p>
+        </SelectServerPrompt>
+      </div>
+    );
   }
 
   return (
