@@ -65,6 +65,14 @@ public final class KingOfHillEvent implements Listener, RunningEvent {
     private String winnerTag;
     private final int hillX;
     private final int hillZ;
+    /**
+     * Pre-event block snapshots taken by {@link #buildHill()} so
+     * {@link #finish()} can restore the spawn area. 1.0.10 fix —
+     * earlier releases left a permanent glowstone pillar at spawn
+     * after every KotH run.
+     */
+    private final java.util.Map<org.bukkit.Location, org.bukkit.Material> placedBlocks =
+            new java.util.LinkedHashMap<>();
 
     public KingOfHillEvent(ClanCapesPlugin plugin, World world, EventConfigDto cfg) {
         this.plugin = plugin;
@@ -156,7 +164,12 @@ public final class KingOfHillEvent implements Listener, RunningEvent {
     private void buildHill() {
         int surface = world.getHighestBlockYAt(hillX, hillZ);
         for (int dy = 1; dy <= 4; dy++) {
-            world.getBlockAt(hillX, surface + dy, hillZ).setType(Material.GLOWSTONE);
+            org.bukkit.block.Block block = world.getBlockAt(hillX, surface + dy, hillZ);
+            // 1.0.10: snapshot the original material so finish() can
+            // restore the spawn area instead of leaving a permanent
+            // glowstone tower.
+            placedBlocks.put(block.getLocation(), block.getType());
+            block.setType(Material.GLOWSTONE);
         }
         // Loot chest one block above the pillar top.
         LootSpawner.spawn(world, hillX, hillZ);
@@ -222,13 +235,22 @@ public final class KingOfHillEvent implements Listener, RunningEvent {
     }
 
     private void enrollAndTrack(long now) {
+        java.util.Set<java.util.UUID> onlineInWorld = new java.util.HashSet<>();
         for (Player p : world.getPlayers()) {
+            onlineInWorld.add(p.getUniqueId());
             boolean inside = zone.contains(p.getLocation());
             if (inside) {
                 tracker.enroll(p);
                 tracker.markEnteredZone(p.getUniqueId());
             } else if (tracker.isParticipant(p.getUniqueId())) {
                 tracker.markLeftZone(p.getUniqueId(), now);
+            }
+        }
+        // 1.0.10: offline participants forced out of zone — see
+        // AirdropEvent.enrollAndTrack for the same fix.
+        for (var entry : tracker.all().values()) {
+            if (!entry.eliminated && !onlineInWorld.contains(entry.uuid)) {
+                tracker.markLeftZone(entry.uuid, now);
             }
         }
         for (var expired : tracker.expireAbsent(now, reentryMs)) {
@@ -364,6 +386,19 @@ public final class KingOfHillEvent implements Listener, RunningEvent {
         EventBoundary.clear();
         scoreboard.clear();
         HandlerList.unregisterAll(this);
+        // 1.0.10: restore the glowstone pillar's original blocks so a
+        // KotH run doesn't permanently pollute spawn. Skipped silently
+        // when the block has changed material between place and finish
+        // (chunk regen, an op /setblock, …).
+        for (var entry : placedBlocks.entrySet()) {
+            try {
+                org.bukkit.block.Block block = entry.getKey().getBlock();
+                if (block.getType() == Material.GLOWSTONE) {
+                    block.setType(entry.getValue());
+                }
+            } catch (Throwable ignored) { }
+        }
+        placedBlocks.clear();
     }
 
     // ──────────────────────── panel persistence ────────────────────────

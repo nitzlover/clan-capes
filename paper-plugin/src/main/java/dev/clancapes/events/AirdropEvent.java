@@ -241,13 +241,25 @@ public final class AirdropEvent implements Listener, RunningEvent {
 
     /** Enroll players in-zone, track exits, expire absentees. */
     private void enrollAndTrack(long now) {
+        java.util.Set<java.util.UUID> onlineInWorld = new java.util.HashSet<>();
         for (Player p : world.getPlayers()) {
+            onlineInWorld.add(p.getUniqueId());
             boolean inside = zone.contains(p.getLocation());
             if (inside) {
                 tracker.enroll(p);
                 tracker.markEnteredZone(p.getUniqueId());
             } else if (tracker.isParticipant(p.getUniqueId())) {
                 tracker.markLeftZone(p.getUniqueId(), now);
+            }
+        }
+        // 1.0.10: participants who logged out mid-event must also be
+        // treated as out-of-zone, otherwise their clan stays "alive"
+        // forever and the event never resolves. The world.getPlayers()
+        // loop above only covers online players, so we re-scan the
+        // tracker for anyone not in the live online set.
+        for (var entry : tracker.all().values()) {
+            if (!entry.eliminated && !onlineInWorld.contains(entry.uuid)) {
+                tracker.markLeftZone(entry.uuid, now);
             }
         }
         for (var expired : tracker.expireAbsent(now, reentryMs)) {

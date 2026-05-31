@@ -155,17 +155,26 @@ public final class ClanShieldStamper {
         if (banner == null) return false;
         if (!(shield.getItemMeta() instanceof BlockStateMeta meta)) return false;
 
-        // Short-circuit on matching marker — saves the ItemStack
-        // mutation churn on every hotbar scroll. Do NOT short-circuit
-        // if there's no marker yet, even if the spec happens to match
-        // some inherited vanilla shield meta.
-        if (clanTag.equalsIgnoreCase(readMarker(meta))) return false;
-
         BlockState rawState = meta.getBlockState();
         if (!(rawState instanceof Banner state)) return false;
 
         int requestedLayers = countRequestedLayers(banner);
         List<Pattern> parsed = parsePatterns(banner, plugin);
+
+        // Short-circuit ONLY when both the marker matches AND the
+        // existing NBT matches the desired spec. 1.0.7..1.0.9 compared
+        // the marker tag alone, so after an admin updated a clan's
+        // banner design every existing branded shield kept the old
+        // design forever — the auto-listener early-returned and only
+        // /clan shield could force a redraw.
+        if (clanTag.equalsIgnoreCase(readMarker(meta))) {
+            DyeColor desiredBase = dyeFromOrdinal(banner.baseColor);
+            if (state.getBaseColor() == desiredBase
+                    && state.getPatterns().equals(parsed)
+                    && (requestedLayers == 0 || !parsed.isEmpty())) {
+                return false; // genuinely up to date
+            }
+        }
         if (requestedLayers > 0 && parsed.isEmpty()) {
             // Every pattern key failed to resolve. Refuse the stamp so
             // the next reconcile retries once the mapping is fixed

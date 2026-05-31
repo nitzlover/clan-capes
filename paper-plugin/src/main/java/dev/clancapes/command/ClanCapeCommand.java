@@ -202,13 +202,22 @@ public final class ClanCapeCommand implements CommandExecutor {
                         plugin.getLogger().info(
                                 "Setup token issued for '" + finalServerName
                                         + "' — paste from in-game chat into /dashboard/servers within 15 min.");
+                        // 1.0.10: do not render the raw token as visible
+                        // chat text — chat-relay plugins (DiscordSRV, AB
+                        // chatlog, …) mirror chat messages off-server and
+                        // would replicate the 15-min credential. The
+                        // clickable component now shows a placeholder
+                        // label; the token lives only in the click-event
+                        // payload that the player's client copies locally.
                         sender.sendMessage(Component.text(
-                                "Setup token (click to copy — paste into /dashboard/servers, valid 15 min):",
+                                "Setup token issued. Click here to copy it, then paste into /dashboard/servers (valid 15 min):",
                                 NamedTextColor.GREEN));
-                        sender.sendMessage(Component.text(token, NamedTextColor.YELLOW)
+                        sender.sendMessage(Component.text(
+                                "  [ Click to copy setup token ]", NamedTextColor.YELLOW)
                                 .clickEvent(ClickEvent.copyToClipboard(token))
                                 .hoverEvent(HoverEvent.showText(Component.text(
-                                        "Click to copy token", NamedTextColor.GRAY))));
+                                        "Click to copy setup_… token to clipboard",
+                                        NamedTextColor.GRAY))));
                         String linkHint = "/clancape link <api-key-from-panel>";
                         sender.sendMessage(Component.text(
                                 "Then click here to prefill: ", NamedTextColor.GRAY)
