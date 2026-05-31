@@ -55,6 +55,15 @@ messages:
   clan-tag-invalid: '&cClan tag must be 2-6 uppercase letters/digits.'
   clan-name-invalid: '&cClan name must be 1-32 characters.'
 
+clan-perks:
+  # When a clan member cures a zombie villager, mirror the resulting
+  # MAJOR_POSITIVE trade-discount gossip onto every member of that
+  # clan — so the whole clan gets the cheaper prices at that villager,
+  # not just the player who cured it. Vanilla 0..100 gossip cap is
+  # respected; an existing member discount is never lowered. Set false
+  # for pure vanilla cure behaviour. (1.1.0+)
+  shared-cure-discount: true
+
 logging:
   # Verbose log lines: every HTTP call, every cache refresh, every kill ingest,
   # every event scheduler decision. Can be flipped at runtime with

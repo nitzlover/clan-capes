@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "dev.clancapes"
-version = "1.0.12"
+version = "1.1.0"
 
 java {
     toolchain {
