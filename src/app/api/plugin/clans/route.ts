@@ -184,13 +184,16 @@ export async function POST(req: Request) {
         })
         .returning();
 
-      await tx.insert(schema.clanMembers).values({
-        clanId: clan.id,
-        serverId: ctx.id,
-        playerUuid: leaderUuid,
-        playerName: leaderName,
-        role: 'leader',
-      });
+      const [member] = await tx
+        .insert(schema.clanMembers)
+        .values({
+          clanId: clan.id,
+          serverId: ctx.id,
+          playerUuid: leaderUuid,
+          playerName: leaderName,
+          role: 'leader',
+        })
+        .returning();
 
       await tx.insert(schema.audit).values({
         serverId: ctx.id,
@@ -200,7 +203,33 @@ export async function POST(req: Request) {
         payload: { name, colorHex, leaderUuid, _rid: rid },
       });
 
-      return await getClanByTag(ctx.id, tag);
+      // Hotfix (1.0.11 panel-side): the prior implementation called
+      // getClanByTag here, which opens its own getDb() connection and
+      // does not see the rows we just inserted through `tx` (Postgres
+      // read-committed isolation isolates separate connections from
+      // uncommitted writes). Result: the SELECT returned null, the
+      // POST response shipped `clan: null`, and the plugin NPE'd in
+      // doCreate's whenComplete callback even though the clan row
+      // had already been persisted. Build the DTO directly from the
+      // RETURNING rows — same shape as getClanByTag, no extra read.
+      return {
+        id: clan.id,
+        tag: clan.tag,
+        name: clan.name,
+        colorHex: clan.colorHex,
+        leaderUuid: clan.leaderUuid,
+        createdAt: clan.createdAt.toISOString(),
+        friendlyFire: clan.friendlyFire,
+        members: [
+          {
+            playerUuid: member.playerUuid,
+            playerName: member.playerName,
+            role: member.role,
+            joinedAt: member.joinedAt.toISOString(),
+          },
+        ],
+        stats: null,
+      };
     });
   } catch (e) {
     if (isUniqueViolation(e)) {
