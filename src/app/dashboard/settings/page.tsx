@@ -191,7 +191,7 @@ export default function SettingsPage() {
                 step={1}
                 value={cooldownMin}
                 onChange={(e) => setCooldownMin(Math.max(0, Number(e.target.value)))}
-                className="brutal-input mt-1 w-full font-mono"
+                className="input mt-1 w-full"
               />
               <span className="mt-1 block text-[11px] text-[var(--text-mute)]">
                 0 disables the cooldown. Anti-spam keeps players from cycling
@@ -209,7 +209,7 @@ export default function SettingsPage() {
                 step={1}
                 value={maxLayers}
                 onChange={(e) => setMaxLayers(Math.min(12, Math.max(1, Number(e.target.value))))}
-                className="brutal-input mt-1 w-full font-mono"
+                className="input mt-1 w-full"
               />
               <span className="mt-1 block text-[11px] text-[var(--text-mute)]">
                 Minecraft renders the first 6 layers natively; values above
@@ -222,7 +222,7 @@ export default function SettingsPage() {
             <button
               onClick={save}
               disabled={!dirty || saving}
-              className="brutal-btn disabled:opacity-40"
+              className="btn-ghost disabled:opacity-40"
             >
               {saving ? 'Saving…' : dirty ? 'Save changes' : 'No changes'}
             </button>
@@ -316,7 +316,7 @@ function PaletteSection({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="#RRGGBB"
-            className="brutal-input mt-1 font-mono"
+            className="input mt-1"
             spellCheck={false}
           />
         </label>
@@ -331,7 +331,7 @@ function PaletteSection({
               onAdd(picker);
             }
           }}
-          className="brutal-btn"
+          className="btn-ghost"
         >
           Add
         </button>

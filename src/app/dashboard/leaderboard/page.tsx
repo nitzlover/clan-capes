@@ -243,7 +243,7 @@ export default function LeaderboardPage() {
               type="button"
               onClick={resetSeason}
               disabled={resetting}
-              className="brutal-btn mt-4 disabled:opacity-40"
+              className="btn-ghost mt-4 disabled:opacity-40"
             >
               {resetting ? 'Resetting…' : 'Bump active season'}
             </button>

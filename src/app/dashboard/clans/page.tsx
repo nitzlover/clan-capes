@@ -977,30 +977,25 @@ function FriendlyFireSwitch({
   }
 
   return (
-    <label className="block">
-      <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
-        Friendly fire
-      </span>
-      <button
-        type="button"
-        onClick={toggle}
-        disabled={busy}
-        aria-pressed={value}
-        className={`mt-1 inline-flex items-center gap-3 border-2 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.22em] transition-colors disabled:opacity-40 ${
-          value
-            ? 'border-white bg-white/[0.08] text-white'
-            : 'border-[var(--rule-strong)] text-[var(--text-mute)] hover:border-white'
-        }`}
-      >
-        <span
-          aria-hidden
-          className={`inline-block h-2 w-2 rounded-full ${
-            value ? 'bg-white' : 'bg-[var(--rule-strong)]'
-          }`}
-        />
-        {value ? 'On — PvP allowed inside clan' : 'Off — clan damage blocked'}
-      </button>
-    </label>
+    <div className="field">
+      <span className="label-soft">friendly fire</span>
+      <div className="toggle-row">
+        <span className="text-sm text-[var(--text-soft)]">
+          {value ? 'on — PvP allowed inside clan' : 'off — clan damage blocked'}
+        </span>
+        <button
+          type="button"
+          onClick={toggle}
+          disabled={busy}
+          role="switch"
+          aria-checked={value}
+          aria-label="Toggle friendly fire"
+          className={`toggle-switch ${value ? 'is-on' : ''}`}
+        >
+          <span aria-hidden className="thumb" />
+        </button>
+      </div>
+    </div>
   );
 }
 

@@ -74,29 +74,29 @@ export function ClanSelect({
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 border border-[var(--rule)] bg-transparent px-4 py-3 text-left transition-colors hover:border-[var(--rule-strong)] disabled:opacity-50"
+        className="select-trigger"
       >
         <span className="min-w-0 truncate">
           {selected ? (
-            <span className="font-sans text-sm font-bold uppercase tracking-wider text-white">
+            <span className="font-sans text-sm font-semibold text-white">
               {selected.tag}
-              <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-                {selected.id}
+              <span className="ml-2 font-sans text-xs font-medium text-[var(--text-faint)]">
+                #{selected.id}
                 {selected.hasCape ? ' · cape set' : ''}
               </span>
             </span>
           ) : (
-            <span className="font-mono text-[12px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+            <span className="font-sans text-sm font-medium text-[var(--text-faint)]">
               {placeholder}
             </span>
           )}
         </span>
         <span
           aria-hidden
-          className="material-symbols-outlined text-[var(--text-mute)]"
-          style={{ fontSize: 18 }}
+          className="material-symbols-outlined text-[var(--text-mute)] transition-transform"
+          style={{ fontSize: 18, transform: open ? 'rotate(180deg)' : 'none' }}
         >
-          {open ? 'expand_less' : 'expand_more'}
+          expand_more
         </span>
       </button>
 
@@ -104,10 +104,10 @@ export function ClanSelect({
         <ul
           role="listbox"
           tabIndex={-1}
-          className="absolute left-0 right-0 top-full z-30 mt-2 max-h-72 overflow-y-auto border-2 border-white bg-[var(--bg-raise)] shadow-[6px_6px_0_0_rgba(255,255,255,0.18)]"
+          className="popover-panel absolute left-0 right-0 top-full z-30 mt-2 max-h-72 overflow-y-auto"
         >
           {options.length === 0 ? (
-            <li className="px-4 py-3 font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+            <li className="px-4 py-3 font-sans text-sm font-medium text-[var(--text-faint)]">
               No clans
             </li>
           ) : (
@@ -124,21 +124,17 @@ export function ClanSelect({
                       setOpen(false);
                       buttonRef.current?.focus();
                     }}
-                    className={`flex w-full items-center justify-between gap-4 px-4 py-2.5 text-left transition-colors ${
-                      active
-                        ? 'bg-white text-black'
-                        : 'text-white hover:bg-white/[0.08]'
-                    }`}
+                    className={`popover-item ${active ? 'is-active' : ''}`}
                   >
-                    <span className="font-sans text-sm font-bold uppercase tracking-wider">
+                    <span className="font-sans text-sm font-semibold">
                       {o.tag}
                     </span>
                     <span
-                      className={`font-mono text-[10px] uppercase tracking-[0.18em] ${
+                      className={`font-sans text-xs font-medium ${
                         active ? 'text-black/60' : 'text-[var(--text-faint)]'
                       }`}
                     >
-                      {o.id}
+                      #{o.id}
                       {o.hasCape ? ' · cape set' : ''}
                     </span>
                   </button>

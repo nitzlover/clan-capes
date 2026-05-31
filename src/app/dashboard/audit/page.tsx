@@ -185,7 +185,7 @@ export default function AuditPage() {
               value={actor}
               onChange={(e) => setActor(e.target.value)}
               placeholder="admin: / plugin: / UUID…"
-              className="brutal-input w-full"
+              className="input w-full"
             />
             <datalist id="audit-actor-list">
               {actorOptions.map((a) => (
@@ -199,7 +199,7 @@ export default function AuditPage() {
             <select
               value={action}
               onChange={(e) => setAction(e.target.value)}
-              className="brutal-input w-full"
+              className="input w-full"
             >
               <option value="">(any)</option>
               {actionOptions.map((a) => (
@@ -217,7 +217,7 @@ export default function AuditPage() {
               value={target}
               onChange={(e) => setTarget(e.target.value)}
               placeholder="clan tag, file…"
-              className="brutal-input w-full"
+              className="input w-full"
             />
           </FilterControl>
 
@@ -227,7 +227,7 @@ export default function AuditPage() {
               type="datetime-local"
               value={since}
               onChange={(e) => setSince(e.target.value)}
-              className="brutal-input w-full"
+              className="input w-full"
             />
           </FilterControl>
 
@@ -237,7 +237,7 @@ export default function AuditPage() {
               type="datetime-local"
               value={until}
               onChange={(e) => setUntil(e.target.value)}
-              className="brutal-input w-full"
+              className="input w-full"
             />
           </FilterControl>
 
@@ -247,7 +247,7 @@ export default function AuditPage() {
               type="button"
               onClick={clearFilters}
               disabled={!hasFilters}
-              className="brutal-btn w-full disabled:cursor-not-allowed disabled:opacity-40"
+              className="btn-ghost w-full justify-center disabled:cursor-not-allowed disabled:opacity-40"
             >
               Clear
             </button>
@@ -335,8 +335,8 @@ function FilterControl({
   children: React.ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="label-mono text-[var(--text-faint)]">{label}</span>
+    <label className="field">
+      <span className="label-soft">{label.toLowerCase()}</span>
       {children}
     </label>
   );
