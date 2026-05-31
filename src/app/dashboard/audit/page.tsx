@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, UnauthorizedError } from '@/lib/api';
 import { SelectServerPrompt } from '@/components/ServerPicker';
+import { Select } from '@/components/Select';
 import { useSelectedServer } from '@/lib/selected-server';
 
 type AuditEntry = {
@@ -196,18 +197,18 @@ export default function AuditPage() {
 
           {/* Action */}
           <FilterControl label="Action">
-            <select
+            <Select
               value={action}
-              onChange={(e) => setAction(e.target.value)}
-              className="input w-full"
-            >
-              <option value="">(any)</option>
-              {actionOptions.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
+              onChange={setAction}
+              placeholder="(any)"
+              aria-label="Filter by action"
+              minWidth={0}
+              className="w-full"
+              options={[
+                { value: '', label: '(any)' },
+                ...actionOptions.map((a) => ({ value: a, label: a })),
+              ]}
+            />
           </FilterControl>
 
           {/* Target */}

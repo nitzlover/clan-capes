@@ -26,6 +26,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, UnauthorizedError } from '@/lib/api';
 import { useSelectedServer, SelectedServer } from '@/lib/selected-server';
+import { Select, SelectOption } from '@/components/Select';
 
 type Server = {
   id: number;
@@ -70,27 +71,31 @@ export function ServerPicker({ allowAll = true }: { allowAll?: boolean }) {
   // Active label for the small status pill next to the dropdown.
   const activeLabel = labelFor(value, servers);
 
+  const selectOptions: SelectOption[] = [
+    ...(allowAll && servers.length > 1
+      ? [{ value: 'all', label: 'All servers', sublabel: `${servers.length}` }]
+      : []),
+    ...servers.map((s) => ({
+      value: String(s.id),
+      label: s.name,
+      sublabel: `#${s.id}`,
+    })),
+  ];
+
   return (
     <div className="flex items-center gap-3">
       <span className="hidden md:inline font-sans text-xs font-medium lowercase text-[var(--text-faint)]">
         server
       </span>
-      <select
-        className="input min-w-[180px]"
+      <Select
         value={selectValue(value)}
-        onChange={(e) => onChange(e.target.value)}
+        options={selectOptions}
+        onChange={onChange}
+        placeholder="Select server…"
         disabled={loading || servers.length === 0}
-      >
-        <option value="">Select server…</option>
-        {allowAll && servers.length > 1 && (
-          <option value="all">All servers ({servers.length})</option>
-        )}
-        {servers.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
-          </option>
-        ))}
-      </select>
+        aria-label="Select server scope"
+        minWidth={190}
+      />
       {error && (
         <span className="font-sans text-xs font-medium text-red-400">
           {error}

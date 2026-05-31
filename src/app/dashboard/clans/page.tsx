@@ -10,6 +10,13 @@ import {
   type ArmorTrimRecord,
 } from '@/components/ArmorTrimEditor';
 import { MemberCard3D } from '@/components/MemberCard3D';
+import { Select, type SelectOption } from '@/components/Select';
+
+/** member / deputy role choices for the custom <Select> (leader uses /transfer). */
+const ROLE_OPTIONS: SelectOption[] = [
+  { value: 'member', label: 'member' },
+  { value: 'deputy', label: 'deputy' },
+];
 
 type Member = {
   playerUuid: string;
@@ -672,18 +679,18 @@ function MemberRow({
         </span>
       </span>
       {m.role === 'leader' ? (
-        <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-white">
+        <span className="font-sans text-xs font-semibold text-white">
           leader
         </span>
       ) : (
-        <select
+        <Select
           value={m.role}
-          onChange={(e) => onRoleChange(e.target.value as 'member' | 'deputy')}
-          className="input max-w-[120px] py-1 font-mono text-[10px] uppercase tracking-[0.22em]"
-        >
-          <option value="member">member</option>
-          <option value="deputy">deputy</option>
-        </select>
+          options={ROLE_OPTIONS}
+          onChange={(v) => onRoleChange(v as 'member' | 'deputy')}
+          aria-label="Member role"
+          minWidth={120}
+          className="max-w-[130px]"
+        />
       )}
       <button
         onClick={onTransfer}
@@ -796,19 +803,15 @@ function AddMemberForm({
             maxLength={32}
           />
         </label>
-        <label className="block">
-          <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
-            Role
-          </span>
-          <select
+        <div className="field">
+          <span className="label-soft">role</span>
+          <Select
             value={role}
-            onChange={(e) => setRole(e.target.value as 'member' | 'deputy')}
-            className="input mt-1 font-mono text-[11px] uppercase tracking-[0.22em]"
-          >
-            <option value="member">member</option>
-            <option value="deputy">deputy</option>
-          </select>
-        </label>
+            options={ROLE_OPTIONS}
+            onChange={(v) => setRole(v as 'member' | 'deputy')}
+            aria-label="New member role"
+          />
+        </div>
         <div className="flex items-end">
           <button
             onClick={submit}
