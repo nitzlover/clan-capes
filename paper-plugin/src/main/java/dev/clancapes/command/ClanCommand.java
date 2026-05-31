@@ -133,16 +133,26 @@ public final class ClanCommand implements CommandExecutor {
             return true;
         }
 
+        // Capture the player's intended tag locally so the success
+        // message can fall back to it if the panel response somehow
+        // ships a null DTO. 1.0.11 panel hotfix removed the
+        // tx-isolation NPE path that caused this, but the defensive
+        // null check stays so a future protocol drift can't crash
+        // the chat reply silently.
+        final String intendedTag = tag;
+        final String intendedName = name;
         plugin.getPanelClient().createClan(tag, name, player.getUniqueId(), player.getName(), null)
                 .whenComplete((dto, err) -> back(() -> {
                     if (err != null) {
                         player.sendMessage(Component.text("Could not create clan: " + msg(err),
                                 NamedTextColor.RED));
-                    } else {
-                        player.sendMessage(Component.text("Clan [" + dto.tag + "] " + dto.name + " created.",
-                                NamedTextColor.GREEN));
-                        plugin.getClanRepository().refresh();
+                        return;
                     }
+                    String t = dto != null && dto.tag != null ? dto.tag : intendedTag;
+                    String n = dto != null && dto.name != null ? dto.name : intendedName;
+                    player.sendMessage(Component.text("Clan [" + t + "] " + n + " created.",
+                            NamedTextColor.GREEN));
+                    plugin.getClanRepository().refresh();
                 }));
         return true;
     }
