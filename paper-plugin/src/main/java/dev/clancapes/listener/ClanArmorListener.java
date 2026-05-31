@@ -1,16 +1,18 @@
 package dev.clancapes.listener;
 
-import com.destroystokyo.paper.event.player.PlayerArmorChangeEvent;
 import dev.clancapes.ClanCapesPlugin;
 import dev.clancapes.api.dto.ClanDto;
 import dev.clancapes.api.dto.TrimDto;
+import io.papermc.paper.event.entity.EntityEquipmentChangedEvent;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ArmorMeta;
 import org.bukkit.inventory.meta.trim.ArmorTrim;
 import org.bukkit.inventory.meta.trim.TrimMaterial;
@@ -26,31 +28,37 @@ import java.util.UUID;
 /**
  * Drives vanilla armour-trim NBT directly on the worn ItemStack so
  * every player on the server — modded or not — sees the clan trim
- * through the standard render pipeline. Replaces the client-side
- * mod-only render the Fabric mod used to do for trims.
+ * through the standard render pipeline.
  *
- * <h2>State machine</h2>
- * Each {@link PlayerArmorChangeEvent} fires for one slot at a time.
- * For the newly-worn stack we ask three questions:
+ * <h2>1.0.8 — event swap + write-back fix</h2>
+ * Paper 26.1.2 deprecated {@code PlayerArmorChangeEvent} (the
+ * handler still compiles but no longer fires), so 1.0.7's trims
+ * only ever applied via the 2-tick {@link PlayerJoinListener}
+ * scheduled reconcile — i.e. the "only on relog" symptom from
+ * Crownless. This listener migrates to the modern {@link
+ * EntityEquipmentChangedEvent}, which carries every changed slot
+ * in a single map.
+ *
+ * <p>The other half of the fix is the explicit write-back: Paper
+ * 26.1.2 returns defensive copies from
+ * {@code Player.getInventory().getHelmet()} and friends, so
+ * mutating the returned stack alone is not enough. Every
+ * apply/strip path now ends with a
+ * {@code setHelmet/setChestplate/...} call on the inventory.
+ *
+ * <h2>Marker policy (unchanged from 1.0.6)</h2>
+ * Each event we get:
  * <ol>
- *   <li>Is the player in a clan that has a trim configured for this
- *       slot? → write {@link ArmorTrim} + stamp the PDC marker
- *       {@link #TRIM_OWNER_KEY} with the clan tag.</li>
- *   <li>Does the stack carry the marker but the wearer is in a
- *       different clan / no clan / no slot trim? → strip the trim
- *       and the marker. This is the cleanup path for armour that
- *       changed hands (dropped on death, traded, picked up from a
- *       chest).</li>
- *   <li>No marker, no clan trim → leave the stack alone so vanilla
- *       trims a player crafted themselves survive untouched.</li>
+ *   <li>Player in a clan with a trim configured for the slot →
+ *       write {@link ArmorTrim} + stamp the PDC marker
+ *       {@link #TRIM_OWNER_KEY} with the clan tag, then write the
+ *       stack back to the inventory.</li>
+ *   <li>Stack carries the marker but the wearer has no clan trim
+ *       → strip the trim and the marker, write back. Cleanup for
+ *       armour that changed hands (drop / chest / death).</li>
+ *   <li>No marker + no clan trim → leave the stack alone so
+ *       vanilla trims a player crafted survive untouched.</li>
  * </ol>
- *
- * <h2>What this means for "leakage"</h2>
- * A trimmed stack sitting in a chest stays visually trimmed — that's
- * cosmetic information already public (clans + their trims are listed
- * on {@code /clan info}). The marker ensures the trim is re-evaluated
- * the moment the stack is worn again, so a non-clan player wearing
- * the armour instantly loses the overlay.
  */
 public final class ClanArmorListener implements Listener {
 
@@ -64,76 +72,110 @@ public final class ClanArmorListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onArmorChange(PlayerArmorChangeEvent event) {
-        ItemStack worn = event.getNewItem();
-        if (worn == null || worn.getType().isAir()) return;
-        String slot = slotKey(event.getSlotType());
-        if (slot == null) return;
-        reconcile(event.getPlayer().getUniqueId(), worn, slot);
+    public void onEquipmentChange(EntityEquipmentChangedEvent event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        PlayerInventory inv = player.getInventory();
+        UUID uuid = player.getUniqueId();
+        for (var entry : event.getEquipmentChanges().entrySet()) {
+            String slotKey = armorSlotKey(entry.getKey());
+            if (slotKey == null) continue;
+            ItemStack worn = entry.getValue().newItem();
+            if (worn == null || worn.getType().isAir()) continue;
+            ItemStack reconciled = reconcile(uuid, worn, slotKey);
+            if (reconciled != null) {
+                writeBack(inv, entry.getKey(), reconciled);
+            }
+        }
     }
 
     /**
      * Reconcile the trim component on the given stack against the
-     * wearer's current clan + trim spec. The stack is mutated in
-     * place — callers either rely on the event's reference or set the
-     * returned modification back into the inventory slot themselves
-     * (the armour-change event hands us the live reference).
+     * wearer's current clan + trim spec. Returns the mutated stack
+     * the caller should write back to the inventory, or {@code null}
+     * when nothing changed (caller can skip the {@code setHelmet}
+     * call entirely).
      */
-    public void reconcile(UUID playerUuid, ItemStack stack, String slot) {
-        if (stack == null || stack.getType().isAir()) return;
+    public ItemStack reconcile(UUID playerUuid, ItemStack stack, String slot) {
+        if (stack == null || stack.getType().isAir()) return null;
         ClanDto clan = plugin.getClanRepository().getByPlayer(playerUuid).orElse(null);
         Optional<TrimDto> wanted = clan == null
                 ? Optional.empty()
                 : plugin.getArmorTrimRepository().get(clan.tag, slot);
 
         if (wanted.isPresent() && clan != null) {
-            applyTrim(stack, wanted.get(), clan.tag);
-        } else if (hasMarker(stack)) {
-            stripTrim(stack);
+            return applyTrim(stack, wanted.get(), clan.tag);
         }
-        // else: no clan-trim wanted, no marker on stack → nothing to do.
+        if (hasMarker(stack)) {
+            return stripTrim(stack);
+        }
+        return null;
     }
 
     /** Walk every armour slot the player is currently wearing and reconcile. */
-    public void reconcileAll(org.bukkit.entity.Player player) {
+    public void reconcileAll(Player player) {
         UUID uuid = player.getUniqueId();
-        var inv = player.getInventory();
-        ItemStack[] order = { inv.getHelmet(), inv.getChestplate(), inv.getLeggings(), inv.getBoots() };
-        String[] slots = { "head", "chest", "legs", "feet" };
-        for (int i = 0; i < 4; i++) {
-            if (order[i] == null) continue;
-            reconcile(uuid, order[i], slots[i]);
+        PlayerInventory inv = player.getInventory();
+        ItemStack helmet = reconcile(uuid, inv.getHelmet(), "head");
+        if (helmet != null) inv.setHelmet(helmet);
+        ItemStack chest = reconcile(uuid, inv.getChestplate(), "chest");
+        if (chest != null) inv.setChestplate(chest);
+        ItemStack legs = reconcile(uuid, inv.getLeggings(), "legs");
+        if (legs != null) inv.setLeggings(legs);
+        ItemStack feet = reconcile(uuid, inv.getBoots(), "feet");
+        if (feet != null) inv.setBoots(feet);
+    }
+
+    /** Map an {@link EquipmentSlot} to the panel's per-slot key string. */
+    private static String armorSlotKey(EquipmentSlot slot) {
+        return switch (slot) {
+            case HEAD -> "head";
+            case CHEST -> "chest";
+            case LEGS -> "legs";
+            case FEET -> "feet";
+            default -> null;
+        };
+    }
+
+    /** Write the reconciled stack back to the correct inventory slot. */
+    private static void writeBack(PlayerInventory inv, EquipmentSlot slot, ItemStack stack) {
+        switch (slot) {
+            case HEAD -> inv.setHelmet(stack);
+            case CHEST -> inv.setChestplate(stack);
+            case LEGS -> inv.setLeggings(stack);
+            case FEET -> inv.setBoots(stack);
+            default -> { /* not an armour slot — caller filtered already */ }
         }
     }
 
     /**
      * Write the {@link ArmorTrim} component (vanilla NBT, visible to
      * every viewing client without a mod) and stamp the PDC marker
-     * with the owning clan tag so cleanup can recognise our writes
-     * later.
+     * with the owning clan tag. Returns the mutated stack (always
+     * non-null when an apply actually happened).
      */
-    private void applyTrim(ItemStack stack, TrimDto spec, String clanTag) {
-        ArmorMeta meta = stack.getItemMeta() instanceof ArmorMeta am ? am : null;
-        if (meta == null) return;
+    private ItemStack applyTrim(ItemStack stack, TrimDto spec, String clanTag) {
+        ItemStack copy = stack.clone();
+        if (!(copy.getItemMeta() instanceof ArmorMeta meta)) return null;
 
         Optional<TrimMaterial> material = resolve(spec.material, Registry.TRIM_MATERIAL);
         Optional<TrimPattern> pattern = resolve(spec.pattern, Registry.TRIM_PATTERN);
         if (material.isEmpty() || pattern.isEmpty()) {
             plugin.debugLog(() -> "[trim] unresolved spec for clan " + clanTag
                     + " — material=" + spec.material + " pattern=" + spec.pattern);
-            return;
+            return null;
         }
         ArmorTrim desired = new ArmorTrim(material.get(), pattern.get());
         ArmorTrim current = meta.hasTrim() ? meta.getTrim() : null;
         String marker = readMarker(meta);
         if (desired.equals(current) && clanTag.equalsIgnoreCase(marker)) {
-            return; // already correct — no need to rewrite NBT
+            return null; // already correct — skip the inventory write
         }
         meta.setTrim(desired);
         meta.getPersistentDataContainer().set(TRIM_OWNER_KEY, PersistentDataType.STRING, clanTag);
-        stack.setItemMeta(meta);
+        copy.setItemMeta(meta);
         plugin.debugLog(() -> "[trim] applied " + spec.material + "/" + spec.pattern
-                + " for clan " + clanTag + " on " + stack.getType());
+                + " for clan " + clanTag + " on " + copy.getType());
+        return copy;
     }
 
     /**
@@ -141,15 +183,18 @@ public final class ClanArmorListener implements Listener {
      * our marker, so vanilla-trimmed armour a player crafted themselves
      * is never touched.
      */
-    private void stripTrim(ItemStack stack) {
-        if (!(stack.getItemMeta() instanceof ArmorMeta meta)) return;
+    private ItemStack stripTrim(ItemStack stack) {
+        ItemStack copy = stack.clone();
+        if (!(copy.getItemMeta() instanceof ArmorMeta meta)) return null;
         if (meta.hasTrim()) meta.setTrim(null);
         meta.getPersistentDataContainer().remove(TRIM_OWNER_KEY);
-        stack.setItemMeta(meta);
-        plugin.debugLog(() -> "[trim] stripped clan trim from " + stack.getType());
+        copy.setItemMeta(meta);
+        plugin.debugLog(() -> "[trim] stripped clan trim from " + copy.getType());
+        return copy;
     }
 
     private boolean hasMarker(ItemStack stack) {
+        if (stack == null || stack.getType().isAir()) return false;
         if (!(stack.getItemMeta() instanceof ArmorMeta meta)) return false;
         return readMarker(meta) != null;
     }
@@ -159,16 +204,6 @@ public final class ClanArmorListener implements Listener {
         return pdc.has(TRIM_OWNER_KEY, PersistentDataType.STRING)
                 ? pdc.get(TRIM_OWNER_KEY, PersistentDataType.STRING)
                 : null;
-    }
-
-    private static String slotKey(PlayerArmorChangeEvent.SlotType type) {
-        if (type == null) return null;
-        return switch (type) {
-            case HEAD -> "head";
-            case CHEST -> "chest";
-            case LEGS -> "legs";
-            case FEET -> "feet";
-        };
     }
 
     /**
@@ -195,14 +230,8 @@ public final class ClanArmorListener implements Listener {
      * single reconcile pass two ticks later so the inventory has
      * settled and the cache is warm.
      */
-    public BukkitTask scheduleJoinReconcile(org.bukkit.entity.Player player) {
+    public BukkitTask scheduleJoinReconcile(Player player) {
         return plugin.getServer().getScheduler().runTaskLater(plugin,
                 () -> reconcileAll(player), 2L);
-    }
-
-    /** Unused enum reference — kept to surface a compile error if Paper renames the slot type. */
-    @SuppressWarnings("unused")
-    private static void assertEquipmentSlots() {
-        EquipmentSlot ignored = EquipmentSlot.HEAD;
     }
 }

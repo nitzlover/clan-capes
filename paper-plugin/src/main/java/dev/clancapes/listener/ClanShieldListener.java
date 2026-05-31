@@ -65,19 +65,30 @@ public final class ClanShieldListener implements Listener {
         ItemStack picked = event.getItem().getItemStack();
         if (!ClanShieldStamper.isShield(picked)) return;
         ClanDto clan = plugin.getClanRepository().getByPlayer(player.getUniqueId()).orElse(null);
+        boolean mutated;
         if (clan == null) {
-            ClanShieldStamper.stripIfOurs(picked);
-            return;
+            mutated = ClanShieldStamper.stripIfOurs(picked);
+        } else {
+            BannerDto banner = plugin.getBannerRepository().get(clan.tag).orElse(null);
+            mutated = banner != null && ClanShieldStamper.apply(picked, banner, clan.tag);
         }
-        Optional<BannerDto> banner = plugin.getBannerRepository().get(clan.tag);
-        banner.ifPresent(b -> ClanShieldStamper.apply(picked, b, clan.tag));
+        if (mutated) {
+            // Write the mutated stack back onto the dropped item entity
+            // before vanilla transfers it into the inventory — otherwise
+            // the item ends up in inv slot with our changes dropped on
+            // Paper builds that defensive-copy the stack reference.
+            event.getItem().setItemStack(picked);
+            plugin.debugLog(() -> "[shield] pickup reconciled for "
+                    + player.getName() + " clan=" + (clan == null ? "<none>" : clan.tag));
+        }
     }
 
     /**
      * Walk main + off hand, write or strip our banner depending on
-     * what the wearer's clan currently configures. Cheap idempotent
-     * pass — the stamper short-circuits when the existing marker
-     * already matches.
+     * what the wearer's clan currently configures. The stack returned
+     * by {@code getItemInMainHand} is a defensive copy on Paper
+     * 26.1.2, so every mutation has to be written back explicitly
+     * via {@code setItemInMainHand} / {@code setItemInOffHand}.
      */
     public void reconcileHands(Player player) {
         ClanDto clan = plugin.getClanRepository().getByPlayer(player.getUniqueId()).orElse(null);
@@ -85,20 +96,36 @@ public final class ClanShieldListener implements Listener {
                 ? Optional.empty()
                 : plugin.getBannerRepository().get(clan.tag);
         PlayerInventory inv = player.getInventory();
-        reconcileSlot(inv.getItemInMainHand(), clan, banner.orElse(null));
-        reconcileSlot(inv.getItemInOffHand(), clan, banner.orElse(null));
+        ItemStack main = inv.getItemInMainHand();
+        if (reconcileSlot(main, clan, banner.orElse(null), "main", player)) {
+            inv.setItemInMainHand(main);
+        }
+        ItemStack off = inv.getItemInOffHand();
+        if (reconcileSlot(off, clan, banner.orElse(null), "off", player)) {
+            inv.setItemInOffHand(off);
+        }
     }
 
-    private void reconcileSlot(ItemStack stack, ClanDto clan, BannerDto banner) {
-        if (!ClanShieldStamper.isShield(stack)) return;
+    /**
+     * @return true when the stack was mutated and the caller must
+     *   write it back to the inventory.
+     */
+    private boolean reconcileSlot(ItemStack stack, ClanDto clan, BannerDto banner,
+                                  String slotLabel, Player player) {
+        if (!ClanShieldStamper.isShield(stack)) return false;
         if (clan != null && banner != null) {
             if (ClanShieldStamper.apply(stack, banner, clan.tag)) {
-                plugin.debugLog(() -> "[shield] auto-applied [" + clan.tag + "] banner");
+                plugin.debugLog(() -> "[shield] auto-applied [" + clan.tag + "] banner ("
+                        + slotLabel + " hand of " + player.getName() + ")");
+                return true;
             }
-        } else {
-            if (ClanShieldStamper.stripIfOurs(stack)) {
-                plugin.debugLog(() -> "[shield] stripped clan banner (no current clan/banner)");
-            }
+            return false;
         }
+        if (ClanShieldStamper.stripIfOurs(stack)) {
+            plugin.debugLog(() -> "[shield] stripped clan banner ("
+                    + slotLabel + " hand of " + player.getName() + ")");
+            return true;
+        }
+        return false;
     }
 }

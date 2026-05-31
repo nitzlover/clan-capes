@@ -511,24 +511,32 @@ public final class ClanCommand implements CommandExecutor {
                     NamedTextColor.RED));
             return true;
         }
-        var inv = player.getInventory();
-        org.bukkit.inventory.ItemStack stack = pickShield(inv);
-        if (stack == null) {
+        org.bukkit.inventory.PlayerInventory inv = player.getInventory();
+        org.bukkit.inventory.ItemStack main = inv.getItemInMainHand();
+        org.bukkit.inventory.ItemStack off = inv.getItemInOffHand();
+        boolean mainIsShield = main != null && main.getType() == org.bukkit.Material.SHIELD;
+        boolean offIsShield = off != null && off.getType() == org.bukkit.Material.SHIELD;
+        if (!mainIsShield && !offIsShield) {
             player.sendMessage(Component.text(
                     "Hold a shield (main or off hand) to brand it.", NamedTextColor.RED));
             return true;
         }
-        // Force a rewrite by clearing the marker first — the stamper
-        // short-circuits when the marker already matches, which we do
-        // not want on a manual refresh.
-        if (stack.getItemMeta() instanceof org.bukkit.inventory.meta.BlockStateMeta meta) {
-            meta.getPersistentDataContainer()
-                    .remove(dev.clancapes.listener.ClanShieldStamper.SHIELD_OWNER_KEY);
-            stack.setItemMeta(meta);
+        // Force the rewrite by clearing the marker first — the stamper
+        // short-circuits when the marker already matches the clan tag,
+        // which we do not want on a manual refresh. Then write the
+        // mutated stack back via setItemInMainHand/OffHand — Paper
+        // 26.1.2 returns a defensive copy from the getter so the
+        // mutation has to be explicitly persisted.
+        boolean stamped = false;
+        if (mainIsShield) {
+            stamped |= forceStampShield(main, bannerOpt.get(), clan.tag);
+            inv.setItemInMainHand(main);
         }
-        boolean applied = dev.clancapes.listener.ClanShieldStamper.apply(
-                stack, bannerOpt.get(), clan.tag);
-        if (applied) {
+        if (offIsShield) {
+            stamped |= forceStampShield(off, bannerOpt.get(), clan.tag);
+            inv.setItemInOffHand(off);
+        }
+        if (stamped) {
             player.sendMessage(Component.text(
                     "Shield branded with [" + clan.tag + "] banner.", NamedTextColor.GREEN));
         } else {
@@ -538,13 +546,19 @@ public final class ClanCommand implements CommandExecutor {
         return true;
     }
 
-    /** Prefer the main-hand shield; fall back to off-hand. */
-    private static org.bukkit.inventory.ItemStack pickShield(org.bukkit.inventory.PlayerInventory inv) {
-        org.bukkit.inventory.ItemStack main = inv.getItemInMainHand();
-        if (main != null && main.getType() == org.bukkit.Material.SHIELD) return main;
-        org.bukkit.inventory.ItemStack off = inv.getItemInOffHand();
-        if (off != null && off.getType() == org.bukkit.Material.SHIELD) return off;
-        return null;
+    /**
+     * Clear the PDC marker then delegate to the stamper. Returns true
+     * when the stamper actually wrote new NBT, false otherwise.
+     */
+    private boolean forceStampShield(org.bukkit.inventory.ItemStack shield,
+                                     dev.clancapes.api.dto.BannerDto banner,
+                                     String clanTag) {
+        if (shield.getItemMeta() instanceof org.bukkit.inventory.meta.BlockStateMeta meta) {
+            meta.getPersistentDataContainer()
+                    .remove(dev.clancapes.listener.ClanShieldStamper.SHIELD_OWNER_KEY);
+            shield.setItemMeta(meta);
+        }
+        return dev.clancapes.listener.ClanShieldStamper.apply(shield, banner, clanTag);
     }
 
     // ─────────────────────── invitations (1.0.5) ───────────────────────
