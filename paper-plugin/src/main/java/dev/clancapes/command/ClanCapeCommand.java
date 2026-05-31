@@ -52,7 +52,7 @@ public final class ClanCapeCommand implements CommandExecutor {
                     "Usage: /clancape <setup|link|reload|event|debug>", NamedTextColor.RED));
             return true;
         }
-        String sub = args[0].toLowerCase();
+        String sub = args[0].toLowerCase(java.util.Locale.ROOT);
         return switch (sub) {
             case "setup" -> doSetup(sender, args);
             case "link" -> doLink(sender, args);
@@ -92,7 +92,7 @@ public final class ClanCapeCommand implements CommandExecutor {
                     NamedTextColor.RED));
             return true;
         }
-        String action = args[1].toLowerCase();
+        String action = args[1].toLowerCase(java.util.Locale.ROOT);
         switch (action) {
             case "start" -> {
                 if (args.length < 3) {
@@ -135,7 +135,7 @@ public final class ClanCapeCommand implements CommandExecutor {
                     "Usage: /clancape debug <on|off|status>", NamedTextColor.RED));
             return true;
         }
-        String mode = args[1].toLowerCase();
+        String mode = args[1].toLowerCase(java.util.Locale.ROOT);
         switch (mode) {
             case "on" -> {
                 plugin.getConfig().set("logging.debug", true);
@@ -194,13 +194,14 @@ public final class ClanCapeCommand implements CommandExecutor {
                     if (res.statusCode() == 200 || res.statusCode() == 201) {
                         plugin.getConfig().set("panel.server-name", finalServerName);
                         plugin.saveConfig();
-                        // Mirror the token to the server console so an operator
-                        // without clipboard access in the JE chat (or running an
-                        // older client) can still copy it from the Apex web log.
+                        // 1.0.9: do NOT mirror the raw token to the server
+                        // console — log files are often forwarded to monitoring
+                        // and chat backups, leaking a 15-min credential. The
+                        // operator can copy the click-event token from chat;
+                        // we only log the metadata.
                         plugin.getLogger().info(
-                                "Setup token issued for '" + finalServerName + "': "
-                                        + token
-                                        + " — paste into /dashboard/servers within 15 min.");
+                                "Setup token issued for '" + finalServerName
+                                        + "' — paste from in-game chat into /dashboard/servers within 15 min.");
                         sender.sendMessage(Component.text(
                                 "Setup token (click to copy — paste into /dashboard/servers, valid 15 min):",
                                 NamedTextColor.GREEN));

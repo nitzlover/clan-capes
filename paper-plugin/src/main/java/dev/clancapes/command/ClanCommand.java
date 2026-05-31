@@ -110,7 +110,7 @@ public final class ClanCommand implements CommandExecutor {
     private boolean isLeaderOrDeputy(ClanDto clan, UUID uuid) {
         if (clan.members == null) return false;
         return clan.members.stream().anyMatch(m -> {
-            String r = m.role == null ? "" : m.role.toLowerCase();
+            String r = m.role == null ? "" : m.role.toLowerCase(Locale.ROOT);
             return (r.equals("leader") || r.equals("deputy"))
                     && uuid.toString().equalsIgnoreCase(m.playerUuid);
         });
@@ -558,7 +558,7 @@ public final class ClanCommand implements CommandExecutor {
                     .remove(dev.clancapes.listener.ClanShieldStamper.SHIELD_OWNER_KEY);
             shield.setItemMeta(meta);
         }
-        return dev.clancapes.listener.ClanShieldStamper.apply(shield, banner, clanTag);
+        return dev.clancapes.listener.ClanShieldStamper.apply(shield, banner, clanTag, plugin);
     }
 
     // ─────────────────────── invitations (1.0.5) ───────────────────────

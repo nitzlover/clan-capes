@@ -70,7 +70,7 @@ public final class ClanShieldListener implements Listener {
             mutated = ClanShieldStamper.stripIfOurs(picked);
         } else {
             BannerDto banner = plugin.getBannerRepository().get(clan.tag).orElse(null);
-            mutated = banner != null && ClanShieldStamper.apply(picked, banner, clan.tag);
+            mutated = banner != null && ClanShieldStamper.apply(picked, banner, clan.tag, plugin);
         }
         if (mutated) {
             // Write the mutated stack back onto the dropped item entity
@@ -114,7 +114,7 @@ public final class ClanShieldListener implements Listener {
                                   String slotLabel, Player player) {
         if (!ClanShieldStamper.isShield(stack)) return false;
         if (clan != null && banner != null) {
-            if (ClanShieldStamper.apply(stack, banner, clan.tag)) {
+            if (ClanShieldStamper.apply(stack, banner, clan.tag, plugin)) {
                 plugin.debugLog(() -> "[shield] auto-applied [" + clan.tag + "] banner ("
                         + slotLabel + " hand of " + player.getName() + ")");
                 return true;

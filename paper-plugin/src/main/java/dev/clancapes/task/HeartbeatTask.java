@@ -24,23 +24,31 @@ public final class HeartbeatTask extends BukkitRunnable {
     public void run() {
         if (!plugin.getPanelClient().isConfigured()) return;
 
-        JsonArray uuids = new JsonArray();
-        for (var p : Bukkit.getOnlinePlayers()) {
-            uuids.add(p.getUniqueId().toString());
-        }
+        // Paper 26.1.2 enforces the main-thread invariant on
+        // Bukkit.getOnlinePlayers() / player accessors; iterating from
+        // the async scheduler tripped the async-catcher under join
+        // storms and risked ConcurrentModificationException. Collect
+        // the uuids on the main thread, then hop back out via the
+        // HttpClient call (already async-internal).
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            JsonArray uuids = new JsonArray();
+            for (var p : Bukkit.getOnlinePlayers()) {
+                uuids.add(p.getUniqueId().toString());
+            }
 
-        JsonObject payload = new JsonObject();
-        payload.addProperty("pluginVersion", plugin.getPluginMeta().getVersion());
-        payload.addProperty("paperVersion", Bukkit.getVersion());
-        payload.addProperty("onlineCount", uuids.size());
-        payload.add("onlinePlayerUuids", uuids);
+            JsonObject payload = new JsonObject();
+            payload.addProperty("pluginVersion", plugin.getPluginMeta().getVersion());
+            payload.addProperty("paperVersion", Bukkit.getVersion());
+            payload.addProperty("onlineCount", uuids.size());
+            payload.add("onlinePlayerUuids", uuids);
 
-        plugin.getPanelClient().postHeartbeat(payload)
-                .exceptionally(t -> {
-                    if (plugin.getConfig().getBoolean("logging.debug", false)) {
-                        plugin.getLogger().warning("[heartbeat] failed: " + t.getMessage());
-                    }
-                    return null;
-                });
+            plugin.getPanelClient().postHeartbeat(payload)
+                    .exceptionally(t -> {
+                        if (plugin.getConfig().getBoolean("logging.debug", false)) {
+                            plugin.getLogger().warning("[heartbeat] failed: " + t.getMessage());
+                        }
+                        return null;
+                    });
+        });
     }
 }

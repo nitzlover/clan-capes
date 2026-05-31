@@ -67,6 +67,14 @@ public final class EventScheduler {
             task.cancel();
             task = null;
         }
+        // 1.0.9: cancel any in-flight event so a /clancape reload (which
+        // bounces the scheduler) can't leave an orphan AirdropEvent /
+        // KingOfHillEvent ticking with its barrier renderer, scoreboard,
+        // and PvP listener still wired up.
+        if (activeEvent != null && !activeEvent.isFinished()) {
+            try { activeEvent.cancel(); } catch (Throwable ignored) {}
+        }
+        activeEvent = null;
     }
 
     private boolean testEnabled() {
@@ -112,7 +120,10 @@ public final class EventScheduler {
                 continue;
             }
             long elapsedMs = now - lastFired.getOrDefault(cfg.type, 0L);
-            long intervalMs = (long) cfg.intervalMinutes * 60_000L;
+            // Clamp negatives so a misconfigured intervalMinutes = -1
+            // (negative interval flips the comparison and would fire
+            // every tick) is treated as "no cooldown".
+            long intervalMs = (long) Math.max(0, cfg.intervalMinutes) * 60_000L;
             if (!bypassCooldown && elapsedMs < intervalMs) {
                 if (debug()) log.info("[event-scheduler]   skip " + cfg.type
                         + " — cooldown " + ((intervalMs - elapsedMs) / 1000) + "s left");

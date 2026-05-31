@@ -3,6 +3,7 @@ package dev.clancapes.events;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
@@ -22,9 +23,17 @@ public final class EventChat {
 
     private EventChat() {}
 
-    /** Server-wide chat line with the event prefix. */
+    /**
+     * Server-wide chat line with the event prefix.
+     *
+     * <p>1.0.9: switched from {@code Component.text(...)} (which left
+     * §-codes as literal characters in Adventure) to the legacy
+     * section-serializer so the colour codes render the way we
+     * always meant them to.
+     */
     public static void broadcast(String legacyMessage) {
-        Bukkit.broadcast(Component.text(PREFIX + legacyMessage));
+        Bukkit.broadcast(LegacyComponentSerializer.legacySection()
+                .deserialize(PREFIX + legacyMessage));
     }
 
     /** Stage transition — bold title + subtitle + chime to everyone. */
