@@ -29,6 +29,16 @@ leader-panel:
   # TTL of the /clan panel single-use token in seconds.
   token-ttl-sec: 600
 
+# 1.0.11: auto-update channel. When enabled and the panel advertises
+# a `downloadUrl` for a strictly-newer version, the plugin downloads
+# the jar straight into Paper's `plugins/update/` directory. Paper
+# hot-swaps any jar there at the next clean stop/start, so the operator
+# just has to restart — no manual SFTP, no hosting on the MC box.
+# Set to false to keep the fully-manual workflow (you'll still see
+# the chat nag, with the download URL clickable).
+auto-update:
+  enabled: true
+
 invites:
   # /clan invite TTL in seconds. Panel clamps to 60..604800 (1 min..7 days).
   # Default 86400 (24h) matches the events.txt design note.

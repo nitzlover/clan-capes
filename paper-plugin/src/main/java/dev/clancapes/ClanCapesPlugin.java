@@ -212,15 +212,122 @@ public final class ClanCapesPlugin extends JavaPlugin {
         panelClient.getPluginVersion().thenAccept(json -> {
             if (json == null || !json.has("latest")) return;
             String latest = json.get("latest").getAsString();
-            if (latest == null || latest.isEmpty() || latest.equals(current)) return;
+            if (latest == null || latest.isEmpty()) return;
+            // 1.0.11: semver-aware compare. Earlier releases used
+            // !latest.equals(current), which also fired on a DOWNGRADE
+            // — e.g. plugin running 1.0.10 with the panel temporarily
+            // serving 1.0.9 (Railway redeploy lag) showed a spurious
+            // "update available: v1.0.9" nag. The new comparison only
+            // surfaces an update when the announced version is
+            // strictly greater than the running one.
+            if (compareSemver(latest, current) <= 0) return;
             updateAvailable = true;
             latestVersion = latest;
             updateUrl = json.has("downloadUrl") && !json.get("downloadUrl").isJsonNull()
                     ? json.get("downloadUrl").getAsString() : "";
             getLogger().warning("Update available: " + current + " -> " + latest
-                    + (updateUrl.isEmpty() ? "" : " (" + updateUrl + ")")
-                    + ". Manual install — never hot-swap a live jar.");
+                    + (updateUrl.isEmpty() ? "" : " (" + updateUrl + ")"));
+            tryAutoDownload(latest, updateUrl);
         }).exceptionally(t -> null);
+    }
+
+    /**
+     * Compare two dot-separated semver-ish strings ("1.0.10" vs "1.0.9").
+     * Returns a negative number when {@code a < b}, zero when equal,
+     * positive when {@code a > b}. Non-numeric segments fall back to a
+     * lexical compare so build tags ("1.0.0-rc1") don't crash the path.
+     */
+    private static int compareSemver(String a, String b) {
+        if (a == null) a = "";
+        if (b == null) b = "";
+        String[] ap = a.split("\\.");
+        String[] bp = b.split("\\.");
+        int n = Math.max(ap.length, bp.length);
+        for (int i = 0; i < n; i++) {
+            String as = i < ap.length ? ap[i] : "0";
+            String bs = i < bp.length ? bp[i] : "0";
+            try {
+                int ai = Integer.parseInt(as.replaceAll("[^0-9].*", ""));
+                int bi = Integer.parseInt(bs.replaceAll("[^0-9].*", ""));
+                if (ai != bi) return Integer.compare(ai, bi);
+            } catch (NumberFormatException nfe) {
+                int c = as.compareTo(bs);
+                if (c != 0) return c;
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * If the operator has opted into auto-download and the panel
+     * advertised a download URL, fetch the new jar straight into
+     * {@code plugins/update/}. Paper hot-swaps any jar found in that
+     * directory at the next clean stop/start, so the operator just
+     * has to restart — no manual SFTP, no jar hosting on the MC box.
+     *
+     * <p>Safety rails:
+     * <ul>
+     *   <li>Opt-in via {@code auto-update.enabled} in config.yml
+     *       (default {@code true} but easy to disable for ops who
+     *       prefer a fully manual workflow).</li>
+     *   <li>Download URL must be present + look like a remote http(s)
+     *       URL. Empty / null / file: URLs are ignored.</li>
+     *   <li>Target filename includes the version so the existing jar
+     *       is never overwritten in place — Paper deletes the old
+     *       copy after a successful start.</li>
+     *   <li>Errors are logged at WARNING and the regular nag still
+     *       fires so the operator has a fallback manual path.</li>
+     * </ul>
+     */
+    private void tryAutoDownload(String latest, String downloadUrl) {
+        if (!getConfig().getBoolean("auto-update.enabled", true)) {
+            getLogger().info("Auto-update disabled in config — operator must install "
+                    + latest + " manually.");
+            return;
+        }
+        if (downloadUrl == null || downloadUrl.isBlank()) {
+            getLogger().info("Update available but PLUGIN_DOWNLOAD_URL is unset on the panel — "
+                    + "operator must install " + latest + " manually.");
+            return;
+        }
+        if (!(downloadUrl.startsWith("http://") || downloadUrl.startsWith("https://"))) {
+            getLogger().warning("Refusing auto-download — unexpected URL scheme: " + downloadUrl);
+            return;
+        }
+        java.nio.file.Path updateDir = getDataFolder().toPath()
+                .getParent().resolve("update");
+        java.nio.file.Path target = updateDir.resolve("ClanCapes-" + latest + ".jar");
+        getServer().getScheduler().runTaskAsynchronously(this, () -> {
+            try {
+                java.nio.file.Files.createDirectories(updateDir);
+                java.net.http.HttpClient http = java.net.http.HttpClient.newBuilder()
+                        .connectTimeout(java.time.Duration.ofSeconds(10))
+                        .build();
+                java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+                        .uri(java.net.URI.create(downloadUrl))
+                        .timeout(java.time.Duration.ofSeconds(60))
+                        .header("Accept", "application/java-archive,*/*")
+                        .header("User-Agent", "ClanCapes/" + getPluginMeta().getVersion())
+                        .GET()
+                        .build();
+                java.net.http.HttpResponse<java.io.InputStream> res = http.send(req,
+                        java.net.http.HttpResponse.BodyHandlers.ofInputStream());
+                if (res.statusCode() < 200 || res.statusCode() >= 300) {
+                    getLogger().warning("Auto-download failed: HTTP " + res.statusCode());
+                    return;
+                }
+                try (var in = res.body()) {
+                    java.nio.file.Files.copy(in, target,
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+                long size = java.nio.file.Files.size(target);
+                getLogger().warning("Auto-downloaded " + target.getFileName()
+                        + " (" + size + " B). Restart server to apply.");
+            } catch (Throwable t) {
+                getLogger().warning("Auto-download error: " + t.getMessage());
+                try { java.nio.file.Files.deleteIfExists(target); } catch (Throwable ignored) {}
+            }
+        });
     }
 
     public boolean isUpdateAvailable() { return updateAvailable; }

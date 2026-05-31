@@ -73,9 +73,21 @@ public final class PlayerJoinListener implements Listener {
                                 "Click to open download page",
                                 NamedTextColor.GRAY))));
             }
-            p.sendMessage(Component.text(
-                    "  Manual install only — do not hot-swap a live jar.",
-                    NamedTextColor.GRAY));
+            // 1.0.11: if the plugin has already auto-downloaded the
+            // new jar to plugins/update/, surface that instead of the
+            // old "manual install only" line.
+            boolean autoStaged = plugin.getServer().getUpdateFolderFile().toPath()
+                    .resolve("ClanCapes-" + plugin.getLatestVersion() + ".jar")
+                    .toFile().isFile();
+            if (autoStaged) {
+                p.sendMessage(Component.text(
+                        "  Auto-download ready — restart server to apply.",
+                        NamedTextColor.GREEN));
+            } else {
+                p.sendMessage(Component.text(
+                        "  Manual install only — do not hot-swap a live jar.",
+                        NamedTextColor.GRAY));
+            }
         }
 
         // Pending-invite nag — surface the invitee's open invitations
