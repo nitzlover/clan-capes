@@ -5,7 +5,18 @@ import Link from 'next/link';
 import { api, UnauthorizedError } from '@/lib/api';
 import { PluginStatus } from '@/components/PluginStatus';
 
-type AuditEntry = { timestamp: string; raw: string };
+// 1.0.10: real audit shape from /api/panel/audit. The 1.0.0..1.0.9
+// dashboard typed this as { timestamp, raw } and rendered `r.raw`,
+// which has always been undefined on the DB-backed route — every row
+// rendered as an empty third column on every overview page load. Now
+// matches the structured payload the audit page already consumes.
+type AuditEntry = {
+  id?: number;
+  timestamp: string;
+  actor?: string | null;
+  action?: string | null;
+  target?: string | null;
+};
 
 /** Counts shape returned by /api/panel/overview. */
 type Overview = {
@@ -180,7 +191,11 @@ function RecentAuditCard({ entries }: { entries: AuditEntry[] }) {
               className="grid grid-cols-[auto_1fr] gap-4 border-t border-[var(--rule)] py-2 first:border-t-0 font-mono text-[11px]"
             >
               <span className="text-[var(--text-faint)] tabular">{a.timestamp}</span>
-              <span className="truncate text-[var(--text-soft)]">{a.raw}</span>
+              <span className="truncate text-[var(--text-soft)]">
+                <span className="text-white">{a.action ?? 'EVENT'}</span>
+                {a.actor ? ` · ${a.actor}` : ''}
+                {a.target ? ` · ${a.target}` : ''}
+              </span>
             </li>
           ))}
         </ul>

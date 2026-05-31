@@ -47,9 +47,20 @@ export async function GET(
     );
   }
 
-  const { tag } = await ctx.params;
-  if (!/^[A-Za-z0-9]{1,16}$/.test(tag)) {
-    return NextResponse.json({ error: 'invalid tag' }, { status: 400 });
+  // 1.0.10: normalise via the shared validator instead of the legacy
+  // `[A-Za-z0-9]{1,16}` regex this route shipped with. The sibling
+  // PATCH and DELETE handlers below use `normaliseTag` (2-6 chars,
+  // uppercase) — a tag that passed the loose GET regex but failed the
+  // tighter siblings could be looked up but never edited or disbanded.
+  const { tag: rawTag } = await ctx.params;
+  let tag: string;
+  try {
+    tag = normaliseTag(rawTag);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'invalid tag' },
+      { status: 400 },
+    );
   }
 
   const clan = await getClanByTag(auth.id, tag);
@@ -228,6 +239,16 @@ export async function DELETE(
           isNull(schema.clanMembers.leftAt),
         ),
       );
+    // 1.0.10: decline pending invites and orphan-clean the cape file.
+    await tx
+      .update(schema.clanInvitations)
+      .set({ status: 'declined' })
+      .where(
+        and(
+          eq(schema.clanInvitations.clanId, existing.id),
+          eq(schema.clanInvitations.status, 'pending'),
+        ),
+      );
     await tx.insert(schema.audit).values({
       serverId: auth.id,
       actor: actorUuid ? `plugin:${auth.name}:${actorUuid}` : `plugin:${auth.name}`,
@@ -236,6 +257,14 @@ export async function DELETE(
       payload: { members: existing.members.length, _rid: rid },
     });
   });
+
+  try {
+    const { fs: fsApi } = await import('node:fs/promises').then((m) => ({ fs: m }));
+    const { capeFilePath } = await import('@/lib/server/storage');
+    await fsApi.unlink(capeFilePath(tag)).catch(() => undefined);
+  } catch {
+    /* storage module unavailable in some test envs — ignore */
+  }
 
   return NextResponse.json(
     { ok: true, _rid: rid },

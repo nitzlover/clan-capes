@@ -13,7 +13,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { and, eq, isNull, ne } from 'drizzle-orm';
+import { and, eq, isNull, ne, inArray } from 'drizzle-orm';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import { requirePluginAuth } from '@/lib/server/plugin-auth';
 import { getClanByTag } from '@/lib/server/clan-repo';
@@ -151,18 +151,37 @@ export async function POST(
         );
 
       // Decline every other still-pending invite for this player —
-      // accepting one clan implicitly rejects the rest. We scope to
-      // the same server via the clan join.
-      await tx
-        .update(schema.clanInvitations)
-        .set({ status: 'declined' })
+      // accepting one clan implicitly rejects the rest. 1.0.10 fix:
+      // scope by this server only via the clan join. 1.0.5..1.0.9 ran
+      // the update against the bare clan_invitations table without
+      // joining clans, which silently wiped the player's pending
+      // invites on every other registered server.
+      const declineTargets = await tx
+        .select({ id: schema.clanInvitations.id })
+        .from(schema.clanInvitations)
+        .innerJoin(
+          schema.clans,
+          eq(schema.clanInvitations.clanId, schema.clans.id),
+        )
         .where(
           and(
             eq(schema.clanInvitations.inviteeUuid, playerUuid),
             eq(schema.clanInvitations.status, 'pending'),
             ne(schema.clanInvitations.id, inviteId),
+            eq(schema.clans.serverId, auth.id),
           ),
         );
+      if (declineTargets.length > 0) {
+        await tx
+          .update(schema.clanInvitations)
+          .set({ status: 'declined' })
+          .where(
+            inArray(
+              schema.clanInvitations.id,
+              declineTargets.map((r) => r.id),
+            ),
+          );
+      }
 
       await tx.insert(schema.clanMembers).values({
         clanId: row.clanId,

@@ -196,6 +196,17 @@ export async function DELETE(
           isNull(schema.clanMembers.leftAt),
         ),
       );
+    // 1.0.10: mirror admin + plugin disband — decline pending invites
+    // so the invitee's chat doesn't surface a now-404 clan.
+    await tx
+      .update(schema.clanInvitations)
+      .set({ status: 'declined' })
+      .where(
+        and(
+          eq(schema.clanInvitations.clanId, clan.id),
+          eq(schema.clanInvitations.status, 'pending'),
+        ),
+      );
     await tx.insert(schema.audit).values({
       serverId: session.serverId,
       actor: `leader:${session.sub}`,
@@ -204,6 +215,14 @@ export async function DELETE(
       payload: { members: clan.members.length, _rid: rid },
     });
   });
+
+  try {
+    const { fs: fsApi } = await import('node:fs/promises').then((m) => ({ fs: m }));
+    const { capeFilePath } = await import('@/lib/server/storage');
+    await fsApi.unlink(capeFilePath(clan.tag)).catch(() => undefined);
+  } catch {
+    /* storage module unavailable in some test envs — ignore */
+  }
 
   return NextResponse.json(
     { ok: true, _rid: rid },

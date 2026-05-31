@@ -209,6 +209,19 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ tag: string 
           isNull(schema.clanMembers.leftAt),
         ),
       );
+    // 1.0.10: decline every pending invite for this clan so the
+    // invitee's chat doesn't keep advertising a clan that no longer
+    // exists. The accept route would 404 on the disbanded clan
+    // anyway — better to surface that state immediately.
+    await tx
+      .update(schema.clanInvitations)
+      .set({ status: 'declined' })
+      .where(
+        and(
+          eq(schema.clanInvitations.clanId, existing.id),
+          eq(schema.clanInvitations.status, 'pending'),
+        ),
+      );
     await tx.insert(schema.audit).values({
       serverId,
       actor: `admin:${user.sub}`,
@@ -217,6 +230,18 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ tag: string 
       payload: { members: existing.members.length, _rid: rid },
     });
   });
+
+  // 1.0.10: orphan cape PNG on the volume would resurrect on tag
+  // reuse — the partial-unique index keys active rows only, so a
+  // disbanded TAG can be re-minted. Strip the file too. Errors are
+  // swallowed since the disband itself committed.
+  try {
+    const { fs: fsApi } = await import('node:fs/promises').then((m) => ({ fs: m }));
+    const { capeFilePath } = await import('@/lib/server/storage');
+    await fsApi.unlink(capeFilePath(tag)).catch(() => undefined);
+  } catch {
+    /* storage module unavailable in some test envs — ignore */
+  }
 
   return NextResponse.json(
     { ok: true, _rid: rid },
