@@ -13,30 +13,53 @@
 :root {
   color-scheme: dark;
 
-  /* surface ladder — almost-black to charcoal */
+  /*
+   * 1.0.14 — refreshed surface ladder. Step values are closer together
+   * than the brutalist set so layered cards feel atmospheric instead
+   * of stamped. Tokens stay B&W per project memory.
+   */
   --ink-0: #ffffff;
-  --ink-50: #ededed;
-  --ink-100: #c8c8c8;
-  --ink-200: #8e8e8e;
-  --ink-300: #5b5b5b;
-  --ink-400: #383838;
-  --ink-500: #232323;
-  --ink-600: #161616;
-  --ink-700: #0e0e0e;
-  --ink-800: #080808;
-  --ink-900: #050505;
+  --ink-50: #fafafa;
+  --ink-100: #d4d4d4;
+  --ink-200: #a1a1a1;
+  --ink-300: #737373;
+  --ink-400: #404040;
+  --ink-500: #262626;
+  --ink-600: #1a1a1a;
+  --ink-700: #141414;
+  --ink-800: #0d0d0d;
+  --ink-900: #0a0a0a;
 
   /* semantic roles */
   --bg: var(--ink-900);
-  --bg-raise: var(--ink-800);
-  --bg-sink: #020202;
+  --bg-raise: var(--ink-700);
+  --bg-sink: var(--ink-800);
+  --surface-1: rgba(255, 255, 255, 0.03);
+  --surface-2: rgba(255, 255, 255, 0.05);
+  --surface-3: rgba(255, 255, 255, 0.07);
   --text: var(--ink-50);
   --text-soft: var(--ink-100);
   --text-mute: var(--ink-200);
   --text-faint: var(--ink-300);
-  --rule: rgba(255, 255, 255, 0.09);
-  --rule-strong: rgba(255, 255, 255, 0.18);
-  --focus: rgba(255, 255, 255, 0.5);
+  --rule: rgba(255, 255, 255, 0.06);
+  --rule-strong: rgba(255, 255, 255, 0.12);
+  --focus: rgba(255, 255, 255, 0.4);
+
+  /*
+   * Geometry + elevation. Switched away from the brutalist
+   * 0-radius / hard-offset shadow vocabulary to a modern soft-shadow
+   * system inspired by mcrender.net — same B&W palette, gentler
+   * visual rhythm. `--radius` is the shared corner; `--radius-pill`
+   * for buttons and chips; shadows escalate from card to popover.
+   */
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-pill: 9999px;
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 4px 16px -4px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 12px 32px -8px rgba(0, 0, 0, 0.7);
 
   /*
    * Accent tokens. Used sparingly — chrome stays B&W per the
@@ -160,24 +183,32 @@ canvas.pixelated {
     margin-bottom: 1.5rem;
   }
 
-  /* Inputs — flat, hard-edged, single-rule underline on focus. */
+  /*
+   * Inputs — 1.0.14 modern soft-edge. Rounded corners + subtle
+   * surface bg so the field reads as a chip on a card instead of a
+   * hard hairline rule.
+   */
   .input {
     width: 100%;
-    padding: 0.7rem 0.9rem;
-    background: transparent;
+    padding: 0.625rem 0.85rem;
+    background: var(--surface-2);
     border: 1px solid var(--rule);
-    border-radius: 0;
+    border-radius: var(--radius-md);
     color: var(--text);
     font-family: theme('fontFamily.sans');
-    font-size: 0.9375rem;
-    transition: border-color 0.18s ease;
+    font-size: 0.875rem;
+    transition: border-color 0.18s ease, background-color 0.18s ease,
+      box-shadow 0.18s ease;
   }
   .input:hover {
     border-color: var(--rule-strong);
+    background: var(--surface-3);
   }
   .input:focus {
     outline: none;
-    border-color: var(--ink-50);
+    border-color: rgba(255, 255, 255, 0.5);
+    background: var(--surface-3);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
   }
   .input::placeholder {
     color: var(--text-faint);
@@ -198,60 +229,68 @@ canvas.pixelated {
   }
   select.input {
     appearance: none;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ededed' stroke-width='2.5'><path d='M6 9l6 6 6-6'/></svg>");
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1a1' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
     background-repeat: no-repeat;
-    background-position: right 0.9rem center;
-    background-size: 0.7rem;
+    background-position: right 0.85rem center;
+    background-size: 0.75rem;
     padding-right: 2rem;
   }
 
   /* Primary button — inverted slab. */
+  /*
+   * 1.0.14 — modern pill button family. Primary stays solid white-on-
+   * black (B&W rule preserved) but the shape is a soft pill and the
+   * typography is lowercase semibold rather than uppercase tracked.
+   */
   .btn-primary {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    padding: 0.78rem 1.4rem;
+    padding: 0.5rem 1.1rem;
     font-family: theme('fontFamily.sans');
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     font-weight: 600;
-    letter-spacing: 0.01em;
-    text-transform: uppercase;
+    letter-spacing: 0;
+    text-transform: none;
     color: var(--ink-900);
     background: var(--ink-50);
     border: 1px solid var(--ink-50);
-    border-radius: 0;
-    transition: background 0.16s ease, color 0.16s ease;
+    border-radius: var(--radius-pill);
+    box-shadow: var(--shadow-soft);
+    transition: background 0.16s ease, transform 0.16s ease;
   }
   .btn-primary:hover {
     background: var(--ink-0);
     border-color: var(--ink-0);
+    transform: translateY(-1px);
   }
   .btn-primary:disabled {
     opacity: 0.4;
     cursor: not-allowed;
   }
 
-  /* Ghost button — outlined. */
+  /* Ghost — subtle pill, no fill, gentle hover wash. */
   .btn-ghost {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.65rem 1.1rem;
+    padding: 0.5rem 1rem;
     font-family: theme('fontFamily.sans');
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     font-weight: 500;
-    letter-spacing: 0.01em;
-    text-transform: uppercase;
+    letter-spacing: 0;
+    text-transform: none;
     color: var(--text-soft);
     background: transparent;
     border: 1px solid var(--rule-strong);
-    border-radius: 0;
-    transition: color 0.16s ease, border-color 0.16s ease;
+    border-radius: var(--radius-pill);
+    transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
   }
   .btn-ghost:hover {
     color: var(--ink-0);
-    border-color: var(--ink-0);
+    border-color: rgba(255, 255, 255, 0.3);
+    background: var(--surface-1);
   }
 
   /* Inline danger link button. */
@@ -423,118 +462,132 @@ canvas.pixelated {
 
 @layer components {
   /*
-   * Brutalist card — 2px white border + offset white shadow. The hover
-   * "knock" (translate up-left + bigger shadow) is what the mockups
-   * lean on instead of color/glow to signal interactive surfaces.
-   * Stays B&W per project memory; no accent fill on hover.
+   * 1.0.14 modern card. Subtle surface, soft border, gentle elevation
+   * shadow. Hover state lifts 1px instead of the brutalist 3px knock.
+   * Class name kept as `.brutal-card` so the existing JSX call sites
+   * carry over without a rename sweep.
    */
   .brutal-card {
-    border: 2px solid var(--rule-strong);
-    background: var(--bg-raise);
-    box-shadow: 6px 6px 0 0 rgba(255, 255, 255, 0.10);
-    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+    border: 1px solid var(--rule);
+    background: var(--surface-1);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    transition: transform 0.18s ease, box-shadow 0.18s ease,
+      border-color 0.18s ease, background 0.18s ease;
   }
   .brutal-card.is-interactive:hover,
   a.brutal-card:hover,
   button.brutal-card:hover {
-    border-color: var(--ink-50);
-    box-shadow: 9px 9px 0 0 rgba(255, 255, 255, 0.22);
-    transform: translate(-3px, -3px);
+    border-color: var(--rule-strong);
+    background: var(--surface-2);
+    box-shadow: var(--shadow-pop);
+    transform: translateY(-1px);
   }
   .brutal-card.is-flat {
     box-shadow: none;
   }
 
-  /* Solid white logo / accent tile — used in the sidebar header. */
+  /* Logo/icon tile — kept B&W but rounded + subtle border. */
   .brutal-tile {
-    border: 2px solid var(--ink-50);
+    border: 1px solid var(--rule-strong);
     background: var(--ink-50);
     color: var(--ink-900);
+    border-radius: var(--radius-md);
   }
 
   /*
-   * Sidebar nav row. Inactive = transparent rule, hover = subtle wash.
-   * Active = inverted slab (white bg, black ink) with a hard shadow
-   * pushed to the right — same "lifted" trick the brutalist mocks use
-   * to mark current page.
+   * 1.0.14 nav row. Lowercase semibold, rounded background fill on
+   * hover/active — no more inverted-slab translate. Active state is
+   * a subtle surface wash so the operator's eye picks up "current
+   * route" without the page jumping.
    */
   .nav-link {
     display: flex;
     align-items: center;
-    gap: 0.85rem;
-    padding: 0.62rem 0.85rem;
-    border: 2px solid transparent;
+    gap: 0.625rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid transparent;
     color: var(--text-mute);
     font-family: theme('fontFamily.sans');
-    font-weight: 700;
-    font-size: 0.8125rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease,
-      transform 0.12s ease, box-shadow 0.12s ease;
+    font-weight: 500;
+    font-size: 0.875rem;
+    letter-spacing: 0;
+    text-transform: none;
+    border-radius: var(--radius-md);
+    transition: background 0.16s ease, color 0.16s ease,
+      border-color 0.16s ease;
   }
   .nav-link:hover {
-    border-color: var(--rule-strong);
-    background: rgba(255, 255, 255, 0.04);
-    color: var(--ink-0);
+    background: var(--surface-2);
+    color: var(--text);
   }
   .nav-link.is-active {
-    background: var(--ink-50);
-    color: var(--ink-900);
-    border-color: var(--ink-50);
-    box-shadow: 4px 4px 0 0 var(--ink-0);
-    transform: translate(-2px, -2px);
+    background: var(--surface-3);
+    color: var(--text);
+    border-color: var(--rule);
+    box-shadow: var(--shadow-soft);
   }
   .nav-link.is-active:hover {
-    background: var(--ink-0);
+    background: var(--surface-3);
   }
   .nav-link .material-symbols-outlined {
-    font-size: 20px;
+    font-size: 18px;
+    opacity: 0.85;
   }
 
   /*
-   * Page header band — display heading + optional right-side meta.
-   * Sits at the top of every subroute. The 2px under-rule mirrors the
-   * sidebar's right border so the L-shape reads as one frame.
+   * 1.0.14 page header. Dropped the 2px under-rule for a softer
+   * baseline gap; titles use semibold lowercase. Bring back the
+   * accent meta-tag on the right if a route wants it.
    */
   .page-band {
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 1.25rem;
-    padding-bottom: 1.5rem;
-    border-bottom: 2px solid var(--rule-strong);
-    margin-bottom: 2.5rem;
+    gap: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 2rem;
   }
+  /*
+   * 1.0.14 — page title is now semibold lowercase, tighter clamp,
+   * no uppercase tracking. Matches the lowercase / tracking-tight
+   * vocabulary the new layout adopts everywhere.
+   */
   .page-title {
     font-family: theme('fontFamily.sans');
-    font-weight: 800;
-    letter-spacing: -0.04em;
-    line-height: 0.95;
-    text-transform: uppercase;
-    font-size: clamp(2rem, 4vw + 0.5rem, 3.25rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    text-transform: none;
+    font-size: clamp(1.625rem, 2.5vw + 0.5rem, 2.25rem);
     color: var(--ink-0);
   }
   .page-subtitle {
     margin-top: 0.5rem;
     color: var(--text-mute);
-    font-size: 0.875rem;
+    font-size: 0.9375rem;
     max-width: 60ch;
   }
 
-  /* Inline meta tag with hard border — used in the page band. */
+  /*
+   * Soft meta chip — rounded pill, subtle surface, gentle border.
+   * Replaces the 2px-bordered brutalist tag.
+   */
   .meta-tag {
     display: inline-flex;
     align-items: center;
-    gap: 0.45rem;
-    padding: 0.32rem 0.6rem;
-    border: 2px solid var(--rule-strong);
-    font-family: theme('fontFamily.mono');
-    font-size: 0.6875rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
+    gap: 0.4rem;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: var(--radius-pill);
+    font-family: theme('fontFamily.sans');
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
     color: var(--text-soft);
-    background: var(--bg-raise);
+    background: var(--surface-2);
   }
 }

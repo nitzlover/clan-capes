@@ -119,12 +119,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex min-h-[100dvh] flex-col md:flex-row">
           <Sidebar pathname={pathname} onLogout={logout} />
           <div className="flex min-w-0 flex-1 flex-col">
-            {/* Global server picker — single source of truth that every
-                dashboard page reads via useSelectedServer(). Replaces the
-                per-page <select> implementations 1.0.0..1.0.12 had grown. */}
-            <div className="flex items-center justify-between gap-3 border-b-2 border-[var(--rule-strong)] bg-[var(--bg)] px-6 py-3 md:px-10">
-              <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
-                Scope
+            {/* Sticky topbar — global server picker single source of truth. */}
+            <div className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-[var(--rule)] bg-[var(--bg)]/80 backdrop-blur-md px-6 py-3 md:px-10">
+              <span className="font-sans text-xs font-medium lowercase text-[var(--text-faint)]">
+                scope
               </span>
               <ServerPicker />
             </div>
@@ -149,22 +147,22 @@ function Sidebar({
     <aside
       className="
         flex shrink-0 flex-col bg-[var(--bg)]
-        border-b-2 md:border-b-0 md:border-r-2 border-[var(--rule-strong)]
+        border-b md:border-b-0 md:border-r border-[var(--rule)]
         md:sticky md:top-0 md:h-[100dvh]
-        md:w-[260px]
+        md:w-[240px]
       "
     >
-      {/* Brand block. */}
-      <div className="flex items-center gap-3 border-b-2 border-[var(--rule-strong)] px-5 py-5">
-        <div className="brutal-tile flex aspect-square h-11 w-11 items-center justify-center">
+      {/* Brand block — soft pill logo + lowercase wordmark. */}
+      <div className="flex items-center gap-3 border-b border-[var(--rule)] px-5 py-5">
+        <div className="brutal-tile flex aspect-square h-10 w-10 items-center justify-center">
           <span className="material-symbols-outlined filled">terminal</span>
         </div>
         <div className="min-w-0">
-          <p className="font-sans text-base font-extrabold uppercase leading-none tracking-tight text-white">
-            Clan / Capes
+          <p className="font-sans text-base font-semibold lowercase leading-none tracking-tight text-white">
+            clan / capes
           </p>
-          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
-            Admin · v1
+          <p className="mt-1 font-sans text-[11px] font-medium lowercase tracking-tight text-[var(--text-faint)]">
+            admin
           </p>
         </div>
       </div>
@@ -193,17 +191,16 @@ function Sidebar({
         </div>
       </nav>
 
-      {/* Plugin status + sign out — pinned to bottom on desktop, inline on
-          mobile so the header bar doesn't grow huge. */}
-      <div className="hidden flex-col gap-3 border-t-2 border-[var(--rule-strong)] p-4 md:flex">
+      {/* Plugin status + sign out pinned bottom on desktop. */}
+      <div className="hidden flex-col gap-3 border-t border-[var(--rule)] p-4 md:flex">
         <div className="flex items-center justify-between gap-3">
-          <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
-            Plugin
+          <span className="font-sans text-xs font-medium lowercase text-[var(--text-faint)]">
+            plugin
           </span>
           <PluginStatus />
         </div>
         <button onClick={onLogout} className="btn-ghost w-full justify-center">
-          Sign out
+          sign out
         </button>
       </div>
     </aside>

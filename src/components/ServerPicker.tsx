@@ -72,9 +72,11 @@ export function ServerPicker({ allowAll = true }: { allowAll?: boolean }) {
 
   return (
     <div className="flex items-center gap-3">
-      <span className="label-mono hidden md:inline">Server</span>
+      <span className="hidden md:inline font-sans text-xs font-medium lowercase text-[var(--text-faint)]">
+        server
+      </span>
       <select
-        className="input min-w-[180px] font-mono"
+        className="input min-w-[180px]"
         value={selectValue(value)}
         onChange={(e) => onChange(e.target.value)}
         disabled={loading || servers.length === 0}
@@ -90,12 +92,12 @@ export function ServerPicker({ allowAll = true }: { allowAll?: boolean }) {
         ))}
       </select>
       {error && (
-        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-red-400">
-          ! {error}
+        <span className="font-sans text-xs font-medium text-red-400">
+          {error}
         </span>
       )}
       {!error && !loading && value !== null && (
-        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--text-faint)] hidden lg:inline">
+        <span className="font-sans text-xs font-medium lowercase text-[var(--text-faint)] hidden lg:inline">
           {activeLabel}
         </span>
       )}
@@ -124,9 +126,11 @@ function labelFor(v: SelectedServer, servers: Server[]): string {
 export function SelectServerPrompt({ children }: { children?: React.ReactNode }) {
   return (
     <div className="brutal-card flex flex-col items-start gap-3 p-8">
-      <span className="label-mono">No server selected</span>
-      <p className="text-[var(--text-soft)]">
-        Pick a server in the top bar to load this page&apos;s data.
+      <span className="font-sans text-sm font-semibold lowercase text-white">
+        no server selected
+      </span>
+      <p className="text-[var(--text-soft)] text-sm">
+        pick a server in the top bar to load this page&apos;s data.
       </p>
       {children}
     </div>
