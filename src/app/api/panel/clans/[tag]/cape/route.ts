@@ -22,7 +22,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/server/auth';
 import { validateAndNormalizePng } from '@/lib/server/capeValidate';
 import { getClanByTag } from '@/lib/server/clan-repo';
-import { dbEnabled } from '@/lib/server/db';
+import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import { CDN_PUBLIC_URL, MAX_UPLOAD_KB } from '@/lib/server/env';
 import { capeFilePath, ensureDirs } from '@/lib/server/storage';
 import { getRequestId } from '@/lib/server/request-id';
