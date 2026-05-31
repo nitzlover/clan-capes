@@ -14,11 +14,11 @@
 
 import fs from 'node:fs/promises';
 import { NextResponse } from 'next/server';
-import { desc } from 'drizzle-orm';
 import { requireAuth } from '@/lib/server/auth';
 import { listClansForServer } from '@/lib/server/clan-repo';
-import { dbEnabled, getDb, schema } from '@/lib/server/db';
+import { dbEnabled } from '@/lib/server/db';
 import { CDN_PUBLIC_URL, UPLOAD_DIR } from '@/lib/server/env';
+import { resolveServerId } from '@/lib/server/resolve-server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -54,16 +54,14 @@ export async function GET(req: Request) {
   const cdn = CDN_PUBLIC_URL;
   const capeIndex = await indexCapeFiles();
 
-  // DB roster path — every clan, capeUrl attached when the file exists.
+  // DB roster path — every clan on the selected server, capeUrl
+  // attached when the file exists.
   if (dbEnabled()) {
-    const db = getDb();
-    const [first] = await db
-      .select({ id: schema.servers.id })
-      .from(schema.servers)
-      .orderBy(desc(schema.servers.createdAt))
-      .limit(1);
-    if (first) {
-      const clans = await listClansForServer(first.id);
+    // 1.0.16 fix: scope to the dashboard's ?serverId= instead of the
+    // newest server, so the cape page roster matches the picker.
+    const serverId = await resolveServerId(req);
+    if (serverId) {
+      const clans = await listClansForServer(serverId);
       if (clans.length > 0) {
         return NextResponse.json({
           source: 'db',

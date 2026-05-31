@@ -28,6 +28,8 @@ type Props = {
   message: string;
   /** Increment to reload PowerClans list (e.g. after upload). */
   optionsRefresh?: number;
+  /** Selected server scope — the clan dropdown is server-specific. */
+  serverId?: number | null;
 };
 
 /**
@@ -56,6 +58,7 @@ export function UploadSection({
   onPngUpload,
   message,
   optionsRefresh = 0,
+  serverId = null,
 }: Props) {
   const [clanOptions, setClanOptions] = useState<ClanOption[]>([]);
   const [optionsStatus, setOptionsStatus] = useState<'loading' | 'ok' | 'error'>(
@@ -80,7 +83,7 @@ export function UploadSection({
       setOptionsStatus('loading');
       setOptionsError('');
       try {
-        const res = await fetchClanOptions();
+        const res = await fetchClanOptions(serverId);
         if (cancelled) return;
         setClanOptions(res.clans);
         setOptionsStatus('ok');
@@ -94,7 +97,7 @@ export function UploadSection({
     return () => {
       cancelled = true;
     };
-  }, [optionsRefresh]);
+  }, [optionsRefresh, serverId]);
 
   // Validate the new file: decode its dimensions, push the result rows
   // into the log feed, gate the Deploy button. The Image() decode is

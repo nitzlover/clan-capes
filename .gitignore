@@ -27,6 +27,7 @@ taste-skill/
 # `next build`). Swept in accidentally by a `git add -A` in 1.0.13.
 src/app/login-preview/
 src/app/studio/
+src/app/p/
 src/app/avagen/
 src/app/api/skin/
 player.gltf

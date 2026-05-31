@@ -152,6 +152,7 @@ export default function CapesPage() {
         onPngUpload={uploadPng}
         message={message}
         optionsRefresh={optionsRefresh}
+        serverId={typeof serverId === 'number' ? serverId : null}
       />
 
       <section className="mt-14">
