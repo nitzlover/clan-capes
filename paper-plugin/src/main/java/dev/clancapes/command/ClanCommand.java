@@ -491,17 +491,13 @@ public final class ClanCommand implements CommandExecutor {
     // ─────────────────────── /clan shield (1.0.6) ───────────────────────
 
     /**
-     * Stamp the player's main-hand (falling back to off-hand) shield
-     * with their clan's banner spec — base colour + pattern layers
-     * written to {@code DataComponents.BANNER_PATTERNS} via the
-     * {@code BlockStateMeta} path so every viewer sees the result
-     * natively (no mod required).
-     *
-     * <p>Banner spec comes from the panel-backed {@link
-     * dev.clancapes.repo.BannerRepository}; a missing or empty spec
-     * falls back to a warning. The original shield is mutated in
-     * place — players keep their shield count, only the cosmetic
-     * banner data changes.
+     * Force-reapply the clan banner onto the player's main-hand
+     * (fall-back off-hand) shield. The {@link
+     * dev.clancapes.listener.ClanShieldListener} already auto-applies
+     * on pickup / hand-swap / hotbar-scroll / join, so this command
+     * is mostly a manual "refresh now" lever for the case where the
+     * banner repo just updated and the player wants the new design
+     * on their existing shield without re-equipping it.
      */
     private boolean doShield(CommandSender sender) {
         Player player = requirePlayer(sender);
@@ -519,16 +515,25 @@ public final class ClanCommand implements CommandExecutor {
         org.bukkit.inventory.ItemStack stack = pickShield(inv);
         if (stack == null) {
             player.sendMessage(Component.text(
-                    "Hold a shield (main or off hand) to stamp it.", NamedTextColor.RED));
+                    "Hold a shield (main or off hand) to brand it.", NamedTextColor.RED));
             return true;
         }
-        try {
-            applyClanBannerToShield(stack, bannerOpt.get(), clan.tag);
+        // Force a rewrite by clearing the marker first — the stamper
+        // short-circuits when the marker already matches, which we do
+        // not want on a manual refresh.
+        if (stack.getItemMeta() instanceof org.bukkit.inventory.meta.BlockStateMeta meta) {
+            meta.getPersistentDataContainer()
+                    .remove(dev.clancapes.listener.ClanShieldStamper.SHIELD_OWNER_KEY);
+            stack.setItemMeta(meta);
+        }
+        boolean applied = dev.clancapes.listener.ClanShieldStamper.apply(
+                stack, bannerOpt.get(), clan.tag);
+        if (applied) {
             player.sendMessage(Component.text(
                     "Shield branded with [" + clan.tag + "] banner.", NamedTextColor.GREEN));
-        } catch (Throwable t) {
+        } else {
             player.sendMessage(Component.text(
-                    "Could not stamp shield: " + t.getMessage(), NamedTextColor.RED));
+                    "Could not stamp shield (Paper API drift?).", NamedTextColor.RED));
         }
         return true;
     }
@@ -540,65 +545,6 @@ public final class ClanCommand implements CommandExecutor {
         org.bukkit.inventory.ItemStack off = inv.getItemInOffHand();
         if (off != null && off.getType() == org.bukkit.Material.SHIELD) return off;
         return null;
-    }
-
-    /**
-     * Write the banner spec onto a shield ItemStack using the
-     * {@link org.bukkit.inventory.meta.BlockStateMeta} path. A PDC
-     * marker (namespace {@code clancapes:shield_owner}) records the
-     * clan tag so future tooling can clean up shields whose owner
-     * has left or disbanded.
-     */
-    private void applyClanBannerToShield(org.bukkit.inventory.ItemStack shield,
-                                         dev.clancapes.api.dto.BannerDto banner,
-                                         String clanTag) {
-        if (!(shield.getItemMeta() instanceof org.bukkit.inventory.meta.BlockStateMeta meta)) {
-            throw new IllegalStateException("Shield meta is not BlockStateMeta — Paper API drift?");
-        }
-        org.bukkit.block.Banner state = (org.bukkit.block.Banner) meta.getBlockState();
-        org.bukkit.DyeColor baseColor = dyeFromOrdinal(banner.baseColor);
-        state.setBaseColor(baseColor);
-        state.setPatterns(parsePatterns(banner));
-        state.update();
-        meta.setBlockState(state);
-        var pdc = meta.getPersistentDataContainer();
-        pdc.set(new org.bukkit.NamespacedKey("clancapes", "shield_owner"),
-                org.bukkit.persistence.PersistentDataType.STRING, clanTag);
-        shield.setItemMeta(meta);
-    }
-
-    /**
-     * Translate the panel's {@code {color, pattern}} JSON array into
-     * Bukkit's {@link org.bukkit.block.banner.Pattern} list. Bad
-     * pattern keys are skipped rather than failing the whole stamp.
-     */
-    private java.util.List<org.bukkit.block.banner.Pattern> parsePatterns(
-            dev.clancapes.api.dto.BannerDto banner) {
-        java.util.List<org.bukkit.block.banner.Pattern> out = new java.util.ArrayList<>();
-        if (banner.patterns == null || !banner.patterns.isJsonArray()) return out;
-        for (com.google.gson.JsonElement el : banner.patterns.getAsJsonArray()) {
-            if (!el.isJsonObject()) continue;
-            com.google.gson.JsonObject obj = el.getAsJsonObject();
-            if (!obj.has("color") || !obj.has("pattern")) continue;
-            int colorOrdinal = obj.get("color").getAsInt();
-            String patternKey = obj.get("pattern").getAsString();
-            org.bukkit.DyeColor color = dyeFromOrdinal(colorOrdinal);
-            String normalised = patternKey.contains(":") ? patternKey : "minecraft:" + patternKey;
-            org.bukkit.NamespacedKey key = org.bukkit.NamespacedKey.fromString(
-                    normalised.toLowerCase(java.util.Locale.ROOT));
-            if (key == null) continue;
-            org.bukkit.block.banner.PatternType type = org.bukkit.Registry.BANNER_PATTERN.get(key);
-            if (type == null) continue;
-            out.add(new org.bukkit.block.banner.Pattern(color, type));
-        }
-        return out;
-    }
-
-    /** Defensive ordinal lookup — clamp out-of-range to white. */
-    private static org.bukkit.DyeColor dyeFromOrdinal(int ordinal) {
-        org.bukkit.DyeColor[] all = org.bukkit.DyeColor.values();
-        if (ordinal < 0 || ordinal >= all.length) return org.bukkit.DyeColor.WHITE;
-        return all[ordinal];
     }
 
     // ─────────────────────── invitations (1.0.5) ───────────────────────

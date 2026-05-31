@@ -8,6 +8,7 @@ import dev.clancapes.events.EventScheduler;
 import dev.clancapes.listener.BoundaryListener;
 import dev.clancapes.listener.ClanArmorListener;
 import dev.clancapes.listener.ClanMenuListener;
+import dev.clancapes.listener.ClanShieldListener;
 import dev.clancapes.listener.FriendlyFireListener;
 import dev.clancapes.listener.PlayerDeathListener;
 import dev.clancapes.listener.PlayerJoinListener;
@@ -39,6 +40,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
     private EventConfigRepository eventConfigRepository;
     private EventScheduler eventScheduler;
     private ClanArmorListener clanArmorListener;
+    private ClanShieldListener clanShieldListener;
     private ClanCapesExpansion expansion;
     private final List<BukkitTask> scheduled = new ArrayList<>();
     // Self-update nag state — populated by checkForUpdate(), surfaced to
@@ -66,6 +68,8 @@ public final class ClanCapesPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new ClanMenuListener(), this);
         clanArmorListener = new ClanArmorListener(this);
         Bukkit.getPluginManager().registerEvents(clanArmorListener, this);
+        clanShieldListener = new ClanShieldListener(this);
+        Bukkit.getPluginManager().registerEvents(clanShieldListener, this);
 
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             expansion = new ClanCapesExpansion(this);
@@ -232,6 +236,7 @@ public final class ClanCapesPlugin extends JavaPlugin {
     public EventConfigRepository getEventConfigRepository() { return eventConfigRepository; }
     public EventScheduler getEventScheduler() { return eventScheduler; }
     public ClanArmorListener getClanArmorListener() { return clanArmorListener; }
+    public ClanShieldListener getClanShieldListener() { return clanShieldListener; }
 
     /**
      * Emit a debug-level log line only when {@code logging.debug} is on.
