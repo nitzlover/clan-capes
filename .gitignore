@@ -21,19 +21,10 @@ backup-*/
 HANDOFF_*.md
 taste-skill/
 
-# Experimental UI prototypes — login redesign, mcrender-style studio,
-# avatar generator. Kept local for future work but excluded from the
-# prod build (App Router pages with WIP type errors that break
-# `next build`). Swept in accidentally by a `git add -A` in 1.0.13.
-src/app/login-preview/
-src/app/studio/
-src/app/p/
+# Avatar-generator prototype — still WIP, excluded from the prod build.
 src/app/avagen/
-src/app/api/skin/
 player.gltf
 public/avagen/
-public/hats/
-public/clouds.png
 public/mc-tex/
 public/models/
 public/textures/
