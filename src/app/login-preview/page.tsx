@@ -11,18 +11,18 @@ import Link from 'next/link';
 
 const LINKS = [
   {
-    href: '/login-preview/v9',
-    num: '09',
-    name: 'Posed scene',
-    note: 'Login · diorama',
-    desc: 'The chosen login. A staged Minecraft scene — multiple characters + props (e.g. two around a campfire), static, pure B&W, fits the viewport. Built on a scene engine so new scene ideas drop in as data.',
+    href: '/login-preview/1',
+    num: '01',
+    name: 'The Grove',
+    note: 'Situation · forest clearing',
+    desc: 'A moonlit forest clearing — the clan standing together among the trees, the creeper peering from behind a far trunk. No fire. Same diorama engine, new staging.',
   },
   {
-    href: '/avagen',
-    num: '—',
-    name: 'Pose studio',
-    note: 'mcskins bundle (vendored)',
-    desc: 'The mcskins.top pose generator running 1:1 in-app: pose sliders, items in hand, copy/load pose strings. Design a pose here, then it gets baked into a scene character.',
+    href: '/login-preview/2',
+    num: '02',
+    name: 'The Quarry',
+    note: 'Situation · stone pit',
+    desc: 'A stone pit at night: a tall cobblestone wall, stepped ledges, ore glowing in the rock, stone underfoot. The clan stands working it. No fire.',
   },
 ];
 
@@ -31,14 +31,18 @@ export default function PreviewIndex() {
     <main className="min-h-[100dvh] bg-black px-6 py-16 text-white sm:px-12">
       <header className="mx-auto max-w-5xl">
         <div className="font-mono text-[10px] uppercase tracking-[0.32em] text-white/50">
-          Login redesign
+          Login situations
         </div>
         <h1 className="mt-5 font-sans text-5xl font-extrabold uppercase tracking-[-0.05em] sm:text-7xl">
-          Posed scene.
+          Two situations.
         </h1>
         <p className="mt-5 max-w-[60ch] text-[0.95rem] leading-relaxed text-white/60">
-          One direction now: a staged, static Minecraft diorama as the operator
-          login. The pose studio is kept separate for authoring characters.
+          The campfire diorama now ships as the live{' '}
+          <Link href="/login" className="text-white underline-offset-4 hover:underline">
+            /login
+          </Link>
+          . Two new non-fire situations staged on the same engine — pick one to
+          rotate in.
         </p>
       </header>
 

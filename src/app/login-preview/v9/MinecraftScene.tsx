@@ -54,7 +54,13 @@ export type PropSpec =
   /** Plank seat (stump/bench) for a character to sit on. */
   | { type: 'seat'; position: Vec3; width?: number; rotationY?: number }
   /** Background tree: trunk + leaf canopy. */
-  | { type: 'tree'; position: Vec3; trunk?: number; rotationY?: number };
+  | { type: 'tree'; position: Vec3; trunk?: number; rotationY?: number }
+  /** Stone cliff / quarry wall / boulder — a big stone (or cobblestone) box.
+   *  position = the BASE centre (bottom sits on position.y). */
+  | { type: 'cliff'; position: Vec3; width?: number; height?: number; depth?: number; cobble?: boolean; rotationY?: number }
+  /** Glowing ore block — stone cube with a soft emissive (reads as a mineral
+   *  vein in B&W, NOT fire). */
+  | { type: 'ore'; position: Vec3; size?: number };
 
 export type SceneSpec = {
   characters: CharSpec[];
@@ -63,8 +69,15 @@ export type SceneSpec = {
   fire?: boolean;
   /** Ground plane Y. Characters/props are authored relative to this. */
   groundY?: number;
-  /** Background scenery for depth + life. */
-  background?: { stars?: boolean; moon?: Vec3; fog?: [number, number] };
+  /** Ground surface texture (defaults to grassy earth). Swap per scene —
+   *  e.g. stone for the quarry. */
+  ground?: { tex?: string; repeat?: number; tint?: number };
+  /** Extra flat ambient light. Non-fire scenes lose the campfire's point light,
+   *  so a touch of fill keeps them from reading flat-dark. */
+  fill?: number;
+  /** Background scenery for depth + life. `fogColor` defaults to black; a dark
+   *  grey reads as a misty night that keeps the far treeline visible. */
+  background?: { stars?: boolean; moon?: Vec3; fog?: [number, number]; fogColor?: number };
 };
 
 /* ─────────────────────────── Texture paths ─────────────────────────── */
@@ -181,7 +194,9 @@ export function MinecraftScene({
 
       const logTex = pixelTex(TEX.log);
       const logTopTex = pixelTex(TEX.logTop);
-      const groundTex = pixelTex('/mc-tex/grass_block_top.png', [40, 40]); // grassy earth, not bare dirt
+      const groundCfg = scene.ground ?? {};
+      const groundRepeat = groundCfg.repeat ?? 40;
+      const groundTex = pixelTex(groundCfg.tex ?? '/mc-tex/grass_block_top.png', [groundRepeat, groundRepeat]); // grassy earth by default; per-scene swappable (e.g. stone)
       const planksTex = pixelTex(TEX.planks);
       const leavesTex = pixelTex(TEX.leaves);
       const trunkTex = pixelTex(TEX.trunk);
@@ -209,7 +224,7 @@ export function MinecraftScene({
 
       /* ── background scenery (depth + life) ── */
       const bg = scene.background ?? {};
-      if (bg.fog) threeScene.fog = new THREE.Fog(0x000000, bg.fog[0], bg.fog[1]);
+      if (bg.fog) threeScene.fog = new THREE.Fog(bg.fogColor ?? 0x000000, bg.fog[0], bg.fog[1]);
       if (bg.stars) {
         const starGeo = new THREE.BufferGeometry();
         const N = 320;
@@ -255,6 +270,7 @@ export function MinecraftScene({
 
       /* ── lights ── */
       threeScene.add(new THREE.AmbientLight(0xffffff, 1.65));
+      if (scene.fill) threeScene.add(new THREE.AmbientLight(0xffffff, scene.fill));
       const key = new THREE.DirectionalLight(0xffffff, 2.3);
       key.position.set(18, 70, 32);
       key.castShadow = true;
@@ -273,7 +289,7 @@ export function MinecraftScene({
       /* ── ground (dirt) ── */
       const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(600, 600),
-        new THREE.MeshStandardMaterial({ map: groundTex, color: 0x7a7a7a, roughness: 1, metalness: 0 }),
+        new THREE.MeshStandardMaterial({ map: groundTex, color: groundCfg.tint ?? 0x7a7a7a, roughness: 1, metalness: 0 }),
       );
       ground.rotation.x = -Math.PI / 2;
       ground.position.y = groundY;
@@ -313,6 +329,17 @@ export function MinecraftScene({
           tr.position.set(...prop.position);
           tr.rotation.y = prop.rotationY ?? 0;
           threeScene.add(tr);
+        } else if (prop.type === 'cliff') {
+          const cl = buildCliff(THREE, disposables, pixelTex, {
+            w: prop.width ?? 60, h: prop.height ?? 40, d: prop.depth ?? 16, cobble: prop.cobble,
+          });
+          cl.position.set(...prop.position);
+          cl.rotation.y = prop.rotationY ?? 0;
+          threeScene.add(cl);
+        } else if (prop.type === 'ore') {
+          const or = buildOre(THREE, disposables, pixelTex, prop.size ?? 9);
+          or.position.set(...prop.position);
+          threeScene.add(or);
         }
       }
 
@@ -778,6 +805,61 @@ function buildTree(
     grp.add(leaf);
   }
   return grp;
+}
+
+/**
+ * Stone cliff / quarry wall / boulder — a big stone (or cobblestone) box with
+ * the texture tiled one-per-16-units (so it reads as stacked blocks). Returned
+ * in a group with the box raised so its BASE sits at the group origin → the
+ * prop's `position` is the base centre (sits flush on the ground).
+ */
+function buildCliff(
+  THREE: T,
+  disp: { dispose: () => void }[],
+  pixelTex: PixelTex,
+  o: { w: number; h: number; d: number; cobble?: boolean },
+) {
+  const path = o.cobble ? '/mc-tex/cobblestone.png' : '/mc-tex/stone.png';
+  const rep = (a: number, b: number): [number, number] => [Math.max(1, Math.round(a / 16)), Math.max(1, Math.round(b / 16))];
+  const sideTex = pixelTex(path, rep(o.w, o.h));
+  const endTex = pixelTex(path, rep(o.d, o.h));
+  const topTex = pixelTex(path, rep(o.w, o.d));
+  const geo = new THREE.BoxGeometry(o.w, o.h, o.d);
+  const matSide = new THREE.MeshStandardMaterial({ map: sideTex, color: 0x8a8a8a, roughness: 1 });
+  const matEnd = new THREE.MeshStandardMaterial({ map: endTex, color: 0x8a8a8a, roughness: 1 });
+  const matTop = new THREE.MeshStandardMaterial({ map: topTex, color: 0x8a8a8a, roughness: 1 });
+  disp.push(geo, matSide, matEnd, matTop);
+  // face order: +x,-x,+y,-y,+z,-z  → ends on ±x, top/bottom on ±y, faces on ±z
+  const m = new THREE.Mesh(geo, [matEnd, matEnd, matTop, matTop, matSide, matSide]);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  m.position.y = o.h / 2; // base at the group origin
+  const g = new THREE.Group();
+  g.add(m);
+  return g;
+}
+
+/**
+ * Glowing ore block — a stone cube with a soft white emissive. In the forced
+ * B&W it reads as a bright mineral vein in the rock (NOT a flame): static, no
+ * point light, no flicker.
+ */
+function buildOre(
+  THREE: T,
+  disp: { dispose: () => void }[],
+  pixelTex: PixelTex,
+  size: number,
+) {
+  const tex = pixelTex('/mc-tex/stone.png');
+  const geo = new THREE.BoxGeometry(size, size, size);
+  const mat = new THREE.MeshStandardMaterial({
+    map: tex, color: 0xcccccc, roughness: 1, metalness: 0,
+    emissive: 0xffffff, emissiveIntensity: 1.6, // bright enough to read as a glowing vein after grayscale
+  });
+  disp.push(geo, mat);
+  const m = new THREE.Mesh(geo, mat);
+  m.castShadow = true;
+  return m;
 }
 
 /** Radial soft-shadow blob texture for character ground contact. */
