@@ -8,9 +8,11 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -18,37 +20,27 @@ import org.bukkit.inventory.PlayerInventory;
 import java.util.Optional;
 
 /**
- * Auto-brands the clan banner onto the shield a player puts in their
- * OFF-HAND — and only the off-hand. Main-hand / hotbar shields are never
- * touched, so a looted trophy shield carrying another clan's banner stays
- * a trophy when you merely scroll past it in the hotbar or pick it up off
- * the ground.
+ * Clan-shield branding — "first claim locks it" model.
  *
- * <p>Two further trophy guards in {@link #reconcileOffHand}:
+ * <p>A shield held in EITHER hand by a clan member is auto-painted with the
+ * clan banner + base colour and stamped with a permanent owner tag (PDC
+ * marker) — but ONLY while it is blank (no tag yet). The instant a shield
+ * carries a tag it is locked: the auto-brander never touches it again, no
+ * matter who holds it. Consequences:
+ *
  * <ul>
- *   <li>a shield whose owner marker is a DIFFERENT clan than the holder's
- *       current clan is left completely alone — never re-stamped, never
- *       stripped;</li>
- *   <li>only blank shields (no marker) or the holder's own
- *       previously-branded shields are (re)painted.</li>
+ *   <li>Pick up / craft a blank shield as a clan member → it becomes your
+ *       clan's shield the moment it is in your hand, in any hand.</li>
+ *   <li>A looted trophy shield (already tagged by the enemy clan) keeps
+ *       its banner forever — holding it never re-paints it.</li>
+ *   <li>Your clan redesigns its banner → already-claimed shields do NOT
+ *       auto-update (they are locked). Re-run {@code /clan shield} to force
+ *       a repaint — that command is the explicit override and re-stamps a
+ *       held shield even when it is already tagged.</li>
  * </ul>
  *
- * Events hooked (all resolve to an off-hand reconcile):
- * <ul>
- *   <li>{@link PlayerSwapHandItemsEvent} — F-key main↔off swap.</li>
- *   <li>{@link InventoryClickEvent}/{@link InventoryDragEvent}/{@link
- *       InventoryCloseEvent} — moving a shield into the off-hand slot
- *       (40) through the inventory GUI; deferred one tick so the off-hand
- *       slot reflects the final state.</li>
- * </ul>
- * On join, {@link PlayerJoinListener} calls {@link #reconcileOffHand} two
- * ticks late so a player who logged out gripping their clan shield
- * re-brands it.
- *
- * <p>Manual {@code /clan shield} still force-stamps via {@link
- * ClanShieldStamper} directly — that path is an explicit operator action
- * and intentionally bypasses these auto guards (e.g. to re-brand a
- * captured shield on purpose).
+ * Every hand-affecting event funnels into a deferred {@link #reconcileHeld}
+ * so the hand slots reflect the final state before we read them.
  */
 public final class ClanShieldListener implements Listener {
 
@@ -59,14 +51,20 @@ public final class ClanShieldListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onHotbarChange(PlayerItemHeldEvent event) {
+        scheduleReconcile(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onHandSwap(PlayerSwapHandItemsEvent event) {
         scheduleReconcile(event.getPlayer());
     }
 
-    // Moving a shield into the off-hand slot (40) through the inventory
-    // GUI — click or drag into slot 40, shift-click, hotbar number-swap —
-    // fires only an inventory event. Reconcile one tick later, after the
-    // interaction resolves so the off-hand slot is final.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPickup(EntityPickupItemEvent event) {
+        if (event.getEntity() instanceof Player player) scheduleReconcile(player);
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onInventoryClick(InventoryClickEvent event) {
         scheduleReconcile(event.getWhoClicked());
@@ -85,53 +83,46 @@ public final class ClanShieldListener implements Listener {
     private void scheduleReconcile(HumanEntity human) {
         if (!(human instanceof Player player)) return;
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-            if (player.isOnline()) reconcileOffHand(player);
+            if (player.isOnline()) reconcileHeld(player);
         }, 1L);
     }
 
     /**
-     * Brand / update / strip ONLY the off-hand shield, trophy-safely. The
-     * stack returned by {@code getItemInOffHand} is a defensive copy on
-     * Paper 26.1.2, so a mutation must be written back via {@code
-     * setItemInOffHand}.
+     * Claim any BLANK shield in either hand for the holder's clan. Tagged
+     * shields (own or trophy) are skipped — locked. The stacks from
+     * {@code getItemInMainHand/OffHand} are defensive copies on Paper
+     * 26.1.2, so a claimed stack is written back explicitly.
      */
-    public void reconcileOffHand(Player player) {
-        PlayerInventory inv = player.getInventory();
-        ItemStack off = inv.getItemInOffHand();
-        if (!ClanShieldStamper.isShield(off)) return;
-
+    public void reconcileHeld(Player player) {
         ClanDto clan = plugin.getClanRepository().getByPlayer(player.getUniqueId()).orElse(null);
-        String myTag = clan == null ? null : clan.tag;
-        String marker = ClanShieldStamper.readMarker(off);
+        if (clan == null) return;
+        Optional<BannerDto> banner = plugin.getBannerRepository().get(clan.tag);
+        if (banner.isEmpty()) return; // no design to stamp — leave shields blank
 
-        // Trophy guard: a shield branded by a clan that ISN'T the holder's
-        // current clan is left exactly as-is — looted enemy shields keep
-        // their banner. marker == null means a blank shield (brandable).
-        if (marker != null && (myTag == null || !marker.equalsIgnoreCase(myTag))) {
-            return;
+        PlayerInventory inv = player.getInventory();
+        ItemStack main = inv.getItemInMainHand();
+        if (claimIfBlank(main, clan.tag, banner.get(), player, "main")) {
+            inv.setItemInMainHand(main);
         }
-
-        Optional<BannerDto> banner = clan == null
-                ? Optional.empty()
-                : plugin.getBannerRepository().get(clan.tag);
-
-        boolean mutated = false;
-        if (clan != null && banner.isPresent()) {
-            // Blank shield, or my own → paint / refresh my clan banner.
-            mutated = ClanShieldStamper.apply(off, banner.get(), clan.tag, plugin);
-            if (mutated) {
-                plugin.debugLog(() -> "[shield] off-hand branded [" + clan.tag
-                        + "] for " + player.getName());
-            }
-        } else if (marker != null) {
-            // marker == my own tag but I no longer have a clan/banner →
-            // strip my stale branding. (Trophies excluded by the guard.)
-            mutated = ClanShieldStamper.stripIfOurs(off);
-            if (mutated) {
-                plugin.debugLog(() -> "[shield] off-hand stripped own branding for "
-                        + player.getName());
-            }
+        ItemStack off = inv.getItemInOffHand();
+        if (claimIfBlank(off, clan.tag, banner.get(), player, "off")) {
+            inv.setItemInOffHand(off);
         }
-        if (mutated) inv.setItemInOffHand(off);
+    }
+
+    /**
+     * @return true when a blank shield was claimed (and must be written
+     *   back). Shields that already carry an owner tag are left untouched.
+     */
+    private boolean claimIfBlank(ItemStack shield, String tag, BannerDto banner,
+                                 Player player, String slot) {
+        if (!ClanShieldStamper.isShield(shield)) return false;
+        if (ClanShieldStamper.readMarker(shield) != null) return false; // locked
+        boolean claimed = ClanShieldStamper.apply(shield, banner, tag, plugin);
+        if (claimed) {
+            plugin.debugLog(() -> "[shield] claimed blank shield for [" + tag + "] "
+                    + player.getName() + " (" + slot + " hand)");
+        }
+        return claimed;
     }
 }
