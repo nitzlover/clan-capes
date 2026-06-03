@@ -17,6 +17,18 @@ export const AUDIT_LOG = process.env.AUDIT_LOG ?? './data/audit.log';
 export const MAX_UPLOAD_KB = Number(process.env.MAX_UPLOAD_KB) || 256;
 
 /**
+ * Client-mod distribution. The Fabric mod jar is stored on the same
+ * Railway Volume as cape PNGs (no separate CDN needed) and served by
+ * /api/mod/download. `MOD_LATEST_VERSION` is only the fallback advertised
+ * by /api/mod/version before any jar has been uploaded; once an operator
+ * uploads one via /api/panel/mod the version comes from latest.json on
+ * the Volume.
+ */
+export const MOD_DIR = process.env.MOD_DIR ?? './data/mod';
+export const MOD_LATEST_VERSION = process.env.MOD_LATEST_VERSION ?? '1.0.4';
+export const MAX_MOD_UPLOAD_KB = Number(process.env.MAX_MOD_UPLOAD_KB) || 8192;
+
+/**
  * Public CDN URL used to construct cape URLs handed to the plugin. On Railway
  * this should be the panel's own public URL, e.g.:
  *   https://clancapes-XYZ.up.railway.app/api/static/capes

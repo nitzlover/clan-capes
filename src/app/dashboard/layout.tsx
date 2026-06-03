@@ -47,6 +47,12 @@ const NAV: Array<{
     hint: 'One-time-pass setup',
   },
   {
+    href: '/dashboard/mod',
+    label: 'Client mod',
+    icon: 'extension',
+    hint: 'Fabric jar + auto-update',
+  },
+  {
     href: '/dashboard/clans',
     label: 'Clans',
     icon: 'groups',
