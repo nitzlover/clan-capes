@@ -3,11 +3,15 @@ package dev.crestoria.listener;
 import dev.crestoria.CrestoriaPlugin;
 import dev.crestoria.api.dto.BannerDto;
 import dev.crestoria.api.dto.ClanDto;
+import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.inventory.ItemStack;
@@ -81,6 +85,35 @@ public final class ClanShieldListener implements Listener {
             plugin.debugLog(() -> "[shield] pickup reconciled for "
                     + player.getName() + " clan=" + (clan == null ? "<none>" : clan.tag));
         }
+    }
+
+    // Equipping a shield into the off-hand slot through the inventory
+    // GUI — click or drag into slot 40, shift-click a shield, or a
+    // hotbar number-swap — fires NONE of the held/swap/pickup events
+    // above; only an inventory event. Without these the shield stayed
+    // unbranded until the next F-swap or relog (the "only on join"
+    // bug). Reconcile one tick later, after the click has resolved so
+    // the hand slots reflect the final state.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onInventoryClick(InventoryClickEvent event) {
+        scheduleReconcile(event.getWhoClicked());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onInventoryDrag(InventoryDragEvent event) {
+        scheduleReconcile(event.getWhoClicked());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onInventoryClose(InventoryCloseEvent event) {
+        scheduleReconcile(event.getPlayer());
+    }
+
+    private void scheduleReconcile(HumanEntity human) {
+        if (!(human instanceof Player player)) return;
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            if (player.isOnline()) reconcileHands(player);
+        }, 1L);
     }
 
     /**
