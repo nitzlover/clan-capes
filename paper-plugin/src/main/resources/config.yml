@@ -45,7 +45,7 @@ invites:
   ttl-seconds: 86400
 
 messages:
-  prefix: '&8[&6ClanCapes&8] &7'
+  prefix: '&8[&6Crestoria&8] &7'
   no-clan: '&cYou are not in a clan.'
   no-permission: '&cNo permission.'
   panel-not-linked: '&cPanel not linked. Run /clancape setup first.'

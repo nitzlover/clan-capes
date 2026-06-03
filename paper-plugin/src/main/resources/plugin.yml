@@ -1,8 +1,8 @@
-name: ClanCapes
+name: Crestoria
 version: '${version}'
-main: dev.clancapes.ClanCapesPlugin
+main: dev.crestoria.CrestoriaPlugin
 api-version: '26.1'
-authors: [ClanCapes]
+authors: [Crestoria]
 description: Clan management — capes, banners, armor trims, K/D stats — REST-synced with web panel
 website: https://github.com/clancapes/clan-capes
 softdepend: [PlaceholderAPI]

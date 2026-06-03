@@ -3,8 +3,8 @@ plugins {
     id("com.gradleup.shadow") version "9.4.2"
 }
 
-group = "dev.clancapes"
-version = "1.1.0"
+group = "dev.crestoria"
+version = "1.2.0"
 
 java {
     toolchain {

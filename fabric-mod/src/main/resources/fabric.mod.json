@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "clancapes",
   "version": "${version}",
-  "name": "Clan Capes",
-  "description": "Custom clan capes rendered as native Minecraft cape layers (client-side).",
-  "authors": ["Clan Capes Team"],
+  "name": "Crestoria",
+  "description": "Renders Crestoria clan cosmetics (capes + armor trims) as native Minecraft layers (client-side).",
+  "authors": ["Crestoria Team"],
   "contact": {
     "homepage": "https://github.com/clancapes/clan-capes",
     "sources": "https://github.com/clancapes/clan-capes"

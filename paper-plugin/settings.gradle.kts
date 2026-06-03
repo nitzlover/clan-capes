@@ -1,1 +1,1 @@
-rootProject.name = "ClanCapes"
+rootProject.name = "Crestoria"
