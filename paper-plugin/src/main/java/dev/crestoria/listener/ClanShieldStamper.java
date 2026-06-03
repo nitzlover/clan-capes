@@ -135,6 +135,13 @@ public final class ClanShieldStamper {
         return null;
     }
 
+    /** Convenience: read the owner marker straight off a shield stack (null if none / not a shield). */
+    public static String readMarker(ItemStack shield) {
+        if (!isShield(shield)) return null;
+        if (!(shield.getItemMeta() instanceof BlockStateMeta meta)) return null;
+        return readMarker(meta);
+    }
+
     /**
      * Stamp the clan banner spec onto a shield. Returns true on a
      * successful mutation (caller writes the stack back to the

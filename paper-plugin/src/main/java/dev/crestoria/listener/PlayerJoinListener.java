@@ -52,10 +52,11 @@ public final class PlayerJoinListener implements Listener {
         if (plugin.getClanShieldListener() != null) {
             // Two ticks after join: clan cache is warm and the player's
             // inventory has settled, so the same delay as the armour
-            // reconcile is the cheapest correct moment to brand any
-            // shield the player was already holding at logout.
+            // reconcile is the cheapest correct moment to brand the clan
+            // shield the player was already holding in their off-hand at
+            // logout. Off-hand only + trophy-safe (see ClanShieldListener).
             Bukkit.getScheduler().runTaskLater(plugin,
-                    () -> plugin.getClanShieldListener().reconcileHands(event.getPlayer()),
+                    () -> plugin.getClanShieldListener().reconcileOffHand(event.getPlayer()),
                     2L);
         }
 
