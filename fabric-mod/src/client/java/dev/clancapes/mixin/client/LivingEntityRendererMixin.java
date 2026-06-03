@@ -51,6 +51,13 @@ public abstract class LivingEntityRendererMixin {
         if (!(state instanceof AvatarRenderState avatarState)) {
             return;
         }
+        if (isWearingElytra(player)) {
+            // Elytra worn: don't inject our cape / force showCape. The
+            // elytra wings would sample the cape texture's elytra-UV
+            // region (undefined on a cape-only PNG) -> broken wings. Let
+            // vanilla hide the cape and draw the default elytra.
+            return;
+        }
 
         CapeManager manager = CapeManager.get();
         boolean shouldRender = manager.shouldRenderClanCape(player);
@@ -147,5 +154,11 @@ public abstract class LivingEntityRendererMixin {
         } catch (Throwable t) {
             return "<err:" + t.getClass().getSimpleName() + ">";
         }
+    }
+
+    /** True when the player has an elytra in the chest slot. */
+    private static boolean isWearingElytra(AbstractClientPlayer player) {
+        return player.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST)
+                .is(net.minecraft.world.item.Items.ELYTRA);
     }
 }
