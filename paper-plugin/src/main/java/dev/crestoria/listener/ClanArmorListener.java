@@ -103,18 +103,18 @@ public final class ClanArmorListener implements Listener {
      */
     public ItemStack reconcile(UUID playerUuid, ItemStack stack, String slot) {
         if (stack == null || stack.getType().isAir()) return null;
+        // First-claim-lock (mirrors the shield): armour already tagged by a
+        // clan is LOCKED — never re-trimmed, never stripped, no matter who
+        // wears it. So looted enemy armour keeps its trim as a trophy.
+        if (hasMarker(stack)) return null;
+        // Blank armour: claim it for the wearer's clan when that clan has a
+        // trim configured for this slot. A clan redesign does NOT retro-
+        // update already-claimed armour — same lock semantics as shields.
         ClanDto clan = plugin.getClanRepository().getByPlayer(playerUuid).orElse(null);
-        Optional<TrimDto> wanted = clan == null
-                ? Optional.empty()
-                : plugin.getArmorTrimRepository().get(clan.tag, slot);
-
-        if (wanted.isPresent() && clan != null) {
-            return applyTrim(stack, wanted.get(), clan.tag);
-        }
-        if (hasMarker(stack)) {
-            return stripTrim(stack);
-        }
-        return null;
+        if (clan == null) return null;
+        Optional<TrimDto> wanted = plugin.getArmorTrimRepository().get(clan.tag, slot);
+        if (wanted.isEmpty()) return null;
+        return applyTrim(stack, wanted.get(), clan.tag);
     }
 
     /** Walk every armour slot the player is currently wearing and reconcile. */
