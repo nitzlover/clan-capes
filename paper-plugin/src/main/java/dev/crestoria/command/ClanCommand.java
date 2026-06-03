@@ -144,12 +144,18 @@ public final class ClanCommand implements CommandExecutor {
         plugin.getPanelClient().createClan(tag, name, player.getUniqueId(), player.getName(), null)
                 .whenComplete((dto, err) -> back(() -> {
                     if (err != null) {
-                        player.sendMessage(Component.text("Could not create clan: " + msg(err),
+                        String reason = msg(err);
+                        plugin.getLogger().warning("[clan-create] " + player.getName()
+                                + " tag=" + intendedTag + " FAILED: " + reason);
+                        player.sendMessage(Component.text("Could not create clan: " + reason,
                                 NamedTextColor.RED));
                         return;
                     }
                     String t = dto != null && dto.tag != null ? dto.tag : intendedTag;
                     String n = dto != null && dto.name != null ? dto.name : intendedName;
+                    plugin.getLogger().info("[clan-create] " + player.getName()
+                            + " created [" + t + "] " + n
+                            + (dto == null ? " (panel returned no clan object — verify)" : ""));
                     player.sendMessage(Component.text("Clan [" + t + "] " + n + " created.",
                             NamedTextColor.GREEN));
                     plugin.getClanRepository().refresh();
@@ -820,6 +826,20 @@ public final class ClanCommand implements CommandExecutor {
         while (cur instanceof java.util.concurrent.CompletionException
                 && cur.getCause() != null) {
             cur = cur.getCause();
+        }
+        // Surface the panel's {"error":"…"} text for a clean, actionable
+        // reason instead of a raw "API 409: {json}" dump in chat.
+        if (cur instanceof dev.crestoria.api.dto.ApiError api) {
+            try {
+                com.google.gson.JsonObject o =
+                        com.google.gson.JsonParser.parseString(api.body).getAsJsonObject();
+                if (o.has("error") && !o.get("error").isJsonNull()) {
+                    return o.get("error").getAsString();
+                }
+            } catch (Throwable ignore) {
+                // body wasn't JSON — fall through to the generic message
+            }
+            return "server error " + api.status;
         }
         String m = cur.getMessage();
         return m == null ? cur.getClass().getSimpleName() : m;
