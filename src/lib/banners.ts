@@ -342,6 +342,31 @@ export function previewMaskCode(pattern: string): string | null {
 }
 
 /**
+ * Project code → column (shape_id) in the minecraft.tools shield sprite
+ * atlas `/public/mc/shieldx7.png` (42 cols × 16 rows, 84×154 per cell).
+ * Verified against minecraft.tools' own /give output: e.g. NBT `mr`→22,
+ * `tt`→20, `flo`→32 land at background-position `-(shape×84)px -(color×154)px`.
+ * This is what makes the shield preview pixel-match the game (and that
+ * site). `null` = pattern not present in the atlas.
+ */
+export const SHIELD_ATLAS_SHAPE_ID: Record<string, number | null> = {
+  bo: 26, bri: 28, bt: 21, bts: 24, cbo: 25, cr: 17, cra: 30, cre: 30, cs: 11,
+  dls: 15, drs: 16, flo: 32, flw: null, glb: 39, gra: 29, gru: 36, gus: null,
+  hh: 6, hhb: 37, ld: 18, lud: 34, mc: 1, moj: 33, mr: 22, ms: 13, msb: 13,
+  mss: 27, pig: 40, rd: 35, rs: 12, rud: 19, sbl: 2, sbr: 3, sc: 4, sku: 31,
+  ss: 14, stl: 4, str: 5, tl: 8, tr: 20, ts: 10, tt: 20, tts: 23, vh: 9, vhr: 38,
+};
+
+/** Resolve any stored / inbound pattern id to its shield-atlas shape_id, or null. */
+export function previewShapeId(pattern: string): number | null {
+  const code = previewMaskCode(pattern);
+  if (code && typeof SHIELD_ATLAS_SHAPE_ID[code] === 'number') {
+    return SHIELD_ATLAS_SHAPE_ID[code] as number;
+  }
+  return null;
+}
+
+/**
  * Parse a vanilla-style NBT blob copied from the game, e.g.
  *
  *   {BlockEntityTag:{Base:14,Patterns:[

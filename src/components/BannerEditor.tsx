@@ -5,7 +5,7 @@ import {
   BANNER_COLORS,
   BANNER_PATTERNS,
   EMPTY_SPEC,
-  previewMaskCode,
+  previewShapeId,
   parseNbtSpec,
   specToNbt,
   type BannerSpec,
@@ -404,12 +404,17 @@ function ShapeTile({
   disabled?: boolean;
   onClick: () => void;
 }) {
-  const maskCode = previewMaskCode(code);
-  if (!maskCode) return null; // no flat mask for this pattern — hide the tile
-  const cellW = tileWidth;
-  const cellH = Math.round(tileWidth * 2);
-  const dyeHex = BANNER_COLORS[Math.max(0, Math.min(15, dyeOrdinal | 0))]?.hex ?? '#f9fffe';
-  const maskUrl = `/banner/patterns/${maskCode}.png`;
+  const shapeId = previewShapeId(code);
+  if (shapeId === null) return null; // not in the shield atlas — hide the tile
+  const NATIVE_CELL_W = 84;
+  const NATIVE_CELL_H = 154;
+  const ATLAS_COLS = 42;
+  const ATLAS_ROWS = 16;
+  const scale = tileWidth / NATIVE_CELL_W;
+  const cellW = NATIVE_CELL_W * scale;
+  const cellH = NATIVE_CELL_H * scale;
+  const atlasW = ATLAS_COLS * cellW;
+  const atlasH = ATLAS_ROWS * cellH;
 
   return (
     <button
@@ -438,13 +443,10 @@ function ShapeTile({
         style={{
           position: 'absolute',
           inset: 0,
-          backgroundColor: dyeHex,
-          WebkitMaskImage: `url(${maskUrl})`,
-          maskImage: `url(${maskUrl})`,
-          WebkitMaskSize: '100% 100%',
-          maskSize: '100% 100%',
-          WebkitMaskRepeat: 'no-repeat',
-          maskRepeat: 'no-repeat',
+          backgroundImage: 'url(/mc/shieldx7.png)',
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: `${atlasW}px ${atlasH}px`,
+          backgroundPosition: `${-shapeId * cellW}px ${-dyeOrdinal * cellH}px`,
           imageRendering: 'pixelated',
         }}
       />

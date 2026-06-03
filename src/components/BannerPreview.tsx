@@ -3,6 +3,7 @@
 import {
   BANNER_COLORS,
   previewMaskCode,
+  previewShapeId,
   type BannerSpec,
   colorForOrdinal,
 } from '@/lib/banners';
@@ -103,8 +104,17 @@ export function BannerPreview({
     </div>
   );
 
+  // Shield mode renders from the minecraft.tools sprite atlas (84×154 per
+  // cell), which pixel-matches the in-game shield. The flat /banner/patterns
+  // masks above are only for the flat banner + block shapes.
+  const shieldLayers = safe.patterns
+    .map((p) => ({ colorOrdinal: p.color, shapeId: previewShapeId(p.pattern) }))
+    .filter((l): l is { colorOrdinal: number; shapeId: number } => l.shapeId !== null);
+
   const inner =
-    shape === 'block' ? (
+    shape === 'shield' ? (
+      <ShieldSprite width={width} baseHex={base.hex} layers={shieldLayers} />
+    ) : shape === 'block' ? (
       <BannerBlockSprite width={width} height={h} baseHex={base.hex}>
         {layers}
       </BannerBlockSprite>
@@ -128,6 +138,78 @@ export function BannerPreview({
           {BANNER_COLORS[safe.baseColor]?.name ?? 'white'} · {safe.patterns.length} layer{safe.patterns.length === 1 ? '' : 's'}
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Shield preview via the minecraft.tools pre-baked sprite atlas
+ * (`/public/mc/shieldx7.png`, 42 cols × 16 rows, 84×154 per cell). Each
+ * pattern layer slices the atlas to its (shape_id, dye-ordinal) cell; the
+ * base colour fills behind (cells carry alpha) and the shadow PNG bakes the
+ * iron rim + grip on top. Position math = minecraft.tools':
+ *   background-position: -(shape_id × cellW)px  -(dyeOrdinal × cellH)px
+ * so a given NBT renders identically to that site and the game.
+ */
+function ShieldSprite({
+  width,
+  baseHex,
+  layers,
+}: {
+  width: number;
+  baseHex: string;
+  layers: Array<{ colorOrdinal: number; shapeId: number }>;
+}) {
+  const NATIVE_CELL_W = 84;
+  const NATIVE_CELL_H = 154;
+  const ATLAS_COLS = 42;
+  const ATLAS_ROWS = 16;
+  const scale = width / NATIVE_CELL_W;
+  const cellW = NATIVE_CELL_W * scale;
+  const cellH = NATIVE_CELL_H * scale;
+  const atlasW = ATLAS_COLS * cellW;
+  const atlasH = ATLAS_ROWS * cellH;
+  const posFor = (shapeId: number, dyeOrdinal: number) =>
+    `${-shapeId * cellW}px ${-dyeOrdinal * cellH}px`;
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        width: cellW,
+        height: cellH,
+        backgroundColor: baseHex,
+        imageRendering: 'pixelated',
+        filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.45))',
+      }}
+    >
+      {layers.map((l, idx) => (
+        <div
+          key={idx}
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: 'url(/mc/shieldx7.png)',
+            backgroundRepeat: 'no-repeat',
+            backgroundSize: `${atlasW}px ${atlasH}px`,
+            backgroundPosition: posFor(l.shapeId, l.colorOrdinal),
+            imageRendering: 'pixelated',
+          }}
+        />
+      ))}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: 'url(/mc/shield-shadow-x7.png)',
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: `${cellW}px ${cellH}px`,
+          backgroundPosition: '0 0',
+          imageRendering: 'pixelated',
+        }}
+      />
     </div>
   );
 }
