@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api, getToken, UnauthorizedError } from '@/lib/api';
+import { SkeletonText } from '@/components/Skeleton';
 
 type ModLatest = {
   version: string;
@@ -91,7 +92,7 @@ export default function ModPage() {
       <section className="brutal-card p-6">
         <p className="label-mono mb-4">Current</p>
         {loading ? (
-          <p className="text-sm text-[var(--text-mute)]">Loading…</p>
+          <SkeletonText lines={4} />
         ) : latest ? (
           <ul className="font-mono text-[12px] leading-relaxed text-[var(--text-soft)]">
             <li>version: <span className="text-white">{latest.version}</span></li>

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { SelectServerPrompt } from '@/components/ServerPicker';
 import { useSelectedServer } from '@/lib/selected-server';
 import { api, UnauthorizedError } from '@/lib/api';
+import { Reveal } from '@/components/motion';
+import { SkeletonCard } from '@/components/Skeleton';
 
 /**
  * Wave 5 — events admin surface.
@@ -142,13 +144,16 @@ export default function EventsConfigPage() {
       <ActiveMonitor serverId={serverId} />
 
       {loading ? (
-        <p className="eyebrow">Loading…</p>
+        <div className="space-y-6">
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
       ) : error ? (
         <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-white">
           ! {error}
         </p>
       ) : (
-        <div className="space-y-6">
+        <Reveal className="space-y-6">
           {configs.map((c) => (
             <EventConfigEditor
               key={c.type}
@@ -157,7 +162,7 @@ export default function EventsConfigPage() {
               serverId={serverId}
             />
           ))}
-        </div>
+        </Reveal>
       )}
 
       <EventLeaderboard serverId={serverId} />

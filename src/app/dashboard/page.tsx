@@ -6,6 +6,8 @@ import { api, UnauthorizedError } from '@/lib/api';
 import { PluginStatus } from '@/components/PluginStatus';
 import { SelectServerPrompt } from '@/components/ServerPicker';
 import { useSelectedServer } from '@/lib/selected-server';
+import { Stagger, StaggerItem, CountUp } from '@/components/motion';
+import { SkeletonMetricGrid, SkeletonCard } from '@/components/Skeleton';
 
 // 1.0.10: real audit shape from /api/panel/audit. The 1.0.0..1.0.9
 // dashboard typed this as { timestamp, raw } and rendered `r.raw`,
@@ -115,48 +117,58 @@ export default function DashboardOverviewPage() {
           </p>
         </SelectServerPrompt>
       ) : loading ? (
-        <p className="eyebrow">Loading…</p>
+        <>
+          <SkeletonMetricGrid count={5} />
+          <div className="mt-12 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+        </>
       ) : !overview ? (
         <p className="eyebrow">Overview unavailable.</p>
       ) : (
         <>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            <MetricCard
-              label="Servers"
-              value={overview.servers}
-              icon="dns"
-              hint="Registered"
-            />
-            <MetricCard
-              label="Clans"
-              value={overview.clans}
-              icon="groups"
-              hint="Active"
-            />
-            <MetricCard
-              label="Members"
-              value={overview.members}
-              icon="person"
-              hint="Across all clans"
-            />
-            <MetricCard
-              label="Kills MTD"
-              value={overview.killsMtd}
-              icon="bolt"
-              hint="Month to date"
-            />
-            <MetricCard
-              label="Capes"
-              value={overview.capesAssigned}
-              icon="image"
-              hint={`${overview.clans - overview.capesAssigned} pending`}
-            />
-          </div>
+          <Stagger className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            <StaggerItem>
+              <MetricCard label="Servers" value={overview.servers} icon="dns" hint="Registered" />
+            </StaggerItem>
+            <StaggerItem>
+              <MetricCard label="Clans" value={overview.clans} icon="groups" hint="Active" />
+            </StaggerItem>
+            <StaggerItem>
+              <MetricCard
+                label="Members"
+                value={overview.members}
+                icon="person"
+                hint="Across all clans"
+              />
+            </StaggerItem>
+            <StaggerItem>
+              <MetricCard
+                label="Kills MTD"
+                value={overview.killsMtd}
+                icon="bolt"
+                hint="Month to date"
+              />
+            </StaggerItem>
+            <StaggerItem>
+              <MetricCard
+                label="Capes"
+                value={overview.capesAssigned}
+                icon="image"
+                hint={`${overview.clans - overview.capesAssigned} pending`}
+              />
+            </StaggerItem>
+          </Stagger>
 
-          <div className="mt-12 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-            <RecentAuditCard entries={audit.slice(0, 6)} />
-            <QuickLinksCard />
-          </div>
+          <Stagger className="mt-12 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+            <StaggerItem>
+              <RecentAuditCard entries={audit.slice(0, 6)} />
+            </StaggerItem>
+            <StaggerItem>
+              <QuickLinksCard />
+            </StaggerItem>
+          </Stagger>
         </>
       )}
     </div>
@@ -182,7 +194,7 @@ function MetricCard({
       <div className="min-w-0">
         <p className="label-mono">{label}</p>
         <p className="mt-2 font-sans text-5xl font-extrabold tabular leading-none text-white">
-          {typeof value === 'number' ? String(value).padStart(2, '0') : value}
+          {typeof value === 'number' ? <CountUp value={value} pad={2} /> : value}
         </p>
         {hint && (
           <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-faint)]">

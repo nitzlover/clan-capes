@@ -3,8 +3,10 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { PluginStatus } from '@/components/PluginStatus';
 import { ServerPicker } from '@/components/ServerPicker';
+import { PageTransition } from '@/components/motion';
 import { SelectedServerProvider } from '@/lib/selected-server';
 import { getToken } from '@/lib/api';
 
@@ -133,7 +135,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <ServerPicker />
             </div>
             <main className="min-w-0 flex-1 overflow-x-hidden px-6 py-10 md:px-10 md:py-12">
-              {children}
+              <PageTransition>{children}</PageTransition>
             </main>
           </div>
         </div>
@@ -149,6 +151,7 @@ function Sidebar({
   pathname: string;
   onLogout: () => void;
 }) {
+  const reduce = useReducedMotion();
   return (
     <aside
       className="
@@ -186,9 +189,19 @@ function Sidebar({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`nav-link ${active ? 'is-active' : ''}`}
+                className={`nav-link relative ${active ? 'is-active' : ''}`}
                 title={item.hint}
               >
+                {active &&
+                  (reduce ? (
+                    <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-white" />
+                  ) : (
+                    <motion.span
+                      layoutId="navActive"
+                      className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-white"
+                      transition={{ duration: 0.2, ease: [0.2, 0.7, 0.2, 1] }}
+                    />
+                  ))}
                 <span className="material-symbols-outlined">{item.icon}</span>
                 <span>{item.label}</span>
               </Link>

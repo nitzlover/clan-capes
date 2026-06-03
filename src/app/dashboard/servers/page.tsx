@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api, UnauthorizedError } from '@/lib/api';
+import { Reveal } from '@/components/motion';
+import { SkeletonRows } from '@/components/Skeleton';
 
 type ServerRow = {
   id: number;
@@ -111,7 +113,9 @@ export default function ServersPage() {
         </div>
         <div className="overflow-x-auto">
           {loading ? (
-            <p className="px-6 py-6 text-sm text-[var(--text-mute)]">Loading…</p>
+            <div className="px-6 py-4">
+              <SkeletonRows rows={4} />
+            </div>
           ) : rows.length === 0 ? (
             <div className="px-6 py-10 text-center">
               <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-[var(--text-mute)]">
@@ -123,6 +127,7 @@ export default function ServersPage() {
               </p>
             </div>
           ) : (
+            <Reveal>
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-[var(--rule)]">
@@ -174,6 +179,7 @@ export default function ServersPage() {
                 ))}
               </tbody>
             </table>
+            </Reveal>
           )}
         </div>
       </section>

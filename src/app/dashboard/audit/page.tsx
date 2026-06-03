@@ -5,6 +5,7 @@ import { api, UnauthorizedError } from '@/lib/api';
 import { SelectServerPrompt } from '@/components/ServerPicker';
 import { Select } from '@/components/Select';
 import { useSelectedServer } from '@/lib/selected-server';
+import { SkeletonRows } from '@/components/Skeleton';
 
 type AuditEntry = {
   id?: string;
@@ -273,7 +274,9 @@ export default function AuditPage() {
 
         <div className="max-h-[68vh] overflow-y-auto p-2">
           {loading ? (
-            <p className="px-4 py-6 text-sm text-[var(--text-mute)]">Loading…</p>
+            <div className="px-2 py-3">
+              <SkeletonRows rows={8} />
+            </div>
           ) : error ? (
             <p className="px-4 py-6 font-mono text-[11px] uppercase tracking-[0.2em] text-white">
               ! {error}

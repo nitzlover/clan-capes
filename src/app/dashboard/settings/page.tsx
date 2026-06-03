@@ -14,6 +14,7 @@ import { SelectServerPrompt } from '@/components/ServerPicker';
 import { useSelectedServer } from '@/lib/selected-server';
 import { api, UnauthorizedError } from '@/lib/api';
 import { nearestVanilla } from '@/lib/vanilla-color';
+import { SkeletonCard } from '@/components/Skeleton';
 
 type Settings = {
   palette: string[];
@@ -170,7 +171,10 @@ export default function SettingsPage() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-[var(--text-mute)]">Loading…</p>
+        <div className="space-y-6">
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
       ) : error ? (
         <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-white">
           ! {error}

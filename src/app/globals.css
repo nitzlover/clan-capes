@@ -285,7 +285,8 @@ canvas.pixelated {
     background: transparent;
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius-pill);
-    transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+    transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease,
+      transform 0.16s ease;
   }
   .btn-ghost:hover {
     color: var(--ink-0);
@@ -740,5 +741,57 @@ canvas.pixelated {
   .select-trigger:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+}
+
+/*
+ * 1.2.x — motion layer.
+ *
+ * Skeleton shimmer for loading states (replaces bare "Loading…" text so
+ * content never pops a grid into place), plus a tactile press on the
+ * button family. Strictly B&W; the whole layer bows to
+ * prefers-reduced-motion below.
+ */
+@layer components {
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--surface-2);
+    border-radius: var(--radius-md);
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.06) 50%,
+      transparent
+    );
+    animation: skeleton-sweep 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes skeleton-sweep {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Tactile press — the button family dips slightly while held. */
+.btn-primary:active:not(:disabled),
+.btn-ghost:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none !important;
+  }
+  .btn-primary:active:not(:disabled),
+  .btn-ghost:active:not(:disabled) {
+    transform: none;
   }
 }

@@ -11,6 +11,7 @@ import { SelectServerPrompt } from '@/components/ServerPicker';
 import { useSelectedServer } from '@/lib/selected-server';
 import { api, UnauthorizedError } from '@/lib/api';
 import { LeaderboardPodium } from '@/components/LeaderboardPodium';
+import { SkeletonCard, SkeletonRows } from '@/components/Skeleton';
 
 type ClanRow = {
   clanId: number;
@@ -135,7 +136,10 @@ export default function LeaderboardPage() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-[var(--text-mute)]">Loading…</p>
+        <div className="space-y-6">
+          <SkeletonCard className="h-48" />
+          <SkeletonRows rows={6} />
+        </div>
       ) : error ? (
         <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-white">
           ! {error}

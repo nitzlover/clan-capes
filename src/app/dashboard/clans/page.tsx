@@ -11,6 +11,8 @@ import {
 } from '@/components/ArmorTrimEditor';
 import { MemberCard3D } from '@/components/MemberCard3D';
 import { Select, type SelectOption } from '@/components/Select';
+import { Reveal } from '@/components/motion';
+import { SkeletonRows } from '@/components/Skeleton';
 
 /** member / deputy role choices for the custom <Select> (leader uses /transfer). */
 const ROLE_OPTIONS: SelectOption[] = [
@@ -224,7 +226,9 @@ export default function ClansPage() {
           </div>
         </div>
         {loading ? (
-          <p className="px-6 py-6 text-sm text-[var(--text-mute)]">Loading…</p>
+          <div className="px-6 py-4">
+            <SkeletonRows rows={6} />
+          </div>
         ) : error ? (
           <p className="px-6 py-6 font-mono text-[11px] uppercase tracking-[0.2em] text-white">
             ! {error}
@@ -265,17 +269,19 @@ export default function ClansPage() {
             </button>
           </div>
         ) : (
-          <ul>
-            {visibleClans.map((c) => (
-              <ClanRow
-                key={c.id}
-                clan={c}
-                serverId={serverId}
-                onlineUuids={onlineUuids}
-                onChange={() => load(serverId)}
-              />
-            ))}
-          </ul>
+          <Reveal>
+            <ul>
+              {visibleClans.map((c) => (
+                <ClanRow
+                  key={c.id}
+                  clan={c}
+                  serverId={serverId}
+                  onlineUuids={onlineUuids}
+                  onChange={() => load(serverId)}
+                />
+              ))}
+            </ul>
+          </Reveal>
         )}
       </section>
     </div>

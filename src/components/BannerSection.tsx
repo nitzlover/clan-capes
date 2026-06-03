@@ -14,6 +14,7 @@ import { BannerPreview } from '@/components/BannerPreview';
 import { SelectServerPrompt } from '@/components/ServerPicker';
 import { EMPTY_SPEC, type BannerSpec } from '@/lib/banners';
 import { useSelectedServer } from '@/lib/selected-server';
+import { SkeletonRows } from '@/components/Skeleton';
 
 /**
  * Lists every PowerClans clan and lets the admin set a shield banner for
@@ -108,9 +109,9 @@ export function BannerSection() {
   return (
     <div>
       {loadState === 'loading' && (
-        <p className="py-6 font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--text-mute)]">
-          Loading clans…
-        </p>
+        <div className="py-2">
+          <SkeletonRows rows={5} />
+        </div>
       )}
       {loadState === 'error' && (
         <p className="py-6 font-mono text-[11px] uppercase tracking-[0.2em] text-white">

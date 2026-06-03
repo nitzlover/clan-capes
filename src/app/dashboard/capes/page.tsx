@@ -6,6 +6,8 @@ import { PlayerCapeView3D } from '@/components/PlayerCapeView3D';
 import { SelectServerPrompt } from '@/components/ServerPicker';
 import { api, type ClanRow, getToken, UnauthorizedError } from '@/lib/api';
 import { useSelectedServer, serverQueryString } from '@/lib/selected-server';
+import { Reveal } from '@/components/motion';
+import { Skeleton } from '@/components/Skeleton';
 
 /**
  * Capes route.
@@ -165,12 +167,24 @@ export default function CapesPage() {
           </span>
         </div>
         {loading ? (
-          <p className="py-6 text-sm text-[var(--text-mute)]">Loading…</p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="brutal-card flex items-start gap-5 p-5" aria-hidden>
+                <Skeleton className="h-[160px] w-[110px]" rounded="md" />
+                <div className="min-w-0 flex-1">
+                  <Skeleton className="h-4 w-20" rounded="sm" />
+                  <Skeleton className="mt-2 h-2.5 w-28" rounded="sm" />
+                  <Skeleton className="mt-4 h-7 w-16" rounded="sm" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : clans.length === 0 ? (
           <p className="py-6 text-sm text-[var(--text-mute)]">
             No clans with capes yet.
           </p>
         ) : (
+          <Reveal>
           <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {clans.map((c) => (
               <li
@@ -201,6 +215,7 @@ export default function CapesPage() {
               </li>
             ))}
           </ul>
+          </Reveal>
         )}
       </section>
     </div>
