@@ -2,38 +2,37 @@
 
 import {
   BANNER_COLORS,
-  PATTERN_PREVIEW_FALLBACK,
-  SHIELD_ATLAS_SHAPE_ID,
+  normalizePatternKey,
   type BannerSpec,
   colorForOrdinal,
 } from '@/lib/banners';
 
-function maskUrlFor(code: string): string {
-  // Some plugin-known codes (e.g. "tt", "flw") don't ship a dedicated 20×40
-  // alpha mask under public/banner/patterns. Fall back to a visually
-  // similar code so the layer is at least visible in the editor preview —
-  // the spec still saves the original code so the plugin resolves it
-  // correctly server-side.
-  const target = PATTERN_PREVIEW_FALLBACK[code] ?? code;
-  return `/banner/patterns/${target}.png`;
+/**
+ * Texture for a pattern layer. Always a modern vanilla key now, resolved
+ * through {@link normalizePatternKey} so any legacy spec still loaded from
+ * the DB falls back to the right texture. These PNGs
+ * (`/public/mc/shield-patterns/<key>.png`) are the vanilla pattern shapes
+ * already projected onto the shield front-face, so painting them flat as a
+ * CSS mask reproduces the in-game look — base colour shows through where
+ * the mask is transparent, the dye colour fills where it is opaque.
+ */
+function maskUrlFor(key: string): string {
+  const resolved = normalizePatternKey(key) ?? key;
+  return `/mc/shield-patterns/${resolved}.png`;
 }
 
 type Props = {
   spec: BannerSpec | null | undefined;
-  /** Banner width on screen. The vanilla banner texture is 20×40, so the
-   *  height is computed at 2× for the correct aspect. */
+  /** Banner width on screen. Native banner cloth is 1:2, shield ≈ 14:24. */
   width?: number;
   label?: string;
   /** Outer frame visible? Set false when embedding inside another card. */
   framed?: boolean;
   /**
    * Render style.
-   *   "banner" — flat 20×40 cloth, used in the editor side-panel preview.
-   *   "shield" — Minecraft inventory-style shield: brown wooden plank
-   *              backing + iron rim + iron rivet pins at the 4 corners,
-   *              cloth painted in the centre.
-   *   "block"  — vanilla banner block: cloth + wooden pole hanging
-   *              below it, like the banner item in a player's hand.
+   *   "banner" — flat cloth, editor side-panel preview.
+   *   "shield" — shield-aspect cloth (the in-game shield front-face).
+   *   "block"  — banner block: cloth + wooden pole hanging below.
    */
   shape?: 'banner' | 'shield' | 'block';
 };
@@ -41,26 +40,14 @@ type Props = {
 /**
  * Banner / shield preview painted in Minecraft's own pixel-art language.
  *
- * The cloth itself uses the same CSS mask-image trick as before — each
- * pattern is a 20×40 alpha PNG, dye colour fills the rect, mask cuts it
- * to the pattern shape. The previous shield mode tried to render a
- * stylised SVG heater silhouette which looked nothing like the in-game
- * item. This rewrite drops the heater shape entirely:
- *
- *   - shield mode mirrors the vanilla shield's INVENTORY sprite: a wood
- *     plank background, iron rim line, iron rivet pins at the corners,
- *     and the banner cloth painted across the front. That's the shape
- *     players actually see in their hotbar and in their hand.
- *   - block mode mirrors the vanilla banner ITEM: cloth on top with a
- *     small wooden pole hanging below it. Same shape as a banner held
- *     in offhand or sitting in an item frame.
- *   - banner mode is unchanged — flat cloth, used in the editor's
- *     side-by-side "you are editing this 20×40 texture" preview.
- *
- * Everything is plain CSS + img masks. No external textures, no canvas,
- * no Three.js. Pixel-perfect look comes from the `imageRendering:
- * pixelated` lock and from snapping all the woodgrain accents to
- * percentage units so they read like 1-px MC pixels at any size.
+ * Unified renderer (post-2026-06-03): every shape composites the base
+ * cloth colour with one CSS-masked layer per pattern, each mask being the
+ * modern-key shield texture. The previous build had a separate shield path
+ * driven by a scraped minecraft.tools sprite atlas indexed by an opaque
+ * `shape_id`; that atlas disagreed with the in-game pattern on several
+ * codes, which is why the editor preview lied. Driving every layer from
+ * the same `/mc/shield-patterns/<modern_key>.png` the plugin resolves
+ * makes the preview WYSIWYG with the server.
  */
 export function BannerPreview({
   spec,
@@ -72,22 +59,15 @@ export function BannerPreview({
   const safe = spec ?? { baseColor: 0, patterns: [] };
   const base = colorForOrdinal(safe.baseColor);
 
-  // Native banner aspect = 1:2. Shield = 14:24 (wood front + iron rim
-  // on all four sides) ≈ 1:1.714. Block mode adds a pole below the
-  // cloth, so its overall height is taller.
+  // Native banner aspect = 1:2. Shield ≈ 14:24. Block adds a pole below.
   const h =
     shape === 'shield' ? Math.round(width * (24 / 14)) :
     shape === 'block' ? Math.round(width * 2.4) :
     width * 2;
 
-  // Two layer renderers: flat banner masks (banner mode + block mode)
-  // use the 20×40 cloth-shaped masks in /banner/patterns; the shield
-  // mode uses the vanilla entity/shield/*.png masks which are already
-  // projected onto the 3D shield front face. Keeping them separate
-  // means each preview reads correctly without one accidentally borrowing
-  // the other's UVs.
-  const bannerLayers = safe.patterns.map((p, idx) => {
+  const layers = safe.patterns.map((p, idx) => {
     const c = colorForOrdinal(p.color);
+    const url = maskUrlFor(p.pattern);
     return (
       <div
         key={idx}
@@ -96,8 +76,8 @@ export function BannerPreview({
           position: 'absolute',
           inset: 0,
           backgroundColor: c.hex,
-          WebkitMaskImage: `url(${maskUrlFor(p.pattern)})`,
-          maskImage: `url(${maskUrlFor(p.pattern)})`,
+          WebkitMaskImage: `url(${url})`,
+          maskImage: `url(${url})`,
           WebkitMaskSize: '100% 100%',
           maskSize: '100% 100%',
           WebkitMaskRepeat: 'no-repeat',
@@ -108,36 +88,28 @@ export function BannerPreview({
     );
   });
 
+  const cloth = (
+    <div
+      style={{
+        position: 'relative',
+        width,
+        height: shape === 'block' ? Math.round(width * 2) : h,
+        background: base.hex,
+        boxShadow: framed && shape !== 'block' ? '0 6px 18px rgba(0,0,0,0.45)' : undefined,
+        imageRendering: 'pixelated',
+      }}
+    >
+      {layers}
+    </div>
+  );
+
   const inner =
-    shape === 'shield' ? (
-      <ShieldSprite
-        width={width}
-        baseHex={base.hex}
-        baseOrdinal={safe.baseColor}
-        layers={safe.patterns
-          .map((p) => ({
-            colorOrdinal: p.color,
-            shapeId: SHIELD_ATLAS_SHAPE_ID[p.pattern] ?? null,
-          }))
-          .filter((l): l is { colorOrdinal: number; shapeId: number } => l.shapeId !== null)}
-      />
-    ) : shape === 'block' ? (
+    shape === 'block' ? (
       <BannerBlockSprite width={width} height={h} baseHex={base.hex}>
-        {bannerLayers}
+        {layers}
       </BannerBlockSprite>
     ) : (
-      <div
-        style={{
-          position: 'relative',
-          width,
-          height: h,
-          background: base.hex,
-          boxShadow: framed ? '0 6px 18px rgba(0,0,0,0.45)' : undefined,
-          imageRendering: 'pixelated',
-        }}
-      >
-        {bannerLayers}
-      </div>
+      cloth
     );
 
   return (
@@ -161,117 +133,9 @@ export function BannerPreview({
 }
 
 /**
- * Shield preview rendered via minecraft.tools' pre-baked sprite atlas.
- *
- * Approach mirrors what minecraft.tools/en/shield.php ships:
- *   - One 3528×2464 PNG (`/public/mc/shieldx7.png`) holding every
- *     (pattern × dye-colour) combination at 84×154 per cell, laid out
- *     42 columns (shape_id) × 16 rows (colour, inverted so row 0 =
- *     WHITE / DyeColor 15 and row 15 = BLACK / DyeColor 0).
- *   - One 84×154 shadow PNG (`/public/mc/shield-shadow-x7.png`) that
- *     bakes the iron rim, the grip stub and the cloth window's alpha.
- *
- * For each layer we render a nested div with:
- *   background-image: shieldx7.png
- *   background-position: -(shape_id × cellW)px  -(dyeOrdinal × cellH)px
- *
- * The `.shield-big` outer container also takes the BASE colour as
- * `background-color`. That colour bleeds through the cloth area of
- * every layer because pattern cells include alpha — so a shield with
- * a black base and a red rhombus pattern renders exactly the way
- * Minecraft would paint it: black cloth where no pattern is set, red
- * pixels where the rhombus mask is opaque, iron rim baked into the
- * shadow on top.
- *
- * Position math is identical to minecraft.tools' `get_position()`:
- * after inverting their UI colour id back to DyeColor ordinal the X
- * becomes shapeId × cellW and the Y becomes dyeOrdinal × cellH.
- */
-function ShieldSprite({
-  width,
-  baseHex,
-  baseOrdinal,
-  layers,
-}: {
-  width: number;
-  baseHex: string;
-  baseOrdinal: number;
-  layers: Array<{ colorOrdinal: number; shapeId: number }>;
-}) {
-  // The native atlas is 84 × 154 per cell — that's minecraft.tools' "big"
-  // size. We scale everything proportionally to whatever width the parent
-  // asked for so the same atlas drives the editor preview, the clan
-  // thumbnail and any other call site without resampling.
-  const NATIVE_CELL_W = 84;
-  const NATIVE_CELL_H = 154;
-  const ATLAS_COLS = 42;
-  const ATLAS_ROWS = 16;
-
-  const scale = width / NATIVE_CELL_W;
-  const cellW = NATIVE_CELL_W * scale;
-  const cellH = NATIVE_CELL_H * scale;
-  const atlasW = ATLAS_COLS * cellW;
-  const atlasH = ATLAS_ROWS * cellH;
-
-  const posFor = (shapeId: number, dyeOrdinal: number) =>
-    `${-shapeId * cellW}px ${-dyeOrdinal * cellH}px`;
-
-  return (
-    <div
-      style={{
-        position: 'relative',
-        width: cellW,
-        height: cellH,
-        backgroundColor: baseHex,
-        imageRendering: 'pixelated',
-        filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.45))',
-      }}
-    >
-      {/* Each pattern layer — nested div with the atlas sliced to the
-          right (shape, colour) cell. base colour shows through wherever
-          the cell's pattern is transparent. */}
-      {layers.map((l, idx) => (
-        <div
-          key={idx}
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundImage: 'url(/mc/shieldx7.png)',
-            backgroundRepeat: 'no-repeat',
-            backgroundSize: `${atlasW}px ${atlasH}px`,
-            backgroundPosition: posFor(l.shapeId, l.colorOrdinal),
-            imageRendering: 'pixelated',
-          }}
-        />
-      ))}
-      {/* Shadow — bakes the iron rim, the grip-stub silhouette and the
-          inner cloth-edge shading the way the in-game item icon shows
-          them. Drawn last so it sits on top of every pattern layer. */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundImage: 'url(/mc/shield-shadow-x7.png)',
-          backgroundRepeat: 'no-repeat',
-          backgroundSize: `${cellW}px ${cellH}px`,
-          backgroundPosition: '0 0',
-          imageRendering: 'pixelated',
-        }}
-      />
-      {/* baseOrdinal is captured purely for hierarchy / debugging — the
-          base colour itself is already painted via the container's
-          background-color above. */}
-      <span hidden>{baseOrdinal}</span>
-    </div>
-  );
-}
-
-/**
  * Vanilla banner block sprite — cloth + wooden pole hanging below.
- * Used as the small clan-row thumbnail and in the editor's secondary
- * preview. The cloth keeps its native 1:2 aspect; the pole sits below.
+ * Used as the small clan-row thumbnail and the editor's secondary preview.
+ * The cloth keeps its native 1:2 aspect; the pole sits below.
  */
 function BannerBlockSprite({
   width,

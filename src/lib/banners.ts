@@ -1,16 +1,35 @@
 /**
- * Vanilla Minecraft banner data — shared by the editor (selector dropdowns)
- * and the preview (CSS colour + mask composition).
+ * Vanilla Minecraft banner data — single source of truth shared by the
+ * editor (pattern picker), the preview (BannerPreview), the image→banner
+ * fitter (imageToBanner), the NBT import/export, and the server-side
+ * banner repo that feeds the plugin.
  *
- * Colours are in DyeColor ordinal order, so `BANNER_COLORS[i].hex` is the
- * paint that DyeColor.values()[i] uses on a real banner in-game. The
- * plugin stores the same ordinal in `baseColor` and each pattern's
- * `color`, so the panel and the server are talking the same numbers.
+ * ## The one rule (post-2026-06-03 unification)
  *
- * Pattern entries use the short NBT codes ("flo", "mc", ...) because that
- * is also what the user already had in their cape ZIP / asset bundle and
- * what the plugin's `BannerPatternCodes` resolver expects. Files live
- * under `public/banner/patterns/<code>.png` (20×40 alpha masks).
+ * A pattern is ALWAYS identified by its **modern vanilla registry key**
+ * (`stripe_downright`, `diagonal_left`, `creeper`, `mojang`, …). That is
+ * exactly what:
+ *   - the plugin resolves via `Registry.BANNER_PATTERN.get(minecraft(key))`,
+ *   - the preview textures are named (`/public/mc/shield-patterns/<key>.png`),
+ *   - real Minecraft 1.21 NBT uses.
+ *
+ * Earlier builds invented a private short-code scheme (`drs`, `ms`, `sc`,
+ * `tl`, …) that COLLIDED with the real Bukkit legacy codes but assigned
+ * different patterns. That made the editor preview, the in-game result,
+ * and any pasted vanilla NBT disagree. The scheme is gone; the two legacy
+ * tables below exist only to normalise old data:
+ *
+ *   - {@link PROJECT_CODE_TO_KEY} — the panel's OWN old short codes →
+ *     modern key. Used to migrate banner specs already saved in the DB
+ *     (and any in-flight read). Values mirror what the plugin actually
+ *     painted in-game for those codes, so migrating is visually a no-op
+ *     on the server — only the panel preview gets corrected to match.
+ *   - {@link VANILLA_LEGACY_TO_KEY} — the REAL Bukkit pre-1.21 codes →
+ *     modern key. Used ONLY inside {@link parseNbtSpec}, where the input
+ *     is a vanilla NBT blob the user pasted from the game.
+ *
+ * Colours stay DyeColor ordinals (0..15); the plugin stores the same
+ * numbers, so panel and server speak identical colour ids.
  */
 
 export type BannerColor = {
@@ -23,7 +42,7 @@ export type BannerColor = {
 };
 
 export type BannerPattern = {
-  /** Short NBT code used as the storage key (matches PNG filename). */
+  /** Modern vanilla registry key — the storage key AND the texture name. */
   code: string;
   /** Readable label for the editor dropdown. */
   label: string;
@@ -49,146 +68,77 @@ export const BANNER_COLORS: BannerColor[] = [
 ];
 
 /**
- * Short code → display label. Order = the order shown in the picker.
- * Every entry must have a matching `public/banner/patterns/<code>.png`.
+ * Every selectable pattern, keyed by modern registry key. Order = order
+ * shown in the picker (grouped: stripes → squares → triangles → diagonals
+ * → halves → borders/shapes → charges). Every `code` MUST have a matching
+ * `/public/mc/shield-patterns/<code>.png` texture.
  */
 export const BANNER_PATTERNS: BannerPattern[] = [
-  { code: 'bo', label: 'Border' },
-  { code: 'bri', label: 'Bricks' },
-  { code: 'bt', label: 'Triangle bottom' },
-  { code: 'bts', label: 'Triangles bottom' },
-  { code: 'cbo', label: 'Curly border' },
-  { code: 'cr', label: 'Cross' },
-  { code: 'cra', label: 'Creeper charge' },
-  { code: 'cre', label: 'Creeper (alt)' },
-  { code: 'cs', label: 'Stripe centre' },
-  { code: 'dls', label: 'Diagonal left' },
-  { code: 'drs', label: 'Diagonal right' },
-  { code: 'flo', label: 'Flower charge' },
-  { code: 'flw', label: 'Flow' },
-  { code: 'glb', label: 'Globe' },
-  { code: 'gra', label: 'Gradient' },
-  { code: 'gru', label: 'Gradient up' },
-  { code: 'gus', label: 'Guster' },
-  { code: 'hh', label: 'Half horizontal' },
-  { code: 'hhb', label: 'Half horizontal bottom' },
-  { code: 'ld', label: 'Diagonal left down' },
-  { code: 'lud', label: 'Diagonal up left' },
-  { code: 'mc', label: 'Mojang charge' },
-  { code: 'mr', label: 'Rhombus' },
-  { code: 'ms', label: 'Stripe down right' },
-  { code: 'msb', label: 'Stripe middle' },
-  { code: 'mss', label: 'Small stripes' },
-  { code: 'pig', label: 'Piglin' },
-  { code: 'rd', label: 'Diagonal right down' },
-  { code: 'rs', label: 'Stripe right' },
-  { code: 'rud', label: 'Diagonal up right' },
-  { code: 'sc', label: 'Square top-left' },
-  { code: 'sku', label: 'Skull charge' },
-  { code: 'ss', label: 'Straight cross' },
-  { code: 'tl', label: 'Stripe top' },
-  { code: 'tr', label: 'Triangle top (single)' },
-  { code: 'ts', label: 'Stripe left' },
-  { code: 'tt', label: 'Triangle top (alias)' },
-  { code: 'tts', label: 'Triangles top' },
-  { code: 'vh', label: 'Half vertical' },
-  { code: 'vhr', label: 'Half vertical right' },
+  // Stripes
+  { code: 'stripe_top', label: 'Stripe top' },
+  { code: 'stripe_bottom', label: 'Stripe bottom' },
+  { code: 'stripe_left', label: 'Stripe left' },
+  { code: 'stripe_right', label: 'Stripe right' },
+  { code: 'stripe_center', label: 'Stripe center (vertical)' },
+  { code: 'stripe_middle', label: 'Stripe middle (horizontal)' },
+  { code: 'stripe_downright', label: 'Stripe down-right' },
+  { code: 'stripe_downleft', label: 'Stripe down-left' },
+  { code: 'small_stripes', label: 'Small stripes' },
+  // Squares (corners)
+  { code: 'square_top_left', label: 'Square top-left' },
+  { code: 'square_top_right', label: 'Square top-right' },
+  { code: 'square_bottom_left', label: 'Square bottom-left' },
+  { code: 'square_bottom_right', label: 'Square bottom-right' },
+  // Crosses
+  { code: 'cross', label: 'Cross (saltire)' },
+  { code: 'straight_cross', label: 'Straight cross (+)' },
+  // Triangles
+  { code: 'triangle_top', label: 'Triangle top' },
+  { code: 'triangle_bottom', label: 'Triangle bottom' },
+  { code: 'triangles_top', label: 'Triangles top (sawtooth)' },
+  { code: 'triangles_bottom', label: 'Triangles bottom (sawtooth)' },
+  // Diagonals
+  { code: 'diagonal_left', label: 'Diagonal left' },
+  { code: 'diagonal_right', label: 'Diagonal right' },
+  { code: 'diagonal_up_left', label: 'Diagonal up-left' },
+  { code: 'diagonal_up_right', label: 'Diagonal up-right' },
+  // Halves
+  { code: 'half_vertical', label: 'Half vertical' },
+  { code: 'half_vertical_right', label: 'Half vertical right' },
+  { code: 'half_horizontal', label: 'Half horizontal' },
+  { code: 'half_horizontal_bottom', label: 'Half horizontal bottom' },
+  // Borders / fills / shapes
+  { code: 'border', label: 'Border' },
+  { code: 'curly_border', label: 'Curly border' },
+  { code: 'bricks', label: 'Bricks (field masoned)' },
+  { code: 'gradient', label: 'Gradient' },
+  { code: 'gradient_up', label: 'Gradient up' },
+  { code: 'circle', label: 'Circle (roundel)' },
+  { code: 'rhombus', label: 'Rhombus (lozenge)' },
+  // Charges (special)
+  { code: 'creeper', label: 'Creeper charge' },
+  { code: 'skull', label: 'Skull charge' },
+  { code: 'flower', label: 'Flower charge' },
+  { code: 'mojang', label: 'Mojang (thing)' },
+  { code: 'globe', label: 'Globe' },
+  { code: 'piglin', label: 'Snout (piglin)' },
+  { code: 'flow', label: 'Flow' },
+  { code: 'guster', label: 'Guster' },
 ];
 
-/**
- * Some short codes don't ship a dedicated 20×40 alpha mask under
- * /banner/patterns — the preview falls back to a visually-similar mask
- * so the layer is at least *visible* in the editor (it will still render
- * correctly in-game because the plugin resolves the code via its own
- * BannerPatternCodes table). Keys are the missing codes, values are an
- * existing PNG name to use as a stand-in.
- */
-export const PATTERN_PREVIEW_FALLBACK: Record<string, string> = {
-  tt: 'tr', // both render a single top triangle
-  flw: 'flo',
-  gus: 'cra',
-  pig: 'mc',
-  vh: 'hh',
-  vhr: 'hhb',
-};
+/** Fast membership test — every valid modern key. */
+export const MODERN_KEYS: ReadonlySet<string> = new Set(
+  BANNER_PATTERNS.map((p) => p.code),
+);
 
 /**
- * Short code → vanilla shield pattern texture filename under
- * /public/mc/shield-patterns/. These textures (extracted from
- * assets/minecraft/textures/entity/shield/<pattern>.png in the 1.21
- * resource pack) project the pattern onto the shield's 3D front-face
- * UVs, so using them as the mask for the shield preview gives an exact
- * in-game appearance — including the slight edge wrapping that flat
- * banner patterns don't have.
- *
- * The map mirrors the plugin's `BannerPatternCodes` resolver so what
- * the editor previews matches what the plugin actually applies.
+ * The panel's OWN pre-unification short codes → modern key. Mirrors the
+ * plugin's old `LEGACY_TO_MODERN_KEY`, so migrating a saved spec through
+ * this table reproduces exactly what the server already painted in-game
+ * for that code — the in-game banner does not change, only the panel
+ * preview is corrected to match it.
  */
-/**
- * Short code → shape column index inside the minecraft.tools shield
- * atlas (`/public/mc/shieldx7.png`, 42 columns × 16 rows, 84×154 px
- * per cell). The atlas itself is a verbatim copy of minecraft.tools'
- * pre-rendered sprite sheet — column N holds the pattern they call
- * shape `N`. We map each of our short codes onto the column whose
- * pattern visually matches the label the user sees in the editor.
- *
- * `null` means the code has no entry in the atlas (atlas is locked to
- * the 41 patterns shipped on minecraft.tools — `flw`, `gus` aren't on
- * it). Those layers skip rendering on the shield preview.
- *
- * Source: scraped from minecraft.tools' /give command output by
- * iterating shape_id 0..40, see the project README for the procedure.
- */
-export const SHIELD_ATLAS_SHAPE_ID: Record<string, number | null> = {
-  bo: 26,
-  bri: 28,
-  bt: 21,
-  bts: 24,
-  cbo: 25,
-  cr: 17,
-  cra: 30,
-  cre: 30,
-  cs: 11,
-  dls: 15,
-  drs: 16,
-  flo: 32,
-  flw: null,
-  glb: 39,
-  gra: 29,
-  gru: 36,
-  gus: null,
-  hh: 6,
-  hhb: 37,
-  ld: 18,
-  lud: 34,
-  mc: 1,
-  moj: 33,
-  mr: 22,
-  ms: 13,
-  msb: 13,
-  mss: 27,
-  pig: 40,
-  rd: 35,
-  rs: 12,
-  rud: 19,
-  sbl: 2,
-  sbr: 3,
-  sc: 4,
-  sku: 31,
-  ss: 14,
-  stl: 4,
-  str: 5,
-  tl: 8,
-  tr: 20,
-  ts: 10,
-  tt: 20,
-  tts: 23,
-  vh: 9,
-  vhr: 38,
-};
-
-export const SHIELD_PATTERN_FILE: Record<string, string> = {
-  b: 'base',
+export const PROJECT_CODE_TO_KEY: Record<string, string> = {
   bo: 'border',
   bri: 'bricks',
   bt: 'triangle_bottom',
@@ -199,7 +149,7 @@ export const SHIELD_PATTERN_FILE: Record<string, string> = {
   cre: 'creeper',
   cs: 'stripe_center',
   dls: 'diagonal_left',
-  drs: 'diagonal_up_right',
+  drs: 'diagonal_right',
   flo: 'flower',
   flw: 'flow',
   glb: 'globe',
@@ -209,23 +159,20 @@ export const SHIELD_PATTERN_FILE: Record<string, string> = {
   hh: 'half_horizontal',
   hhb: 'half_horizontal_bottom',
   ld: 'diagonal_up_left',
-  lud: 'diagonal_right',
+  lud: 'diagonal_up_left',
   mc: 'mojang',
+  moj: 'mojang',
   mr: 'rhombus',
-  ms: 'stripe_downleft',
+  ms: 'stripe_downright',
   msb: 'stripe_middle',
   mss: 'small_stripes',
   pig: 'piglin',
   rd: 'diagonal_right',
   rs: 'stripe_right',
-  rud: 'stripe_downright',
-  sbl: 'square_bottom_left',
-  sbr: 'square_bottom_right',
-  sc: 'square_bottom_left',
+  rud: 'diagonal_up_right',
+  sc: 'square_top_left',
   sku: 'skull',
   ss: 'straight_cross',
-  stl: 'square_top_left',
-  str: 'square_top_right',
   tl: 'stripe_top',
   tr: 'triangle_top',
   ts: 'stripe_left',
@@ -233,15 +180,62 @@ export const SHIELD_PATTERN_FILE: Record<string, string> = {
   tts: 'triangles_top',
   vh: 'half_vertical',
   vhr: 'half_vertical_right',
+  bl: 'square_bottom_left',
+  br: 'square_bottom_right',
 };
 
-export function colorForOrdinal(o: number): BannerColor {
-  return BANNER_COLORS[Math.max(0, Math.min(15, o | 0))];
-}
-
-export function patternForCode(code: string): BannerPattern | null {
-  return BANNER_PATTERNS.find((p) => p.code === code) ?? null;
-}
+/**
+ * The REAL Bukkit / vanilla pre-1.21 short codes → modern key. Sourced
+ * from the Bukkit `PatternType` legacy identifiers + the Minecraft Wiki
+ * banner-pattern table (2026-06-03). Used ONLY by {@link parseNbtSpec}
+ * when the user pastes an NBT blob copied out of the game, where the
+ * codes carry their vanilla meaning (NOT the panel's old scheme).
+ */
+export const VANILLA_LEGACY_TO_KEY: Record<string, string> = {
+  b: 'base',
+  bs: 'stripe_bottom',
+  ts: 'stripe_top',
+  ls: 'stripe_left',
+  rs: 'stripe_right',
+  cs: 'stripe_center',
+  ms: 'stripe_middle',
+  drs: 'stripe_downright',
+  dls: 'stripe_downleft',
+  ss: 'small_stripes',
+  cr: 'cross',
+  sc: 'straight_cross',
+  bt: 'triangle_bottom',
+  tt: 'triangle_top',
+  bts: 'triangles_bottom',
+  tts: 'triangles_top',
+  ld: 'diagonal_left',
+  rd: 'diagonal_right',
+  lud: 'diagonal_up_left',
+  rud: 'diagonal_up_right',
+  vh: 'half_vertical',
+  vhr: 'half_vertical_right',
+  hh: 'half_horizontal',
+  hhb: 'half_horizontal_bottom',
+  bl: 'square_bottom_left',
+  br: 'square_bottom_right',
+  tl: 'square_top_left',
+  tr: 'square_top_right',
+  mc: 'circle',
+  mr: 'rhombus',
+  bo: 'border',
+  cbo: 'curly_border',
+  gra: 'gradient',
+  gru: 'gradient_up',
+  bri: 'bricks',
+  cre: 'creeper',
+  sku: 'skull',
+  flo: 'flower',
+  moj: 'mojang',
+  glb: 'globe',
+  pig: 'piglin',
+  flw: 'flow',
+  gus: 'guster',
+};
 
 export type BannerSpec = {
   baseColor: number;
@@ -250,20 +244,57 @@ export type BannerSpec = {
 
 export const EMPTY_SPEC: BannerSpec = { baseColor: 0, patterns: [] };
 
+export function colorForOrdinal(o: number): BannerColor {
+  return BANNER_COLORS[Math.max(0, Math.min(15, o | 0))];
+}
+
 /**
- * Parse a vanilla-style NBT blob like:
+ * Normalise any stored / inbound pattern identifier to a modern key.
+ *
+ *   1. already a modern key            → return as-is
+ *   2. a `minecraft:foo` namespaced id → strip namespace, recheck
+ *   3. one of the panel's OLD codes    → map via PROJECT_CODE_TO_KEY
+ *   4. anything else                   → null (caller skips the layer)
+ *
+ * This is the DB / read-path normaliser: every banner spec already saved
+ * by this panel used a project code, and new specs use modern keys, so
+ * those two cases cover all stored data. (Vanilla NBT import is handled
+ * separately by {@link parseNbtSpec}, which knows the codes are vanilla.)
+ */
+export function normalizePatternKey(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let k = String(raw).trim().toLowerCase();
+  if (k.startsWith('minecraft:')) k = k.slice('minecraft:'.length);
+  if (MODERN_KEYS.has(k)) return k;
+  const mapped = PROJECT_CODE_TO_KEY[k];
+  return mapped && MODERN_KEYS.has(mapped) ? mapped : null;
+}
+
+/** Normalise a whole spec's pattern layers to modern keys, dropping unknowns. */
+export function normalizeSpec(spec: BannerSpec): BannerSpec {
+  return {
+    baseColor: clampOrdinal(spec.baseColor),
+    patterns: spec.patterns
+      .map((p) => {
+        const key = normalizePatternKey(p.pattern);
+        return key ? { color: clampOrdinal(p.color), pattern: key } : null;
+      })
+      .filter((p): p is { color: number; pattern: string } => p !== null),
+  };
+}
+
+/**
+ * Parse a vanilla-style NBT blob copied from the game, e.g.
  *
  *   {BlockEntityTag:{Base:14,Patterns:[
- *     {Color:15,Pattern:"gra"},
- *     {Color:15,Pattern:"cbo"}
+ *     {Color:15,Pattern:"drs"},
+ *     {Color:15,Pattern:"minecraft:creeper"}
  *   ]}}
  *
- * into a BannerSpec. The parser is deliberately permissive — vanilla NBT
- * isn't strict JSON (unquoted keys, double-or-no quotes around values)
- * so we extract Base and each {Color, Pattern} block with regex rather
- * than fighting a strict parser. Returns null when no valid spec can be
- * recovered (no Base, or zero patterns and the input clearly wasn't a
- * banner NBT).
+ * into a BannerSpec with modern keys. Permissive on syntax (vanilla NBT
+ * isn't strict JSON) — extracts Base and each {Color,Pattern} block with
+ * regex. Each pattern is resolved as a VANILLA code (or modern key, or
+ * `minecraft:`-prefixed id). Returns null when no Base is recoverable.
  */
 export function parseNbtSpec(input: string): BannerSpec | null {
   if (!input || !input.trim()) return null;
@@ -275,20 +306,34 @@ export function parseNbtSpec(input: string): BannerSpec | null {
   const blockRe = /\{[^{}]+\}/g;
   for (const block of input.matchAll(blockRe)) {
     const c = block[0].match(/Color\s*:\s*(\d+)/i);
-    const p = block[0].match(/Pattern\s*:\s*"?([A-Za-z0-9_]+)"?/i);
+    const p = block[0].match(/Pattern\s*:\s*"?([A-Za-z0-9_:]+)"?/i);
     if (!c || !p) continue;
-    patterns.push({
-      color: clampOrdinal(parseInt(c[1], 10)),
-      pattern: p[1].toLowerCase(),
-    });
+    const key = resolveVanillaPattern(p[1]);
+    if (!key) continue;
+    patterns.push({ color: clampOrdinal(parseInt(c[1], 10)), pattern: key });
   }
   return { baseColor, patterns };
 }
 
-/** Round-trip a BannerSpec back to the vanilla NBT format. */
+/** Vanilla NBT pattern token → modern key (modern › namespaced › vanilla legacy). */
+function resolveVanillaPattern(raw: string): string | null {
+  let k = raw.trim().toLowerCase();
+  if (k.startsWith('minecraft:')) k = k.slice('minecraft:'.length);
+  if (MODERN_KEYS.has(k)) return k;
+  const viaVanilla = VANILLA_LEGACY_TO_KEY[k];
+  if (viaVanilla && MODERN_KEYS.has(viaVanilla)) return viaVanilla;
+  return null;
+}
+
+/**
+ * Round-trip a BannerSpec back to a vanilla NBT string. Emits modern
+ * `minecraft:<key>` ids inside the legacy BlockEntityTag wrapper — the
+ * format Minecraft 1.21 accepts and our own {@link parseNbtSpec} reads
+ * back losslessly.
+ */
 export function specToNbt(spec: BannerSpec): string {
   const layers = spec.patterns
-    .map((p) => `{Color:${p.color},Pattern:"${p.pattern}"}`)
+    .map((p) => `{Color:${p.color},Pattern:"minecraft:${p.pattern}"}`)
     .join(',');
   return `{BlockEntityTag:{Base:${spec.baseColor},Patterns:[${layers}]}}`;
 }

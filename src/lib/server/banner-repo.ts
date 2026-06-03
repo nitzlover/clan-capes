@@ -5,6 +5,7 @@
 
 import { eq } from 'drizzle-orm';
 import { getDb, schema } from '@/lib/server/db';
+import { normalizePatternKey } from '@/lib/banners';
 
 export type BannerPattern = { color: number; pattern: string };
 
@@ -24,10 +25,20 @@ export async function getBannerByClanId(clanId: number): Promise<BannerRecord | 
     .where(eq(schema.clanBanners.clanId, clanId))
     .limit(1);
   if (!row) return null;
+  // Normalise legacy short codes → modern vanilla keys on read, so the
+  // plugin and the panel preview both receive exactly the key the server
+  // resolves against the registry. Old rows saved with the panel's former
+  // private code scheme migrate transparently; unknown layers are dropped.
+  const patterns = (row.patterns as BannerPattern[])
+    .map((p) => {
+      const key = normalizePatternKey(p.pattern);
+      return key ? { color: p.color, pattern: key } : null;
+    })
+    .filter((p): p is BannerPattern => p !== null);
   return {
     clanId: row.clanId,
     baseColor: row.baseColor,
-    patterns: row.patterns as BannerPattern[],
+    patterns,
     updatedAt: row.updatedAt.toISOString(),
     updatedBy: row.updatedBy,
   };

@@ -5,7 +5,6 @@ import {
   BANNER_COLORS,
   BANNER_PATTERNS,
   EMPTY_SPEC,
-  SHIELD_ATLAS_SHAPE_ID,
   parseNbtSpec,
   specToNbt,
   type BannerSpec,
@@ -41,13 +40,10 @@ type Props = {
  */
 const MAX_LAYERS = 6;
 
-// Only show shape tiles for pattern codes that exist in the atlas — the
-// editor previews the shield only, so codes without an atlas column
-// (flw, gus) can't be picked visually here. NBT import still accepts
-// them; this list just gates the visual grid.
-const SHIELD_PATTERN_CODES = BANNER_PATTERNS
-  .map((p) => p.code)
-  .filter((code) => SHIELD_ATLAS_SHAPE_ID[code] != null);
+// Every pattern now has a modern-key shield texture under
+// /public/mc/shield-patterns/, so the whole picker is renderable — no
+// atlas-column gating any more.
+const SHIELD_PATTERN_CODES = BANNER_PATTERNS.map((p) => p.code);
 
 export function BannerEditor({ initial, onSave, onRemove, busy, error }: Props) {
   const [spec, setSpec] = useState<BannerSpec>(() => ({
@@ -407,19 +403,10 @@ function ShapeTile({
   disabled?: boolean;
   onClick: () => void;
 }) {
-  const NATIVE_CELL_W = 84;
-  const NATIVE_CELL_H = 154;
-  const ATLAS_COLS = 42;
-  const ATLAS_ROWS = 16;
-
-  const shapeId = SHIELD_ATLAS_SHAPE_ID[code];
-  if (shapeId == null) return null;
-
-  const scale = tileWidth / NATIVE_CELL_W;
-  const cellW = NATIVE_CELL_W * scale;
-  const cellH = NATIVE_CELL_H * scale;
-  const atlasW = ATLAS_COLS * cellW;
-  const atlasH = ATLAS_ROWS * cellH;
+  const cellW = tileWidth;
+  const cellH = Math.round(tileWidth * (154 / 84));
+  const dyeHex = BANNER_COLORS[Math.max(0, Math.min(15, dyeOrdinal | 0))]?.hex ?? '#f9fffe';
+  const maskUrl = `/mc/shield-patterns/${code}.png`;
 
   return (
     <button
@@ -448,10 +435,13 @@ function ShapeTile({
         style={{
           position: 'absolute',
           inset: 0,
-          backgroundImage: 'url(/mc/shieldx7.png)',
-          backgroundRepeat: 'no-repeat',
-          backgroundSize: `${atlasW}px ${atlasH}px`,
-          backgroundPosition: `${-shapeId * cellW}px ${-dyeOrdinal * cellH}px`,
+          backgroundColor: dyeHex,
+          WebkitMaskImage: `url(${maskUrl})`,
+          maskImage: `url(${maskUrl})`,
+          WebkitMaskSize: '100% 100%',
+          maskSize: '100% 100%',
+          WebkitMaskRepeat: 'no-repeat',
+          maskRepeat: 'no-repeat',
           imageRendering: 'pixelated',
         }}
       />

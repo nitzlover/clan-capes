@@ -27,7 +27,6 @@
 import {
   BANNER_COLORS,
   BANNER_PATTERNS,
-  PATTERN_PREVIEW_FALLBACK,
   type BannerSpec,
 } from './banners';
 
@@ -86,10 +85,10 @@ async function loadPatternMasks(): Promise<PatternMask[]> {
     const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
     const out: PatternMask[] = [];
     for (const p of BANNER_PATTERNS) {
-      // Use the same fallback table the preview component uses — pattern
-      // codes without their own PNG borrow a visually-similar mask.
-      const file = PATTERN_PREVIEW_FALLBACK[p.code] ?? p.code;
-      const img = await loadImage(`/banner/patterns/${file}.png`);
+      // Modern-key shield-projected texture — the same set the preview and
+      // the plugin use, so the fitter only ever searches over patterns the
+      // server can actually render. Drawn into a 20×40 canvas below.
+      const img = await loadImage(`/mc/shield-patterns/${p.code}.png`);
       ctx.clearRect(0, 0, BANNER_WIDTH, BANNER_HEIGHT);
       ctx.drawImage(img, 0, 0, BANNER_WIDTH, BANNER_HEIGHT);
       const data = ctx.getImageData(0, 0, BANNER_WIDTH, BANNER_HEIGHT).data;
