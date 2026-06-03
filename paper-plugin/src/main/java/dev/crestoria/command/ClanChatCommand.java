@@ -2,6 +2,7 @@ package dev.crestoria.command;
 
 import dev.crestoria.CrestoriaPlugin;
 import dev.crestoria.api.dto.ClanDto;
+import dev.crestoria.util.Msg;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
@@ -30,16 +31,16 @@ public final class ClanChatCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Player only.", NamedTextColor.RED));
+            sender.sendMessage(Msg.err("Only players can use clan chat."));
             return true;
         }
         if (args.length == 0) {
-            player.sendMessage(Component.text("Usage: /clanc <message>", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Usage:  /clanc <message>"));
             return true;
         }
         ClanDto clan = plugin.getClanRepository().getByPlayer(player.getUniqueId()).orElse(null);
         if (clan == null) {
-            player.sendMessage(Component.text("You are not in a clan.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("You're not in a clan yet."));
             return true;
         }
         String message = String.join(" ", args);

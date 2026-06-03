@@ -1,7 +1,7 @@
 package dev.crestoria.command;
 
+import dev.crestoria.util.Msg;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -70,7 +70,7 @@ public final class ClanMenu {
     public static void open(Player player) {
         Holder holder = new Holder();
         Inventory inv = Bukkit.createInventory(holder, 54,
-                Component.text("Clan Menu", NamedTextColor.GOLD));
+                Component.text("❖ Clan Menu", Msg.ACCENT));
         holder.inventory = inv;
 
         for (Button b : BUTTONS) {

@@ -2,10 +2,11 @@ package dev.crestoria.listener;
 
 import dev.crestoria.CrestoriaPlugin;
 import dev.crestoria.api.dto.InvitationDto;
+import dev.crestoria.util.Msg;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
-import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -63,16 +64,13 @@ public final class PlayerJoinListener implements Listener {
         if (plugin.isUpdateAvailable()
                 && event.getPlayer().hasPermission("clancapes.admin")) {
             var p = event.getPlayer();
-            p.sendMessage(Component.text(
-                    "Crestoria update available: v" + plugin.getLatestVersion(),
-                    NamedTextColor.GOLD));
+            p.sendMessage(Msg.info("Update available — Crestoria v" + plugin.getLatestVersion() + "."));
             String url = plugin.getUpdateUrl();
             if (!url.isEmpty()) {
-                p.sendMessage(Component.text("  " + url, NamedTextColor.GRAY)
+                p.sendMessage(Component.text("  " + url, Msg.LINK)
                         .clickEvent(ClickEvent.openUrl(url))
                         .hoverEvent(HoverEvent.showText(Component.text(
-                                "Click to open download page",
-                                NamedTextColor.GRAY))));
+                                "Click to open the download page", Msg.MUTE))));
             }
             // 1.0.11: if the plugin has already auto-downloaded the
             // new jar to plugins/update/, surface that instead of the
@@ -81,13 +79,9 @@ public final class PlayerJoinListener implements Listener {
                     .resolve("Crestoria-" + plugin.getLatestVersion() + ".jar")
                     .toFile().isFile();
             if (autoStaged) {
-                p.sendMessage(Component.text(
-                        "  Auto-download ready — restart server to apply.",
-                        NamedTextColor.GREEN));
+                p.sendMessage(Msg.line("  Downloaded — restart the server to apply.", Msg.OK));
             } else {
-                p.sendMessage(Component.text(
-                        "  Manual install only — do not hot-swap a live jar.",
-                        NamedTextColor.GRAY));
+                p.sendMessage(Msg.line("  Manual install only — don't hot-swap a live jar.", Msg.MUTE));
             }
         }
 
@@ -102,31 +96,31 @@ public final class PlayerJoinListener implements Listener {
                 .whenComplete((invites, err) -> Bukkit.getScheduler().runTask(plugin, () -> {
                     if (err != null || invites == null || invites.isEmpty()) return;
                     if (!joining.isOnline()) return;
-                    joining.sendMessage(Component.text(
+                    joining.sendMessage(Msg.info(
                             "You have " + invites.size() + " pending clan invitation"
-                                    + (invites.size() == 1 ? "" : "s") + ":",
-                            NamedTextColor.GOLD));
+                                    + (invites.size() == 1 ? "" : "s") + ":"));
                     for (InvitationDto i : invites) {
                         renderInvite(joining, i);
                     }
-                    joining.sendMessage(Component.text(
-                            "  Use /clan accept <TAG> or /clan decline <TAG>.",
-                            NamedTextColor.GRAY));
+                    joining.sendMessage(Msg.line(
+                            "  Use /clan accept <TAG> or /clan decline <TAG>.", Msg.MUTE));
                 }));
     }
 
     /** Per-invitation line with clickable accept / decline. */
     private static void renderInvite(Player p, InvitationDto i) {
-        Component accept = Component.text("[Accept]", NamedTextColor.GREEN)
+        Component accept = Component.text("[Accept]", Msg.OK, TextDecoration.BOLD)
                 .clickEvent(ClickEvent.runCommand("/clan accept " + i.clanTag))
-                .hoverEvent(HoverEvent.showText(Component.text(
-                        "Click to join [" + i.clanTag + "]", NamedTextColor.GRAY)));
-        Component decline = Component.text("[Decline]", NamedTextColor.RED)
+                .hoverEvent(HoverEvent.showText(
+                        Component.text("Click to join " + i.clanTag, Msg.MUTE)));
+        Component decline = Component.text("[Decline]", Msg.ERR, TextDecoration.BOLD)
                 .clickEvent(ClickEvent.runCommand("/clan decline " + i.clanTag))
-                .hoverEvent(HoverEvent.showText(Component.text(
-                        "Click to reject", NamedTextColor.GRAY)));
-        p.sendMessage(Component.text(
-                "  [" + i.clanTag + "] " + i.clanName + "  ", NamedTextColor.GRAY)
-                .append(accept).append(Component.text(" ", NamedTextColor.GRAY)).append(decline));
+                .hoverEvent(HoverEvent.showText(
+                        Component.text("Click to decline", Msg.MUTE)));
+        p.sendMessage(Component.text("  ")
+                .append(Msg.tag(i.clanTag))
+                .append(Component.text(" " + i.clanName, Msg.INFO))
+                .append(Component.text("   ", Msg.MUTE)).append(accept)
+                .append(Component.text("   ", Msg.MUTE)).append(decline));
     }
 }

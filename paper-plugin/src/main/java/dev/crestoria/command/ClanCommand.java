@@ -4,11 +4,13 @@ import com.google.gson.JsonObject;
 import dev.crestoria.CrestoriaPlugin;
 import dev.crestoria.api.dto.ClanDto;
 import dev.crestoria.api.dto.InvitationDto;
+import dev.crestoria.util.Msg;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -61,22 +63,31 @@ public final class ClanCommand implements CommandExecutor {
     }
 
     private boolean showHelp(CommandSender sender) {
-        sender.sendMessage(Component.text("/clan <subcommand>", NamedTextColor.GOLD));
-        sender.sendMessage(Component.text("  create <TAG> <name>   create a clan", NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("  info [tag]            show clan info", NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("  list                  list all clans", NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("  leave                 leave your clan", NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("  kick <player>         kick a member (leader/deputy)", NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("  promote/demote <p>    change role (leader only)", NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("  transfer <player>     transfer leadership", NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("  color <#RRGGBB>       set clan colour", NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("  invite <player>       invite player to clan (leader/deputy)", NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("  accept [tag]          accept pending invite (omit tag to see list)", NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("  decline [tag]         decline pending invite", NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("  shield                stamp clan banner on shield in hand", NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("  panel                 open web management panel", NamedTextColor.GRAY));
-        sender.sendMessage(Component.text("  menu                  open the clan chest GUI", NamedTextColor.GRAY));
+        sender.sendMessage(Msg.prefix().append(Component.text("Clan commands",
+                Msg.ACCENT, net.kyori.adventure.text.format.TextDecoration.BOLD)));
+        helpLine(sender, "/clan create <TAG> <name>", "found a new clan");
+        helpLine(sender, "/clan info [tag]", "show clan details");
+        helpLine(sender, "/clan list", "browse every clan");
+        helpLine(sender, "/clan invite <player>", "invite someone  (leader/deputy)");
+        helpLine(sender, "/clan accept [tag]", "accept an invite");
+        helpLine(sender, "/clan decline [tag]", "decline an invite");
+        helpLine(sender, "/clan leave", "leave your clan");
+        helpLine(sender, "/clan kick <player>", "remove a member  (leader/deputy)");
+        helpLine(sender, "/clan promote|demote <p>", "change a role  (leader)");
+        helpLine(sender, "/clan transfer <player>", "hand over leadership");
+        helpLine(sender, "/clan color <#RRGGBB>", "set your clan colour");
+        helpLine(sender, "/clan shield", "stamp your banner on a held shield");
+        helpLine(sender, "/clan panel", "open the web panel");
+        helpLine(sender, "/clan menu", "open the clan chest");
         return true;
+    }
+
+    private void helpLine(CommandSender sender, String cmd, String desc) {
+        sender.sendMessage(Component.text()
+                .append(Component.text("  " + cmd, Msg.ACCENT))
+                .append(Component.text("  —  ", Msg.MUTE))
+                .append(Component.text(desc, Msg.INFO))
+                .build());
     }
 
     private boolean doMenu(CommandSender sender) {
@@ -88,16 +99,23 @@ public final class ClanCommand implements CommandExecutor {
 
     private Player requirePlayer(CommandSender sender) {
         if (sender instanceof Player p) return p;
-        sender.sendMessage(Component.text("Player only.", NamedTextColor.RED));
+        sender.sendMessage(Msg.err("Only players can use this command."));
         return null;
     }
 
     private ClanDto requireOwnClan(Player player) {
         ClanDto clan = plugin.getClanRepository().getByPlayer(player.getUniqueId()).orElse(null);
         if (clan == null) {
-            player.sendMessage(Component.text("You are not in a clan.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("You are not in a clan yet — use /clan create or accept an invite."));
         }
         return clan;
+    }
+
+    /** Standard async-failure reply: log the raw cause, show friendly chat. */
+    private void panelFail(Player player, Throwable err, String action) {
+        plugin.getLogger().warning("[clan] " + action + " failed for "
+                + player.getName() + ": " + msg(err));
+        player.sendMessage(Msg.err(Msg.friendly(msg(err))));
     }
 
     private boolean isLeader(ClanDto clan, UUID uuid) {
@@ -122,14 +140,13 @@ public final class ClanCommand implements CommandExecutor {
         Player player = requirePlayer(sender);
         if (player == null) return true;
         if (args.length < 3) {
-            player.sendMessage(Component.text("Usage: /clan create <TAG> <name…>", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Usage:  /clan create <TAG> <name>"));
             return true;
         }
         String tag = args[1].toUpperCase(Locale.ROOT);
         String name = String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length));
         if (!plugin.getPanelClient().isConfigured()) {
-            player.sendMessage(Component.text("Panel not linked. Ask an admin to run /clancape setup.",
-                    NamedTextColor.RED));
+            player.sendMessage(Msg.err("The server isn't linked to the panel yet — ask an admin."));
             return true;
         }
 
@@ -144,11 +161,9 @@ public final class ClanCommand implements CommandExecutor {
         plugin.getPanelClient().createClan(tag, name, player.getUniqueId(), player.getName(), null)
                 .whenComplete((dto, err) -> back(() -> {
                     if (err != null) {
-                        String reason = msg(err);
                         plugin.getLogger().warning("[clan-create] " + player.getName()
-                                + " tag=" + intendedTag + " FAILED: " + reason);
-                        player.sendMessage(Component.text("Could not create clan: " + reason,
-                                NamedTextColor.RED));
+                                + " tag=" + intendedTag + " FAILED: " + msg(err));
+                        player.sendMessage(Msg.err(Msg.friendly(msg(err))));
                         return;
                     }
                     String t = dto != null && dto.tag != null ? dto.tag : intendedTag;
@@ -156,8 +171,7 @@ public final class ClanCommand implements CommandExecutor {
                     plugin.getLogger().info("[clan-create] " + player.getName()
                             + " created [" + t + "] " + n
                             + (dto == null ? " (panel returned no clan object — verify)" : ""));
-                    player.sendMessage(Component.text("Clan [" + t + "] " + n + " created.",
-                            NamedTextColor.GREEN));
+                    player.sendMessage(Msg.okTag("Created clan ", t, "  " + n + " — you are the leader."));
                     plugin.getClanRepository().refresh();
                 }));
         return true;
@@ -169,7 +183,7 @@ public final class ClanCommand implements CommandExecutor {
         ClanDto clan = requireOwnClan(player);
         if (clan == null) return true;
         if (!isLeader(clan, player.getUniqueId())) {
-            player.sendMessage(Component.text("Only the leader can disband.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Only the leader can disband the clan."));
             return true;
         }
         final String tag = clan.tag;
@@ -177,12 +191,9 @@ public final class ClanCommand implements CommandExecutor {
         plugin.getPanelClient().deleteClan(tag, player.getUniqueId())
                 .whenComplete((res, err) -> back(() -> {
                     if (err != null) {
-                        player.sendMessage(Component.text(
-                                "Could not disband: " + msg(err), NamedTextColor.RED));
+                        panelFail(player, err, "disband");
                     } else {
-                        player.sendMessage(Component.text(
-                                "Clan [" + tag + "] " + name + " disbanded.",
-                                NamedTextColor.YELLOW));
+                        player.sendMessage(Msg.infoTag("Disbanded clan ", tag, "  " + name + "."));
                         plugin.getClanRepository().refresh();
                     }
                 }));
@@ -195,52 +206,54 @@ public final class ClanCommand implements CommandExecutor {
             clan = plugin.getClanRepository().getByTag(args[1]).orElse(null);
         } else {
             if (!(sender instanceof Player p)) {
-                sender.sendMessage(Component.text("Pass a tag: /clan info <TAG>", NamedTextColor.RED));
+                sender.sendMessage(Msg.err("Specify a tag:  /clan info <TAG>"));
                 return true;
             }
             clan = plugin.getClanRepository().getByPlayer(p.getUniqueId()).orElse(null);
         }
         if (clan == null) {
-            sender.sendMessage(Component.text("Clan not found.", NamedTextColor.RED));
+            sender.sendMessage(Msg.err("No clan with that tag."));
             return true;
         }
         TextColor color = parseColor(clan.colorHex);
-        sender.sendMessage(Component.text("[" + clan.tag + "] " + clan.name, color));
-        sender.sendMessage(Component.text("Members: "
-                + (clan.members == null ? 0 : clan.members.size()), NamedTextColor.GRAY));
+        sender.sendMessage(Msg.prefix()
+                .append(Component.text(clan.name, color, net.kyori.adventure.text.format.TextDecoration.BOLD))
+                .append(Component.text("  [" + clan.tag + "]", color)));
+        sender.sendMessage(Msg.line("  Members        ", Msg.MUTE)
+                .append(Component.text(String.valueOf(clan.members == null ? 0 : clan.members.size()), Msg.INFO)));
         if (clan.stats != null) {
-            sender.sendMessage(Component.text(
-                    "K/D: " + clan.stats.kills + "/" + clan.stats.deaths
-                            + " (" + String.format(Locale.ROOT, "%.2f", clan.stats.kd) + ")",
-                    NamedTextColor.GRAY));
+            sender.sendMessage(Msg.line("  Kills / Deaths ", Msg.MUTE)
+                    .append(Component.text(clan.stats.kills + " / " + clan.stats.deaths
+                            + "  (" + String.format(Locale.ROOT, "%.2f", clan.stats.kd) + " K/D)", Msg.INFO)));
         }
         // Friendly-fire status — surfaced only when the clan has explicitly
         // opted out, since the default-on case is the silent baseline.
         if (Boolean.FALSE.equals(clan.friendlyFire)) {
-            sender.sendMessage(Component.text(
-                    "Friendly fire: OFF (intra-clan damage blocked)", NamedTextColor.GRAY));
+            sender.sendMessage(Msg.line("  Friendly fire  ", Msg.MUTE)
+                    .append(Component.text("off — clanmates can't hurt each other", Msg.INFO)));
         }
-        // Pinned announcement, if any. Body is plain text capped at 500 chars
-        // server-side; render it as a single italic line under a header so
-        // long announcements wrap naturally in the vanilla chat box.
-        plugin.getAnnouncementRepository().get(clan.tag).ifPresent(a -> {
-            sender.sendMessage(Component.text("Announcement:", NamedTextColor.GOLD));
-            sender.sendMessage(Component.text("  " + a.body, NamedTextColor.WHITE));
-        });
+        // Pinned announcement, if any (rendered as a quoted accent line).
+        plugin.getAnnouncementRepository().get(clan.tag).ifPresent(a ->
+                sender.sendMessage(Msg.line("  “" + a.body + "”", Msg.ACCENT)));
         return true;
     }
 
     private boolean doList(CommandSender sender) {
         var clans = plugin.getClanRepository().all();
         if (clans.isEmpty()) {
-            sender.sendMessage(Component.text("No clans on this server.", NamedTextColor.GRAY));
+            sender.sendMessage(Msg.info("No clans yet — be the first with /clan create."));
             return true;
         }
-        sender.sendMessage(Component.text("Clans (" + clans.size() + "):", NamedTextColor.GOLD));
+        sender.sendMessage(Msg.prefix()
+                .append(Component.text("Clans ", Msg.ACCENT, net.kyori.adventure.text.format.TextDecoration.BOLD))
+                .append(Component.text("(" + clans.size() + ")", Msg.MUTE)));
         for (ClanDto c : clans) {
             int size = c.members == null ? 0 : c.members.size();
-            sender.sendMessage(Component.text("  [" + c.tag + "] " + c.name + " — " + size + " members",
-                    parseColor(c.colorHex)));
+            sender.sendMessage(Component.text()
+                    .append(Component.text("  [" + c.tag + "] ", parseColor(c.colorHex)))
+                    .append(Component.text(c.name, Msg.INFO))
+                    .append(Component.text("  ·  " + size + (size == 1 ? " member" : " members"), Msg.MUTE))
+                    .build());
         }
         return true;
     }
@@ -251,18 +264,15 @@ public final class ClanCommand implements CommandExecutor {
         ClanDto clan = requireOwnClan(player);
         if (clan == null) return true;
         if (isLeader(clan, player.getUniqueId())) {
-            player.sendMessage(Component.text(
-                    "Leader cannot leave. Transfer leadership first.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Leaders can't leave — transfer leadership first  (/clan transfer)."));
             return true;
         }
         plugin.getPanelClient().removeMember(clan.tag, player.getUniqueId(), player.getUniqueId())
                 .whenComplete((res, err) -> back(() -> {
                     if (err != null) {
-                        player.sendMessage(Component.text(
-                                "Could not leave: " + msg(err), NamedTextColor.RED));
+                        panelFail(player, err, "leave");
                     } else {
-                        player.sendMessage(Component.text("You left [" + clan.tag + "].",
-                                NamedTextColor.YELLOW));
+                        player.sendMessage(Msg.infoTag("You left ", clan.tag, "."));
                         plugin.getClanRepository().refresh();
                     }
                 }));
@@ -273,13 +283,13 @@ public final class ClanCommand implements CommandExecutor {
         Player player = requirePlayer(sender);
         if (player == null) return true;
         if (args.length < 2) {
-            player.sendMessage(Component.text("Usage: /clan kick <player>", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Usage:  /clan kick <player>"));
             return true;
         }
         ClanDto clan = requireOwnClan(player);
         if (clan == null) return true;
         if (!isLeaderOrDeputy(clan, player.getUniqueId())) {
-            player.sendMessage(Component.text("Only leader or deputy can kick.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Only the leader or a deputy can kick."));
             return true;
         }
         OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
@@ -288,18 +298,15 @@ public final class ClanCommand implements CommandExecutor {
         // seen the player. Gate on hasPlayedBefore() / isOnline() so a
         // typo can't kick a player who has never joined this server.
         if (!target.hasPlayedBefore() && !target.isOnline()) {
-            player.sendMessage(Component.text(
-                    "Unknown player — never seen on this server.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("That player has never joined this server."));
             return true;
         }
         plugin.getPanelClient().removeMember(clan.tag, target.getUniqueId(), player.getUniqueId())
                 .whenComplete((res, err) -> back(() -> {
                     if (err != null) {
-                        player.sendMessage(Component.text(
-                                "Could not kick: " + msg(err), NamedTextColor.RED));
+                        panelFail(player, err, "kick");
                     } else {
-                        player.sendMessage(Component.text("Kicked " + target.getName() + ".",
-                                NamedTextColor.YELLOW));
+                        player.sendMessage(Msg.info("Kicked " + target.getName() + " from the clan."));
                         plugin.getClanRepository().refresh();
                     }
                 }));
@@ -310,19 +317,18 @@ public final class ClanCommand implements CommandExecutor {
         Player player = requirePlayer(sender);
         if (player == null) return true;
         if (args.length < 2) {
-            player.sendMessage(Component.text("Usage: /clan promote|demote <player>", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Usage:  /clan promote|demote <player>"));
             return true;
         }
         ClanDto clan = requireOwnClan(player);
         if (clan == null) return true;
         if (!isLeader(clan, player.getUniqueId())) {
-            player.sendMessage(Component.text("Only the leader can change roles.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Only the leader can change roles."));
             return true;
         }
         OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
         if (!target.hasPlayedBefore() && !target.isOnline()) {
-            player.sendMessage(Component.text(
-                    "Unknown player — never seen on this server.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("That player has never joined this server."));
             return true;
         }
         UUID targetUuid = target.getUniqueId();
@@ -330,25 +336,21 @@ public final class ClanCommand implements CommandExecutor {
         // panel route would 400/409 anyway but echoing the rule locally
         // keeps the error message in the player's vocabulary.
         if (targetUuid.equals(player.getUniqueId())) {
-            player.sendMessage(Component.text(
-                    "Cannot change your own role.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("You can't change your own role."));
             return true;
         }
         if (!isMemberOfClan(clan, targetUuid)) {
-            player.sendMessage(Component.text(
-                    target.getName() + " is not in your clan.", NamedTextColor.RED));
+            player.sendMessage(Msg.err(target.getName() + " isn't in your clan."));
             return true;
         }
         final String targetName = target.getName() == null ? args[1] : target.getName();
         plugin.getPanelClient().updateMemberRole(clan.tag, targetUuid, role, player.getUniqueId())
                 .whenComplete((res, err) -> back(() -> {
                     if (err != null) {
-                        player.sendMessage(Component.text(
-                                "Could not update role: " + msg(err), NamedTextColor.RED));
+                        panelFail(player, err, "role-change");
                     } else {
-                        player.sendMessage(Component.text(
-                                targetName + " is now " + role + ".",
-                                NamedTextColor.GREEN));
+                        player.sendMessage(Msg.ok(targetName + " is now "
+                                + ("deputy".equals(role) ? "a deputy" : "a member") + "."));
                         plugin.getClanRepository().refresh();
                     }
                 }));
@@ -366,32 +368,29 @@ public final class ClanCommand implements CommandExecutor {
         Player player = requirePlayer(sender);
         if (player == null) return true;
         if (args.length < 2) {
-            player.sendMessage(Component.text("Usage: /clan transfer <player>", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Usage:  /clan transfer <player>"));
             return true;
         }
         ClanDto clan = requireOwnClan(player);
         if (clan == null) return true;
         if (!isLeader(clan, player.getUniqueId())) {
-            player.sendMessage(Component.text("Only the leader can transfer.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Only the leader can transfer leadership."));
             return true;
         }
         OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
         // See kick() — OfflinePlayer.getUniqueId() never returns null.
         if (!target.hasPlayedBefore() && !target.isOnline()) {
-            player.sendMessage(Component.text(
-                    "Unknown player — never seen on this server.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("That player has never joined this server."));
             return true;
         }
         UUID targetUuid = target.getUniqueId();
         plugin.getPanelClient().transferLeadership(clan.tag, targetUuid, player.getUniqueId())
                 .whenComplete((res, err) -> back(() -> {
                     if (err != null) {
-                        player.sendMessage(Component.text(
-                                "Could not transfer: " + msg(err), NamedTextColor.RED));
+                        panelFail(player, err, "transfer");
                     } else {
-                        player.sendMessage(Component.text(
-                                "Leadership transferred to " + target.getName() + ".",
-                                NamedTextColor.GREEN));
+                        player.sendMessage(Msg.ok(
+                                "Leadership transferred to " + target.getName() + "."));
                         plugin.getClanRepository().refresh();
                     }
                 }));
@@ -405,21 +404,18 @@ public final class ClanCommand implements CommandExecutor {
         Player player = requirePlayer(sender);
         if (player == null) return true;
         if (args.length < 2) {
-            player.sendMessage(Component.text(
-                    "Usage: /clan color <#RRGGBB>", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Usage:  /clan color <#RRGGBB>"));
             return true;
         }
         ClanDto clan = requireOwnClan(player);
         if (clan == null) return true;
         if (!isLeaderOrDeputy(clan, player.getUniqueId())) {
-            player.sendMessage(Component.text(
-                    "Only leader or deputy can change the clan colour.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Only the leader or a deputy can change the clan colour."));
             return true;
         }
         String raw = args[1].trim();
         if (!HEX_RE.matcher(raw).matches()) {
-            player.sendMessage(Component.text(
-                    "Colour must look like #RRGGBB (e.g. #ff8800).", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Colour must look like #RRGGBB — e.g. #ff8800."));
             return true;
         }
         // Normalise to upper-case with the leading '#' so the panel
@@ -428,11 +424,9 @@ public final class ClanCommand implements CommandExecutor {
         plugin.getPanelClient().updateClan(clan.tag, null, hex, player.getUniqueId())
                 .whenComplete((res, err) -> back(() -> {
                     if (err != null) {
-                        player.sendMessage(Component.text(
-                                "Could not update colour: " + msg(err), NamedTextColor.RED));
+                        panelFail(player, err, "colour-change");
                     } else {
-                        player.sendMessage(Component.text(
-                                "Clan colour set to " + hex + ".", NamedTextColor.GREEN));
+                        player.sendMessage(Msg.ok("Clan colour set to " + hex + "."));
                         plugin.getClanRepository().refresh();
                     }
                 }));
@@ -443,24 +437,21 @@ public final class ClanCommand implements CommandExecutor {
         Player player = requirePlayer(sender);
         if (player == null) return true;
         if (!plugin.getPanelClient().isConfigured()) {
-            player.sendMessage(Component.text("Panel not linked.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("The server isn't linked to the panel — ask an admin."));
             return true;
         }
         ClanDto clan = requireOwnClan(player);
         if (clan == null) return true;
         if (!isLeaderOrDeputy(clan, player.getUniqueId())) {
-            player.sendMessage(Component.text(
-                    "Only leader or deputy can open the panel.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Only the leader or a deputy can open the panel."));
             return true;
         }
         int ttl = plugin.getConfig().getInt("leader-panel.token-ttl-sec", 600);
         plugin.getPanelClient().issueLeaderToken(player.getUniqueId(), ttl)
                 .whenComplete((JsonObject json, Throwable err) -> back(() -> {
                     if (err != null || json == null) {
-                        player.sendMessage(Component.text(
-                                "Could not issue panel link: "
-                                        + (err == null ? "unknown" : msg(err)),
-                                NamedTextColor.RED));
+                        if (err != null) panelFail(player, err, "panel-link");
+                        else player.sendMessage(Msg.err("Could not create a panel link — try again."));
                         return;
                     }
                     String url = json.has("url") && !json.get("url").isJsonNull()
@@ -468,27 +459,24 @@ public final class ClanCommand implements CommandExecutor {
                             : null;
                     String token = json.has("token") ? json.get("token").getAsString() : null;
                     if (url != null) {
-                        player.sendMessage(Component.text(
-                                "Open your clan panel (valid " + (ttl / 60) + " min):",
-                                NamedTextColor.GOLD));
+                        player.sendMessage(Msg.info(
+                                "Open your clan panel — valid for " + (ttl / 60) + " min:"));
                         // Click → open browser. Shift-click would normally paste
                         // the URL into chat (vanilla behaviour), so we also wire
                         // a hover hint pointing at the action.
-                        player.sendMessage(Component.text(url, NamedTextColor.AQUA)
-                                .clickEvent(ClickEvent.openUrl(url))
-                                .hoverEvent(HoverEvent.showText(Component.text(
-                                        "Click to open in browser",
-                                        NamedTextColor.GRAY))));
+                        player.sendMessage(Component.text("  ", Msg.MUTE)
+                                .append(Component.text(url, Msg.LINK)
+                                        .clickEvent(ClickEvent.openUrl(url))
+                                        .hoverEvent(HoverEvent.showText(Component.text(
+                                                "Click to open in your browser", Msg.MUTE)))));
                     } else if (token != null) {
-                        player.sendMessage(Component.text(
-                                "Token (click to copy — paste at /clan-panel):",
-                                NamedTextColor.GOLD));
+                        player.sendMessage(Msg.info(
+                                "Your panel token (click to copy — paste at /clan-panel):"));
                         final String t = token;
-                        player.sendMessage(Component.text(t, NamedTextColor.YELLOW)
+                        player.sendMessage(Component.text("  " + t, Msg.LINK)
                                 .clickEvent(ClickEvent.copyToClipboard(t))
                                 .hoverEvent(HoverEvent.showText(Component.text(
-                                        "Click to copy token",
-                                        NamedTextColor.GRAY))));
+                                        "Click to copy", Msg.MUTE))));
                     }
                 }));
         return true;
@@ -525,8 +513,7 @@ public final class ClanCommand implements CommandExecutor {
         // immediately instead of waiting for the ~5-minute background
         // refresh (the "old banner got applied" report). The HTTP refresh
         // is async; hop back to the main thread to touch the inventory.
-        player.sendMessage(Component.text(
-                "Fetching latest [" + clan.tag + "] banner…", NamedTextColor.GRAY));
+        player.sendMessage(Msg.infoTag("Fetching the latest ", clan.tag, " banner…"));
         final String tag = clan.tag;
         plugin.getBannerRepository().refresh().whenComplete((v, err) ->
                 plugin.getServer().getScheduler().runTask(plugin,
@@ -539,9 +526,8 @@ public final class ClanCommand implements CommandExecutor {
         if (!player.isOnline()) return;
         var bannerOpt = plugin.getBannerRepository().get(clanTag);
         if (bannerOpt.isEmpty()) {
-            player.sendMessage(Component.text(
-                    "Clan [" + clanTag + "] has no banner yet. Ask an admin to design one in /dashboard/banners.",
-                    NamedTextColor.RED));
+            player.sendMessage(Msg.errTag("Clan ", clanTag,
+                    " has no banner yet — ask an admin to design one."));
             return;
         }
         org.bukkit.inventory.PlayerInventory inv = player.getInventory();
@@ -550,8 +536,7 @@ public final class ClanCommand implements CommandExecutor {
         boolean mainIsShield = main != null && main.getType() == org.bukkit.Material.SHIELD;
         boolean offIsShield = off != null && off.getType() == org.bukkit.Material.SHIELD;
         if (!mainIsShield && !offIsShield) {
-            player.sendMessage(Component.text(
-                    "Hold a shield (main or off hand) to brand it.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Hold a shield in your main or off hand to brand it."));
             return;
         }
         // Force the rewrite by clearing the marker first — the stamper
@@ -569,11 +554,9 @@ public final class ClanCommand implements CommandExecutor {
             inv.setItemInOffHand(off);
         }
         if (stamped) {
-            player.sendMessage(Component.text(
-                    "Shield branded with [" + clanTag + "] banner.", NamedTextColor.GREEN));
+            player.sendMessage(Msg.okTag("Shield branded with the ", clanTag, " banner."));
         } else {
-            player.sendMessage(Component.text(
-                    "Could not stamp shield (Paper API drift?).", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Couldn't brand the shield — try again."));
         }
     }
 
@@ -605,31 +588,27 @@ public final class ClanCommand implements CommandExecutor {
         Player player = requirePlayer(sender);
         if (player == null) return true;
         if (args.length < 2) {
-            player.sendMessage(Component.text("Usage: /clan invite <player>", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Usage:  /clan invite <player>"));
             return true;
         }
         ClanDto clan = requireOwnClan(player);
         if (clan == null) return true;
         if (!isLeaderOrDeputy(clan, player.getUniqueId())) {
-            player.sendMessage(Component.text(
-                    "Only leader or deputy can invite.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("Only the leader or a deputy can invite."));
             return true;
         }
         OfflinePlayer target = Bukkit.getOfflinePlayer(args[1]);
         if (!target.hasPlayedBefore() && !target.isOnline()) {
-            player.sendMessage(Component.text(
-                    "Unknown player — never seen on this server.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("That player has never joined this server."));
             return true;
         }
         UUID targetUuid = target.getUniqueId();
         if (targetUuid.equals(player.getUniqueId())) {
-            player.sendMessage(Component.text(
-                    "Cannot invite yourself.", NamedTextColor.RED));
+            player.sendMessage(Msg.err("You can't invite yourself."));
             return true;
         }
         if (isMemberOfClan(clan, targetUuid)) {
-            player.sendMessage(Component.text(
-                    target.getName() + " is already in your clan.", NamedTextColor.RED));
+            player.sendMessage(Msg.err(target.getName() + " is already in your clan."));
             return true;
         }
         final String targetName = target.getName() == null ? args[1] : target.getName();
@@ -638,15 +617,12 @@ public final class ClanCommand implements CommandExecutor {
                 .createInvite(clan.tag, targetUuid, targetName, player.getUniqueId(), ttl)
                 .whenComplete((invite, err) -> back(() -> {
                     if (err != null || invite == null) {
-                        player.sendMessage(Component.text(
-                                "Could not invite: " + (err == null ? "unknown" : msg(err)),
-                                NamedTextColor.RED));
+                        if (err != null) panelFail(player, err, "invite");
+                        else player.sendMessage(Msg.err("Couldn't send the invite — try again."));
                         return;
                     }
-                    player.sendMessage(Component.text(
-                            "Invited " + targetName + " to [" + clan.tag + "]. "
-                                    + "Expires in " + (ttl / 60) + " min.",
-                            NamedTextColor.GREEN));
+                    player.sendMessage(Msg.okTag("Invited " + targetName + " to ", clan.tag,
+                            " — expires in " + (ttl / 60) + " min."));
                     Player invitee = Bukkit.getPlayer(targetUuid);
                     if (invitee != null && invitee.isOnline()) {
                         notifyInvitee(invitee, invite);
@@ -660,19 +636,23 @@ public final class ClanCommand implements CommandExecutor {
      * decline hints save them the typing.
      */
     private static void notifyInvitee(Player invitee, InvitationDto invite) {
-        invitee.sendMessage(Component.text(
-                "You have been invited to clan [" + invite.clanTag + "] " + invite.clanName + ".",
-                NamedTextColor.GOLD));
-        Component accept = Component.text("[Accept]", NamedTextColor.GREEN)
-                .clickEvent(ClickEvent.runCommand("/clan accept " + invite.clanTag))
-                .hoverEvent(HoverEvent.showText(Component.text(
-                        "Click to join [" + invite.clanTag + "]", NamedTextColor.GRAY)));
-        Component decline = Component.text("[Decline]", NamedTextColor.RED)
-                .clickEvent(ClickEvent.runCommand("/clan decline " + invite.clanTag))
-                .hoverEvent(HoverEvent.showText(Component.text(
-                        "Click to reject the invitation", NamedTextColor.GRAY)));
-        invitee.sendMessage(Component.text("  ", NamedTextColor.GRAY)
-                .append(accept).append(Component.text("  ", NamedTextColor.GRAY)).append(decline));
+        invitee.sendMessage(Msg.infoTag("You've been invited to ", invite.clanTag,
+                " " + invite.clanName + "."));
+        invitee.sendMessage(inviteButtons(invite.clanTag));
+    }
+
+    /** Clickable "  [Accept]   [Decline]" row for one invitation tag. */
+    private static Component inviteButtons(String clanTag) {
+        Component accept = Component.text("[Accept]", Msg.OK, TextDecoration.BOLD)
+                .clickEvent(ClickEvent.runCommand("/clan accept " + clanTag))
+                .hoverEvent(HoverEvent.showText(
+                        Component.text("Click to join " + clanTag, Msg.MUTE)));
+        Component decline = Component.text("[Decline]", Msg.ERR, TextDecoration.BOLD)
+                .clickEvent(ClickEvent.runCommand("/clan decline " + clanTag))
+                .hoverEvent(HoverEvent.showText(
+                        Component.text("Click to decline", Msg.MUTE)));
+        return Component.text("  ", Msg.MUTE).append(accept)
+                .append(Component.text("   ", Msg.MUTE)).append(decline);
     }
 
     /**
@@ -685,21 +665,18 @@ public final class ClanCommand implements CommandExecutor {
         if (player == null) return true;
         ClanDto existing = plugin.getClanRepository().getByPlayer(player.getUniqueId()).orElse(null);
         if (existing != null) {
-            player.sendMessage(Component.text(
-                    "You are already in [" + existing.tag + "]. /clan leave first.",
-                    NamedTextColor.RED));
+            player.sendMessage(Msg.errTag("You're already in ", existing.tag,
+                    " — use /clan leave first."));
             return true;
         }
         plugin.getPanelClient().listPlayerInvites(player.getUniqueId())
                 .whenComplete((invites, err) -> back(() -> {
                     if (err != null) {
-                        player.sendMessage(Component.text(
-                                "Could not load invites: " + msg(err), NamedTextColor.RED));
+                        panelFail(player, err, "load-invites");
                         return;
                     }
                     if (invites == null || invites.isEmpty()) {
-                        player.sendMessage(Component.text(
-                                "You have no pending invitations.", NamedTextColor.GRAY));
+                        player.sendMessage(Msg.info("You have no pending invitations."));
                         return;
                     }
                     if (args.length < 2) {
@@ -711,9 +688,7 @@ public final class ClanCommand implements CommandExecutor {
                             .filter(i -> i.clanTag != null && i.clanTag.equalsIgnoreCase(wanted))
                             .findFirst().orElse(null);
                     if (match == null) {
-                        player.sendMessage(Component.text(
-                                "No pending invitation from [" + wanted + "].",
-                                NamedTextColor.RED));
+                        player.sendMessage(Msg.errTag("No pending invitation from ", wanted, "."));
                         renderInviteList(player, invites);
                         return;
                     }
@@ -721,13 +696,11 @@ public final class ClanCommand implements CommandExecutor {
                             .acceptInvite(match.id, player.getUniqueId(), player.getName())
                             .whenComplete((res, e2) -> back(() -> {
                                 if (e2 != null) {
-                                    player.sendMessage(Component.text(
-                                            "Could not accept: " + msg(e2), NamedTextColor.RED));
+                                    panelFail(player, e2, "accept-invite");
                                     return;
                                 }
-                                player.sendMessage(Component.text(
-                                        "Joined clan [" + match.clanTag + "] "
-                                                + match.clanName + ".", NamedTextColor.GREEN));
+                                player.sendMessage(Msg.okTag("You joined ", match.clanTag,
+                                        " " + match.clanName + "."));
                                 plugin.getClanRepository().refresh();
                             }));
                 }));
@@ -744,13 +717,11 @@ public final class ClanCommand implements CommandExecutor {
         plugin.getPanelClient().listPlayerInvites(player.getUniqueId())
                 .whenComplete((invites, err) -> back(() -> {
                     if (err != null) {
-                        player.sendMessage(Component.text(
-                                "Could not load invites: " + msg(err), NamedTextColor.RED));
+                        panelFail(player, err, "load-invites");
                         return;
                     }
                     if (invites == null || invites.isEmpty()) {
-                        player.sendMessage(Component.text(
-                                "You have no pending invitations.", NamedTextColor.GRAY));
+                        player.sendMessage(Msg.info("You have no pending invitations."));
                         return;
                     }
                     if (args.length < 2) {
@@ -762,22 +733,18 @@ public final class ClanCommand implements CommandExecutor {
                             .filter(i -> i.clanTag != null && i.clanTag.equalsIgnoreCase(wanted))
                             .findFirst().orElse(null);
                     if (match == null) {
-                        player.sendMessage(Component.text(
-                                "No pending invitation from [" + wanted + "].",
-                                NamedTextColor.RED));
+                        player.sendMessage(Msg.errTag("No pending invitation from ", wanted, "."));
                         renderInviteList(player, invites);
                         return;
                     }
                     plugin.getPanelClient().declineInvite(match.id, player.getUniqueId())
                             .whenComplete((res, e2) -> back(() -> {
                                 if (e2 != null) {
-                                    player.sendMessage(Component.text(
-                                            "Could not decline: " + msg(e2), NamedTextColor.RED));
+                                    panelFail(player, e2, "decline-invite");
                                     return;
                                 }
-                                player.sendMessage(Component.text(
-                                        "Declined invitation from [" + match.clanTag + "].",
-                                        NamedTextColor.YELLOW));
+                                player.sendMessage(Msg.infoTag("Declined the invitation from ",
+                                        match.clanTag, "."));
                             }));
                 }));
         return true;
@@ -789,20 +756,12 @@ public final class ClanCommand implements CommandExecutor {
      * called without a tag, and by the on-join listener.
      */
     private static void renderInviteList(Player player, java.util.List<InvitationDto> invites) {
-        player.sendMessage(Component.text(
-                "Pending invitations (" + invites.size() + "):", NamedTextColor.GOLD));
+        player.sendMessage(Msg.info("Pending invitations (" + invites.size() + "):"));
         for (InvitationDto i : invites) {
-            Component accept = Component.text("[Accept]", NamedTextColor.GREEN)
-                    .clickEvent(ClickEvent.runCommand("/clan accept " + i.clanTag))
-                    .hoverEvent(HoverEvent.showText(Component.text(
-                            "Click to join [" + i.clanTag + "]", NamedTextColor.GRAY)));
-            Component decline = Component.text("[Decline]", NamedTextColor.RED)
-                    .clickEvent(ClickEvent.runCommand("/clan decline " + i.clanTag))
-                    .hoverEvent(HoverEvent.showText(Component.text(
-                            "Click to reject", NamedTextColor.GRAY)));
-            player.sendMessage(Component.text(
-                    "  [" + i.clanTag + "] " + i.clanName + "  ", NamedTextColor.GRAY)
-                    .append(accept).append(Component.text(" ", NamedTextColor.GRAY)).append(decline));
+            player.sendMessage(Component.text("  ")
+                    .append(Msg.tag(i.clanTag))
+                    .append(Component.text(" " + i.clanName, Msg.INFO))
+                    .append(inviteButtons(i.clanTag)));
         }
     }
 

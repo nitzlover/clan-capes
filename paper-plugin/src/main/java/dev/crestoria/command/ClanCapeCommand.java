@@ -2,10 +2,10 @@ package dev.crestoria.command;
 
 import com.google.gson.Gson;
 import dev.crestoria.CrestoriaPlugin;
+import dev.crestoria.util.Msg;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -44,12 +44,11 @@ public final class ClanCapeCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("clancapes.cape.admin")) {
-            sender.sendMessage(Component.text("No permission.", NamedTextColor.RED));
+            sender.sendMessage(Msg.err("You don't have permission to use this command."));
             return true;
         }
         if (args.length == 0) {
-            sender.sendMessage(Component.text(
-                    "Usage: /clancape <setup|link|reload|event|debug>", NamedTextColor.RED));
+            sender.sendMessage(Msg.err("Usage:  /clancape <setup|link|reload|event|debug>"));
             return true;
         }
         String sub = args[0].toLowerCase(java.util.Locale.ROOT);
@@ -60,9 +59,8 @@ public final class ClanCapeCommand implements CommandExecutor {
             case "event" -> doEvent(sender, args);
             case "debug" -> doDebug(sender, args);
             default -> {
-                sender.sendMessage(Component.text(
-                        "Unknown subcommand. Use setup, link, reload, event, or debug.",
-                        NamedTextColor.RED));
+                sender.sendMessage(Msg.err(
+                        "Unknown subcommand — use setup, link, reload, event, or debug."));
                 yield true;
             }
         };
@@ -83,44 +81,33 @@ public final class ClanCapeCommand implements CommandExecutor {
     private boolean doEvent(CommandSender sender, String[] args) {
         var sched = plugin.getEventScheduler();
         if (sched == null) {
-            sender.sendMessage(Component.text("Event scheduler not initialised.", NamedTextColor.RED));
+            sender.sendMessage(Msg.err("The event scheduler isn't ready yet."));
             return true;
         }
         if (args.length < 2) {
-            sender.sendMessage(Component.text(
-                    "Usage: /clancape event <start <airdrop|koth|random>|stop|status|reset>",
-                    NamedTextColor.RED));
+            sender.sendMessage(Msg.err(
+                    "Usage:  /clancape event <start <airdrop|koth|random>|stop|status|reset>"));
             return true;
         }
         String action = args[1].toLowerCase(java.util.Locale.ROOT);
         switch (action) {
             case "start" -> {
                 if (args.length < 3) {
-                    sender.sendMessage(Component.text(
-                            "Usage: /clancape event start <airdrop|koth|random>",
-                            NamedTextColor.RED));
+                    sender.sendMessage(Msg.err("Usage:  /clancape event start <airdrop|koth|random>"));
                     return true;
                 }
-                String msg = sched.forceStart(args[2]);
-                sender.sendMessage(Component.text("[event] " + msg, NamedTextColor.GREEN));
+                sender.sendMessage(Msg.okTag("", "event", " " + sched.forceStart(args[2])));
             }
-            case "stop" -> {
-                String msg = sched.stopActive();
-                sender.sendMessage(Component.text("[event] " + msg, NamedTextColor.GOLD));
-            }
+            case "stop" -> sender.sendMessage(Msg.infoTag("", "event", " " + sched.stopActive()));
             case "status" -> {
                 String snap = sched.describeStatus();
                 for (String line : snap.split("\n")) {
-                    sender.sendMessage(Component.text(line, NamedTextColor.GRAY));
+                    sender.sendMessage(Msg.line("  " + line, Msg.MUTE));
                 }
             }
-            case "reset" -> {
-                String msg = sched.clearCooldowns();
-                sender.sendMessage(Component.text("[event] " + msg, NamedTextColor.GOLD));
-            }
-            default -> sender.sendMessage(Component.text(
-                    "Unknown event action '" + action + "'. Use start, stop, status, or reset.",
-                    NamedTextColor.RED));
+            case "reset" -> sender.sendMessage(Msg.infoTag("", "event", " " + sched.clearCooldowns()));
+            default -> sender.sendMessage(Msg.err(
+                    "Unknown action '" + action + "' — use start, stop, status, or reset."));
         }
         return true;
     }
@@ -131,8 +118,7 @@ public final class ClanCapeCommand implements CommandExecutor {
      */
     private boolean doDebug(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(Component.text(
-                    "Usage: /clancape debug <on|off|status>", NamedTextColor.RED));
+            sender.sendMessage(Msg.err("Usage:  /clancape debug <on|off|status>"));
             return true;
         }
         String mode = args[1].toLowerCase(java.util.Locale.ROOT);
@@ -141,27 +127,20 @@ public final class ClanCapeCommand implements CommandExecutor {
                 plugin.getConfig().set("logging.debug", true);
                 plugin.saveConfig();
                 plugin.reloadFromConfig();
-                sender.sendMessage(Component.text(
-                        "[debug] ON — verbose HTTP/refresh/event logs enabled.",
-                        NamedTextColor.GREEN));
+                sender.sendMessage(Msg.okTag("", "debug", " on — verbose logs enabled."));
             }
             case "off" -> {
                 plugin.getConfig().set("logging.debug", false);
                 plugin.saveConfig();
                 plugin.reloadFromConfig();
-                sender.sendMessage(Component.text(
-                        "[debug] OFF — back to warnings only.",
-                        NamedTextColor.GOLD));
+                sender.sendMessage(Msg.infoTag("", "debug", " off — warnings only."));
             }
             case "status" -> {
                 boolean on = plugin.getConfig().getBoolean("logging.debug", false);
-                sender.sendMessage(Component.text(
-                        "[debug] currently " + (on ? "ON" : "OFF"),
-                        NamedTextColor.GRAY));
+                sender.sendMessage(Msg.infoTag("", "debug", " is currently " + (on ? "on" : "off") + "."));
             }
-            default -> sender.sendMessage(Component.text(
-                    "Unknown debug mode '" + mode + "'. Use on, off, or status.",
-                    NamedTextColor.RED));
+            default -> sender.sendMessage(Msg.err(
+                    "Unknown mode '" + mode + "' — use on, off, or status."));
         }
         return true;
     }
@@ -169,8 +148,7 @@ public final class ClanCapeCommand implements CommandExecutor {
     private boolean doSetup(CommandSender sender, String[] args) {
         String panelUrl = plugin.getConfig().getString("panel.url", "").trim();
         if (panelUrl.isEmpty()) {
-            sender.sendMessage(Component.text("Set panel.url in config.yml first.",
-                    NamedTextColor.RED));
+            sender.sendMessage(Msg.err("Set panel.url in config.yml first."));
             return true;
         }
         String serverName = args.length >= 2
@@ -209,35 +187,29 @@ public final class ClanCapeCommand implements CommandExecutor {
                         // clickable component now shows a placeholder
                         // label; the token lives only in the click-event
                         // payload that the player's client copies locally.
-                        sender.sendMessage(Component.text(
-                                "Setup token issued. Click here to copy it, then paste into /dashboard/servers (valid 15 min):",
-                                NamedTextColor.GREEN));
-                        sender.sendMessage(Component.text(
-                                "  [ Click to copy setup token ]", NamedTextColor.YELLOW)
-                                .clickEvent(ClickEvent.copyToClipboard(token))
-                                .hoverEvent(HoverEvent.showText(Component.text(
-                                        "Click to copy setup_… token to clipboard",
-                                        NamedTextColor.GRAY))));
-                        String linkHint = "/clancape link <api-key-from-panel>";
-                        sender.sendMessage(Component.text(
-                                "Then click here to prefill: ", NamedTextColor.GRAY)
-                                .append(Component.text(linkHint, NamedTextColor.AQUA)
-                                        .clickEvent(ClickEvent.suggestCommand(
-                                                "/clancape link "))
+                        sender.sendMessage(Msg.ok(
+                                "Setup token ready — click to copy, then paste it into the panel (valid 15 min):"));
+                        sender.sendMessage(Component.text("  ", Msg.MUTE).append(
+                                Msg.button("Copy setup token",
+                                        ClickEvent.copyToClipboard(token),
+                                        "Click to copy the token to your clipboard")));
+                        sender.sendMessage(Msg.prefix()
+                                .append(Component.text("Then click to prefill: ", Msg.INFO))
+                                .append(Component.text("/clancape link …", Msg.LINK)
+                                        .clickEvent(ClickEvent.suggestCommand("/clancape link "))
                                         .hoverEvent(HoverEvent.showText(Component.text(
-                                                "Click to open chat prefilled with the link command",
-                                                NamedTextColor.GRAY)))));
+                                                "Opens chat prefilled with the link command",
+                                                Msg.MUTE)))));
                     } else {
-                        sender.sendMessage(Component.text(
-                                "Panel rejected setup: " + res.statusCode() + " " + res.body(),
-                                NamedTextColor.RED));
+                        sender.sendMessage(Msg.err(
+                                "The panel rejected the setup request (HTTP " + res.statusCode()
+                                        + ") — check panel.url and try again."));
                     }
                 }))
                 .exceptionally(t -> {
                     plugin.getServer().getScheduler().runTask(plugin, () ->
-                            sender.sendMessage(Component.text(
-                                    "Panel unreachable: " + t.getMessage(),
-                                    NamedTextColor.RED)));
+                            sender.sendMessage(Msg.err(
+                                    "Couldn't reach the panel — check panel.url and the network.")));
                     return null;
                 });
         return true;
@@ -245,27 +217,26 @@ public final class ClanCapeCommand implements CommandExecutor {
 
     private boolean doLink(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(Component.text("Usage: /clancape link <api-key>", NamedTextColor.RED));
+            sender.sendMessage(Msg.err("Usage:  /clancape link <api-key>"));
             return true;
         }
         String apiKey = args[1].trim();
         if (apiKey.isEmpty()) {
-            sender.sendMessage(Component.text("API key must not be empty.", NamedTextColor.RED));
+            sender.sendMessage(Msg.err("The key can't be empty — copy it from the panel."));
             return true;
         }
         plugin.getConfig().set("panel.api-key", apiKey);
         plugin.saveConfig();
         plugin.reloadFromConfig();
-        sender.sendMessage(Component.text("Panel linked. Caches refreshing.", NamedTextColor.GREEN));
+        sender.sendMessage(Msg.ok("Panel linked — refreshing caches."));
         return true;
     }
 
     private boolean doReload(CommandSender sender) {
         plugin.reloadConfig();
         plugin.reloadFromConfig();
-        sender.sendMessage(Component.text(
-                "Plugin reloaded (config.yml only — plugin.yml requires server restart).",
-                NamedTextColor.GREEN));
+        sender.sendMessage(Msg.ok(
+                "Reloaded config.yml.  (plugin.yml changes still need a server restart.)"));
         return true;
     }
 
