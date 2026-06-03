@@ -159,7 +159,7 @@ function Sidebar({
         </div>
         <div className="min-w-0">
           <p className="font-sans text-base font-semibold lowercase leading-none tracking-tight text-white">
-            clan / capes
+            crestoria
           </p>
           <p className="mt-1 font-sans text-[11px] font-medium lowercase tracking-tight text-[var(--text-faint)]">
             admin

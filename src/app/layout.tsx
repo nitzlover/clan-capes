@@ -5,8 +5,8 @@ import { ToastProvider } from '@/components/Toast';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Clan Capes',
-  description: 'Admin panel for the Minecraft clan capes plugin.',
+  title: 'Crestoria',
+  description: 'Admin panel for the Crestoria clan system.',
 };
 
 /**
