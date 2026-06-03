@@ -144,8 +144,13 @@ export function serverQueryString(
   extra: Record<string, string | number | undefined> = {},
 ): string {
   const params = new URLSearchParams();
-  if (value === 'all') params.set('server', 'all');
-  else if (typeof value === 'number') params.set('server', String(value));
+  // Key MUST be `serverId` — every /api/panel resolver reads
+  // searchParams.get('serverId'). `server` was a DEAD key: nothing read
+  // it, so the request silently fell back to the newest server. That is
+  // why cape upload/roster hit the wrong tenant ("clan not found on this
+  // server" even though the picker — which uses ?serverId — showed it).
+  if (value === 'all') params.set('serverId', 'all');
+  else if (typeof value === 'number') params.set('serverId', String(value));
   for (const [k, v] of Object.entries(extra)) {
     if (v === undefined) continue;
     params.set(k, String(v));

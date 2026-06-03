@@ -21,7 +21,7 @@ import fs from 'node:fs/promises';
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/server/auth';
 import { validateAndNormalizePng } from '@/lib/server/capeValidate';
-import { getClanByTag } from '@/lib/server/clan-repo';
+import { getClanByTag, listClansForServer } from '@/lib/server/clan-repo';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import { CDN_PUBLIC_URL, MAX_UPLOAD_KB } from '@/lib/server/env';
 import { capeFilePath, ensureDirs } from '@/lib/server/storage';
@@ -86,10 +86,27 @@ export async function POST(req: Request, ctx: { params: Promise<{ tag: string }>
   if (!serverId) {
     return NextResponse.json({ error: 'no servers registered' }, { status: 409 });
   }
+  console.info(`[cape] upload: tag="${tag}" resolved serverId=${serverId}`);
   const clan = await getClanByTag(serverId, tag);
   if (!clan) {
+    // A "not found" that contradicts the dashboard list almost always
+    // means the request resolved a different server than the picker.
+    // Surface the resolved server + the tags that DO live there — in the
+    // log and the JSON — so the mismatch is diagnosable at a glance.
+    let tagsOnServer: string[] = [];
+    try {
+      tagsOnServer = (await listClansForServer(serverId)).map((c) => c.tag);
+    } catch {
+      /* best-effort diagnostic */
+    }
+    console.warn(
+      `[cape] 404: tag="${tag}" absent on serverId=${serverId}; active tags there=[${tagsOnServer.join(', ')}]`,
+    );
     return NextResponse.json(
-      { error: `clan tag "${tag}" not found on this server — create it first` },
+      {
+        error: `clan tag "${tag}" not found on this server — create it first`,
+        debug: { serverId, requestedTag: tag, tagsOnServer },
+      },
       { status: 404 },
     );
   }
