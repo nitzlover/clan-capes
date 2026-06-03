@@ -284,6 +284,64 @@ export function normalizeSpec(spec: BannerSpec): BannerSpec {
 }
 
 /**
+ * Modern key → the basename of its FLAT 20×40 alpha mask under
+ * `/public/banner/patterns/<code>.png`. These are the only correctly-sized
+ * masks for CSS `mask-image` previews; the `/mc/shield-patterns/*` set is
+ * 64×64 shield-entity textures (pattern in a sub-region) and renders as a
+ * tiny shield in the corner when used as a flat mask. A handful of keys
+ * have no dedicated flat PNG and borrow a visually-similar one.
+ */
+export const KEY_TO_MASK_CODE: Record<string, string> = {
+  border: 'bo',
+  bricks: 'bri',
+  triangle_bottom: 'bt',
+  triangles_bottom: 'bts',
+  curly_border: 'cbo',
+  cross: 'cr',
+  creeper: 'cre',
+  stripe_center: 'cs',
+  diagonal_left: 'dls',
+  diagonal_right: 'drs',
+  flower: 'flo',
+  globe: 'glb',
+  gradient: 'gra',
+  gradient_up: 'gru',
+  half_horizontal: 'hh',
+  half_horizontal_bottom: 'hhb',
+  diagonal_up_left: 'ld',
+  mojang: 'mc',
+  rhombus: 'mr',
+  stripe_downright: 'ms',
+  stripe_middle: 'msb',
+  small_stripes: 'mss',
+  diagonal_up_right: 'rud',
+  stripe_right: 'rs',
+  square_top_left: 'sc',
+  skull: 'sku',
+  straight_cross: 'ss',
+  stripe_top: 'tl',
+  triangle_top: 'tr',
+  stripe_left: 'ts',
+  triangles_top: 'tts',
+  // No dedicated flat mask — borrow a visually-similar one.
+  flow: 'flo',
+  guster: 'cra',
+  piglin: 'mc',
+  half_vertical: 'hh',
+  half_vertical_right: 'hhb',
+};
+
+/**
+ * Resolve any stored / inbound pattern id (modern key OR a legacy project
+ * code) to the flat-mask basename for the editor/preview, or null when the
+ * pattern has no renderable mask (the layer is then skipped in the preview).
+ */
+export function previewMaskCode(pattern: string): string | null {
+  const key = normalizePatternKey(pattern) ?? pattern.toLowerCase();
+  return KEY_TO_MASK_CODE[key] ?? null;
+}
+
+/**
  * Parse a vanilla-style NBT blob copied from the game, e.g.
  *
  *   {BlockEntityTag:{Base:14,Patterns:[

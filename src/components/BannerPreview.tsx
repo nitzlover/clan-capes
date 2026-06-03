@@ -2,23 +2,22 @@
 
 import {
   BANNER_COLORS,
-  normalizePatternKey,
+  previewMaskCode,
   type BannerSpec,
   colorForOrdinal,
 } from '@/lib/banners';
 
 /**
- * Texture for a pattern layer. Always a modern vanilla key now, resolved
- * through {@link normalizePatternKey} so any legacy spec still loaded from
- * the DB falls back to the right texture. These PNGs
- * (`/public/mc/shield-patterns/<key>.png`) are the vanilla pattern shapes
- * already projected onto the shield front-face, so painting them flat as a
- * CSS mask reproduces the in-game look — base colour shows through where
- * the mask is transparent, the dye colour fills where it is opaque.
+ * Flat 20×40 alpha mask for a pattern layer, resolved through
+ * {@link previewMaskCode} (handles both modern keys and legacy project
+ * codes). Returns null for the rare key with no flat mask — the layer is
+ * then skipped. NOTE: must be the /banner/patterns set (20×40), NOT
+ * /mc/shield-patterns (64×64 shield-entity textures, which render as a
+ * tiny shield in the corner when used as a flat CSS mask).
  */
-function maskUrlFor(key: string): string {
-  const resolved = normalizePatternKey(key) ?? key;
-  return `/mc/shield-patterns/${resolved}.png`;
+function maskUrlFor(key: string): string | null {
+  const code = previewMaskCode(key);
+  return code ? `/banner/patterns/${code}.png` : null;
 }
 
 type Props = {
@@ -66,8 +65,9 @@ export function BannerPreview({
     width * 2;
 
   const layers = safe.patterns.map((p, idx) => {
-    const c = colorForOrdinal(p.color);
     const url = maskUrlFor(p.pattern);
+    if (!url) return null;
+    const c = colorForOrdinal(p.color);
     return (
       <div
         key={idx}

@@ -5,6 +5,7 @@ import {
   BANNER_COLORS,
   BANNER_PATTERNS,
   EMPTY_SPEC,
+  previewMaskCode,
   parseNbtSpec,
   specToNbt,
   type BannerSpec,
@@ -403,10 +404,12 @@ function ShapeTile({
   disabled?: boolean;
   onClick: () => void;
 }) {
+  const maskCode = previewMaskCode(code);
+  if (!maskCode) return null; // no flat mask for this pattern — hide the tile
   const cellW = tileWidth;
-  const cellH = Math.round(tileWidth * (154 / 84));
+  const cellH = Math.round(tileWidth * 2);
   const dyeHex = BANNER_COLORS[Math.max(0, Math.min(15, dyeOrdinal | 0))]?.hex ?? '#f9fffe';
-  const maskUrl = `/mc/shield-patterns/${code}.png`;
+  const maskUrl = `/banner/patterns/${maskCode}.png`;
 
   return (
     <button
