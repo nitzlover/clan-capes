@@ -139,7 +139,7 @@ export default function EventsConfigPage() {
         </span>
       </div>
 
-      <ActiveMonitor />
+      <ActiveMonitor serverId={serverId} />
 
       {loading ? (
         <p className="eyebrow">Loading…</p>
@@ -150,13 +150,18 @@ export default function EventsConfigPage() {
       ) : (
         <div className="space-y-6">
           {configs.map((c) => (
-            <EventConfigEditor key={c.type} initial={c} onSaved={load} />
+            <EventConfigEditor
+              key={c.type}
+              initial={c}
+              onSaved={load}
+              serverId={serverId}
+            />
           ))}
         </div>
       )}
 
-      <EventLeaderboard />
-      <EventHistory />
+      <EventLeaderboard serverId={serverId} />
+      <EventHistory serverId={serverId} />
     </div>
   );
 }
@@ -181,14 +186,16 @@ const ACTIVE_STATUSES = new Set(['pending', 'prep', 'landing', 'finale', 'active
  * pulsing marker. Hides itself when nothing is running so the page
  * stays quiet between events.
  */
-function ActiveMonitor() {
+function ActiveMonitor({ serverId }: { serverId: number }) {
   const [active, setActive] = useState<EventRun[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     async function poll() {
       try {
-        const r = await api<{ events: EventRun[] }>('/panel/events?limit=10');
+        const r = await api<{ events: EventRun[] }>(
+          `/panel/events?limit=10&serverId=${serverId}`,
+        );
         if (cancelled) return;
         setActive(r.events.filter((e) => ACTIVE_STATUSES.has(e.status)));
       } catch {
@@ -201,7 +208,7 @@ function ActiveMonitor() {
       cancelled = true;
       clearInterval(id);
     };
-  }, []);
+  }, [serverId]);
 
   if (active.length === 0) return null;
 
@@ -250,14 +257,16 @@ type LeaderRow = {
  * Per-clan event leaderboard — wins, events entered, kills/deaths,
  * K/D. Single fetch on mount; ordered server-side by wins then kills.
  */
-function EventLeaderboard() {
+function EventLeaderboard({ serverId }: { serverId: number }) {
   const [rows, setRows] = useState<LeaderRow[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const r = await api<{ rows: LeaderRow[] }>('/panel/events/leaderboard?limit=25');
+        const r = await api<{ rows: LeaderRow[] }>(
+          `/panel/events/leaderboard?limit=25&serverId=${serverId}`,
+        );
         if (!cancelled) setRows(r.rows);
       } catch {
         if (!cancelled) setRows([]);
@@ -266,7 +275,7 @@ function EventLeaderboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [serverId]);
 
   if (rows !== null && rows.length === 0) return null;
 
@@ -312,7 +321,7 @@ function EventLeaderboard() {
  * once on mount (the operator can refresh the page for a fresh pull —
  * events are infrequent, no need for a live socket here).
  */
-function EventHistory() {
+function EventHistory({ serverId }: { serverId: number }) {
   const [runs, setRuns] = useState<EventRun[] | null>(null);
   const [error, setError] = useState('');
 
@@ -320,7 +329,9 @@ function EventHistory() {
     let cancelled = false;
     (async () => {
       try {
-        const r = await api<{ events: EventRun[] }>('/panel/events?limit=50');
+        const r = await api<{ events: EventRun[] }>(
+          `/panel/events?limit=50&serverId=${serverId}`,
+        );
         if (!cancelled) setRuns(r.events);
       } catch (e) {
         if (e instanceof UnauthorizedError) return;
@@ -330,7 +341,7 @@ function EventHistory() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [serverId]);
 
   return (
     <section className="brutal-card mt-10 p-6">
@@ -393,9 +404,11 @@ function EventHistory() {
 function EventConfigEditor({
   initial,
   onSaved,
+  serverId,
 }: {
   initial: EventConfig;
   onSaved: () => void;
+  serverId: number;
 }) {
   const [enabled, setEnabled] = useState(initial.enabled);
   const [interval, setIntervalMin] = useState(initial.intervalMinutes);
@@ -430,7 +443,7 @@ function EventConfigEditor({
     setBusy(true);
     setMsg(null);
     try {
-      await api('/panel/events/config', {
+      await api(`/panel/events/config?serverId=${serverId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
