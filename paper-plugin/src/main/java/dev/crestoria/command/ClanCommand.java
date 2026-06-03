@@ -514,12 +514,29 @@ public final class ClanCommand implements CommandExecutor {
         if (player == null) return true;
         ClanDto clan = requireOwnClan(player);
         if (clan == null) return true;
-        var bannerOpt = plugin.getBannerRepository().get(clan.tag);
+        // Pull the freshest banner from the panel BEFORE stamping, so a
+        // design the leader just saved on /dashboard/banners is applied
+        // immediately instead of waiting for the ~5-minute background
+        // refresh (the "old banner got applied" report). The HTTP refresh
+        // is async; hop back to the main thread to touch the inventory.
+        player.sendMessage(Component.text(
+                "Fetching latest [" + clan.tag + "] banner…", NamedTextColor.GRAY));
+        final String tag = clan.tag;
+        plugin.getBannerRepository().refresh().whenComplete((v, err) ->
+                plugin.getServer().getScheduler().runTask(plugin,
+                        () -> applyShieldNow(player, tag)));
+        return true;
+    }
+
+    /** Main-thread shield stamp, run after the banner cache is refreshed. */
+    private void applyShieldNow(Player player, String clanTag) {
+        if (!player.isOnline()) return;
+        var bannerOpt = plugin.getBannerRepository().get(clanTag);
         if (bannerOpt.isEmpty()) {
             player.sendMessage(Component.text(
-                    "Clan [" + clan.tag + "] has no banner yet. Ask an admin to design one in /dashboard/banners.",
+                    "Clan [" + clanTag + "] has no banner yet. Ask an admin to design one in /dashboard/banners.",
                     NamedTextColor.RED));
-            return true;
+            return;
         }
         org.bukkit.inventory.PlayerInventory inv = player.getInventory();
         org.bukkit.inventory.ItemStack main = inv.getItemInMainHand();
@@ -529,31 +546,29 @@ public final class ClanCommand implements CommandExecutor {
         if (!mainIsShield && !offIsShield) {
             player.sendMessage(Component.text(
                     "Hold a shield (main or off hand) to brand it.", NamedTextColor.RED));
-            return true;
+            return;
         }
         // Force the rewrite by clearing the marker first — the stamper
         // short-circuits when the marker already matches the clan tag,
-        // which we do not want on a manual refresh. Then write the
-        // mutated stack back via setItemInMainHand/OffHand — Paper
-        // 26.1.2 returns a defensive copy from the getter so the
-        // mutation has to be explicitly persisted.
+        // which we do not want on a manual refresh. Then write the mutated
+        // stack back via setItemInMainHand/OffHand — Paper 26.1.2 returns
+        // a defensive copy from the getter so the mutation must be persisted.
         boolean stamped = false;
         if (mainIsShield) {
-            stamped |= forceStampShield(main, bannerOpt.get(), clan.tag);
+            stamped |= forceStampShield(main, bannerOpt.get(), clanTag);
             inv.setItemInMainHand(main);
         }
         if (offIsShield) {
-            stamped |= forceStampShield(off, bannerOpt.get(), clan.tag);
+            stamped |= forceStampShield(off, bannerOpt.get(), clanTag);
             inv.setItemInOffHand(off);
         }
         if (stamped) {
             player.sendMessage(Component.text(
-                    "Shield branded with [" + clan.tag + "] banner.", NamedTextColor.GREEN));
+                    "Shield branded with [" + clanTag + "] banner.", NamedTextColor.GREEN));
         } else {
             player.sendMessage(Component.text(
                     "Could not stamp shield (Paper API drift?).", NamedTextColor.RED));
         }
-        return true;
     }
 
     /**
