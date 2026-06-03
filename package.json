@@ -10,7 +10,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "test": "tsx scripts/test-scope.ts"
+    "test": "tsx scripts/test-scope.ts && tsx scripts/test-banners.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

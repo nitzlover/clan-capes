@@ -18,9 +18,16 @@ import { getDb, schema } from '@/lib/server/db';
 export async function resolveServerId(req: Request): Promise<number | null> {
   const url = new URL(req.url);
   const raw = url.searchParams.get('serverId');
-  if (raw) {
+  // 'all' is a UI sentinel for the aggregate views; it is not a single
+  // server, so it deliberately falls through to the newest-server default.
+  if (raw && raw !== 'all') {
     const n = Number(raw);
-    if (Number.isInteger(n) && n > 0) return n;
+    if (Number.isInteger(n) && n > 0) {
+      if (process.env.DEBUG_SCOPE === '1') {
+        console.info(`[scope] ${url.pathname} -> explicit serverId=${n}`);
+      }
+      return n;
+    }
   }
   const db = getDb();
   const [first] = await db
@@ -28,5 +35,14 @@ export async function resolveServerId(req: Request): Promise<number | null> {
     .from(schema.servers)
     .orderBy(desc(schema.servers.createdAt))
     .limit(1);
+  // Set DEBUG_SCOPE=1 on the panel to surface every newest-server
+  // fallback — a fallback firing on a request that SHOULD have carried
+  // ?serverId is exactly the class of bug that sent cape uploads to the
+  // wrong tenant (dead `?server=` key).
+  if (process.env.DEBUG_SCOPE === '1') {
+    console.warn(
+      `[scope] ${url.pathname} -> NO valid ?serverId (raw=${JSON.stringify(raw)}); fell back to newest server ${first?.id ?? 'none'}`,
+    );
+  }
   return first?.id ?? null;
 }
