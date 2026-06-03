@@ -2,6 +2,7 @@ package dev.clancapes;
 
 import dev.clancapes.cape.CapeManager;
 import dev.clancapes.config.ClanCapesConfig;
+import dev.clancapes.update.ModUpdateChecker;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
@@ -18,8 +19,10 @@ public class ClanCapesClient implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> CapeManager.get().tick());
 
-        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) ->
-                CapeManager.get().onWorldJoin());
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+            CapeManager.get().onWorldJoin();
+            ModUpdateChecker.checkOnJoin(client);
+        });
 
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
                 CapeManager.get().onWorldLeave());
