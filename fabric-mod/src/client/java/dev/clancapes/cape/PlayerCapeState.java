@@ -15,6 +15,12 @@ public final class PlayerCapeState {
     private volatile long lastFetchedAtMs;
     private volatile long lastAppliedUpdatedAt;
 
+    // Render-thread-only cape-patch cache (see CapeSkinPatcher). Touched
+    // exclusively from the render mixins, so plain fields — no volatile.
+    private Object baseSkin;
+    private Object patchedSkin;
+    private Identifier patchedTexture;
+
     public PlayerCapeState(UUID playerId) {
         this.playerId = playerId;
     }
@@ -47,6 +53,26 @@ public final class PlayerCapeState {
         this.textureId = textureId;
     }
 
+    // ── Render-thread cape-patch cache ──────────────────────────────
+    public Object baseSkin() {
+        return baseSkin;
+    }
+
+    public Object patchedSkin() {
+        return patchedSkin;
+    }
+
+    public Identifier patchedTexture() {
+        return patchedTexture;
+    }
+
+    /** Record that {@code patched} (built from {@code base}) is current for {@code tex}. */
+    public void setPatchedSkin(Object base, Object patched, Identifier tex) {
+        this.baseSkin = base;
+        this.patchedSkin = patched;
+        this.patchedTexture = tex;
+    }
+
     public long lastFetchedAtMs() {
         return lastFetchedAtMs;
     }
@@ -75,5 +101,8 @@ public final class PlayerCapeState {
         updatedAt = 0L;
         textureId = null;
         lastAppliedUpdatedAt = 0L;
+        baseSkin = null;
+        patchedSkin = null;
+        patchedTexture = null;
     }
 }
