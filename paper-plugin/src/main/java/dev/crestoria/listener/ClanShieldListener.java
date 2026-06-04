@@ -18,6 +18,9 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Clan-shield branding — "first claim locks it" model.
@@ -45,6 +48,14 @@ import java.util.Optional;
 public final class ClanShieldListener implements Listener {
 
     private final CrestoriaPlugin plugin;
+
+    /**
+     * Players with a reconcile already queued for the next tick. Coalesces a
+     * burst of hand-affecting events (a player clicking rapidly through a
+     * chest fires many InventoryClickEvents) into a single reconcile pass.
+     * Main-thread-only in practice, but a concurrent set keeps it safe.
+     */
+    private final Set<UUID> pendingReconcile = ConcurrentHashMap.newKeySet();
 
     public ClanShieldListener(CrestoriaPlugin plugin) {
         this.plugin = plugin;
@@ -82,7 +93,17 @@ public final class ClanShieldListener implements Listener {
 
     private void scheduleReconcile(HumanEntity human) {
         if (!(human instanceof Player player)) return;
+        UUID id = player.getUniqueId();
+        // InventoryClickEvent (and friends) fire on every click in every
+        // inventory for every player. Two cheap guards keep this off the hot
+        // path for the 99% of events that can't matter:
+        //   1. only clan members ever get a shield reconcile — a single
+        //      O(1) snapshot map lookup, no allocation;
+        //   2. coalesce a burst into one queued task per tick window.
+        if (plugin.getClanRepository().getByPlayer(id).isEmpty()) return;
+        if (!pendingReconcile.add(id)) return;
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            pendingReconcile.remove(id);
             if (player.isOnline()) reconcileHeld(player);
         }, 1L);
     }
