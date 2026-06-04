@@ -84,6 +84,22 @@
   --signal-ink: #1a2200;
   --danger: #ff4d4d;
   --danger-ink: #2a0000;
+
+  /*
+   * Brand accent (2026-06-04 — palette opened from strict B&W to
+   * dark + a single accent, per the Dribbble gaming-dashboard direction).
+   * Gold mirrors the in-game `❖ Crestoria` chat prefix (0xF2C14E) so the
+   * web panel and the server speak one identity. Used for: active nav,
+   * live state, primary/hero CTAs, stat rings, key figures, focus. Still
+   * ONE hue — the rest of the chrome stays monochrome so it reads premium,
+   * not rainbow.
+   */
+  --accent: #f2c14e;
+  --accent-bright: #ffd36b;
+  --accent-ink: #241c00;
+  --accent-soft: rgba(242, 193, 78, 0.13);
+  --accent-line: rgba(242, 193, 78, 0.42);
+  --accent-glow: rgba(242, 193, 78, 0.22);
 }
 
 html,
@@ -282,6 +298,41 @@ canvas.pixelated {
     cursor: not-allowed;
   }
 
+  /*
+   * Accent CTA — gold fill, dark ink, soft glow. For the hero/primary
+   * action on a surface (e.g. Download). One per view; the white
+   * .btn-primary and outline .btn-ghost still carry secondary actions.
+   */
+  .btn-accent {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1.1rem;
+    font-family: theme('fontFamily.sans');
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--accent-ink);
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-pill);
+    box-shadow: 0 6px 22px -8px var(--accent-glow);
+    transition: background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+  }
+  .btn-accent:hover {
+    background: var(--accent-bright);
+    border-color: var(--accent-bright);
+    transform: translateY(-1px);
+    box-shadow: 0 10px 28px -8px var(--accent-glow);
+  }
+  .btn-accent:active:not(:disabled) {
+    transform: translateY(0) scale(0.97);
+  }
+  .btn-accent:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
   /* Ghost — subtle pill, no fill, gentle hover wash. */
   .btn-ghost {
     display: inline-flex;
@@ -337,8 +388,8 @@ canvas.pixelated {
     color: var(--text-soft);
   }
   .status-pill.ok {
-    color: var(--ink-0);
-    border-color: var(--ink-50);
+    color: var(--accent-bright);
+    border-color: var(--accent-line);
   }
   .status-pill.bad {
     color: var(--text-faint);
@@ -351,8 +402,8 @@ canvas.pixelated {
     background: var(--text-mute);
   }
   .status-pill.ok .status-dot {
-    background: var(--ink-0);
-    animation: pulse-dot-on 2.6s ease-out infinite;
+    background: var(--accent);
+    animation: pulse-dot-accent 2.6s ease-out infinite;
   }
   .status-pill.bad .status-dot {
     background: var(--text-faint);
@@ -391,6 +442,14 @@ canvas.pixelated {
   }
   100% {
     box-shadow: 0 0 0 7px rgba(255, 255, 255, 0);
+  }
+}
+@keyframes pulse-dot-accent {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-glow);
+  }
+  100% {
+    box-shadow: 0 0 0 7px rgba(242, 193, 78, 0);
   }
 }
 

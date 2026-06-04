@@ -194,11 +194,11 @@ function Sidebar({
               >
                 {active &&
                   (reduce ? (
-                    <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-white" />
+                    <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-[var(--accent)]" />
                   ) : (
                     <motion.span
                       layoutId="navActive"
-                      className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-white"
+                      className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-[var(--accent)]"
                       transition={{ duration: 0.2, ease: [0.2, 0.7, 0.2, 1] }}
                     />
                   ))}

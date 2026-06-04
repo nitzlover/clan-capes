@@ -148,8 +148,9 @@ export default function ModPage() {
                 <p className="font-sans text-[clamp(3.5rem,8vw,5.5rem)] font-extrabold leading-[0.85] tracking-[-0.04em] text-white tabular">
                   {latest.version}
                 </p>
+                <div className="mt-4 h-[3px] w-14 rounded-full bg-[var(--accent)]" aria-hidden />
                 <div className="mt-auto flex flex-wrap items-center gap-3 pt-9">
-                  <a href="/api/mod/download" className="btn-primary">
+                  <a href="/api/mod/download" className="btn-accent">
                     <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
                       download
                     </span>
@@ -333,7 +334,7 @@ export default function ModPage() {
 function IndexLabel({ n, label }: { n: string; label: string }) {
   return (
     <p className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.28em] text-[var(--text-mute)]">
-      <span className="text-white">{n}</span>
+      <span className="text-[var(--accent)]">{n}</span>
       <span className="h-px w-7 bg-[var(--rule-strong)]" />
       <span>{label}</span>
     </p>
@@ -353,7 +354,7 @@ function SpecRow({ k, v }: { k: string; v: string }) {
 
 /** Registration / crosshair marks at the four corners of a panel. */
 function CornerTicks({ active }: { active?: boolean }) {
-  const tone = active ? 'border-white' : 'border-[rgba(255,255,255,0.35)]';
+  const tone = active ? 'border-[var(--accent)]' : 'border-[var(--accent-line)]';
   const base = `pointer-events-none absolute h-2.5 w-2.5 ${tone}`;
   return (
     <>
