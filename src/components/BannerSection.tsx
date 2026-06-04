@@ -124,13 +124,14 @@ export function BannerSection() {
           ! {loadError}
         </p>
       )}
-      {clans.length === 0 && loadState === 'ok' && (
+      {loadState === 'ok' && clans.length === 0 && (
         <p className="py-6 text-sm text-[var(--text-mute)]">
           No clans in PowerClans data.yml.
         </p>
       )}
 
-      <ul className="flex flex-col gap-3">
+      {loadState === 'ok' && clans.length > 0 && (
+        <ul className="flex flex-col gap-3">
         {clans.map((c) => {
           const banner = banners[c.tag] ?? null;
           const spec: BannerSpec = banner
@@ -183,7 +184,8 @@ export function BannerSection() {
             </li>
           );
         })}
-      </ul>
+        </ul>
+      )}
     </div>
   );
 }

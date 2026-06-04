@@ -11,12 +11,7 @@
  * tone rather than a marketing splash.
  */
 
-import {
-  AnimatePresence,
-  motion,
-  useReducedMotion,
-  type Variants,
-} from 'framer-motion';
+import { motion, useReducedMotion, type Variants } from 'framer-motion';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
@@ -178,26 +173,25 @@ export function useDelayedFlag(active: boolean, delayMs = 250): boolean {
 /* ───────────────────────── PageTransition ───────────────────────── */
 
 /**
- * Cross-fade dashboard routes. Keyed on pathname so navigating swaps the
- * page with a short fade + drift instead of a hard cut. `mode="wait"`
- * lets the outgoing page finish leaving before the next arrives, which
- * reads cleaner than an overlap on a content swap.
+ * Fade each dashboard route in on arrival. Keyed on pathname so a nav
+ * remounts the wrapper and replays the enter. Enter-only by design — an
+ * exit animation (AnimatePresence mode="wait") delayed every navigation
+ * by the exit duration and, caught mid-frame, left a ghosted copy of the
+ * outgoing page's header. The new page now appears immediately and just
+ * fades up; the old one unmounts at once.
  */
 export function PageTransition({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const reduce = useReducedMotion();
   if (reduce) return <>{children}</>;
   return (
-    <AnimatePresence mode="wait" initial={false}>
-      <motion.div
-        key={pathname}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -6 }}
-        transition={{ duration: 0.22, ease: EASE }}
-      >
-        {children}
-      </motion.div>
-    </AnimatePresence>
+    <motion.div
+      key={pathname}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.18, ease: EASE }}
+    >
+      {children}
+    </motion.div>
   );
 }
