@@ -23,7 +23,7 @@ import {
   Plus, Lock, Globe, FileText, Sparkles, ArrowRight, Settings2, Wind,
 } from 'lucide-react';
 
-const FALLBACK_SKIN = '/models/steve.png';
+export const FALLBACK_SKIN = '/models/steve.png';
 const SKIN_RE = /^[A-Za-z0-9_]{2,16}$/;
 const D2R = Math.PI / 180;
 
@@ -41,11 +41,11 @@ const BONES = [
 ] as const;
 
 type Axis = 'x' | 'y' | 'z';
-type PoseState = Record<string, { x: number; y: number; z: number }>;
+export type PoseState = Record<string, { x: number; y: number; z: number }>;
 const ZERO_POSE = (): PoseState =>
   Object.fromEntries(BONES.map((b) => [b.key, { x: 0, y: 0, z: 0 }]));
 
-const PRESETS: Record<string, PoseState> = {
+export const PRESETS: Record<string, PoseState> = {
   Standing: ZERO_POSE(),
   Sitting: {
     ...ZERO_POSE(),
@@ -76,7 +76,7 @@ type CamPreset =
   | 'portrait' | 'headshot' | 'overShoulder' | 'hero' | 'closeup'
   | 'thumbLeft' | 'thumbRight';
 
-type NodeXform = Record<string, { rotation?: [number, number, number]; translation?: [number, number, number]; scale?: number }>;
+export type NodeXform = Record<string, { rotation?: [number, number, number]; translation?: [number, number, number]; scale?: number }>;
 
 const MC_SEATED: NodeXform = {
   Body: { rotation: [Math.PI / 2, 0, 0] },
@@ -115,7 +115,7 @@ const MC_ROAST: NodeXform = {
   ArmLeftUpper: { ...MC_SEATED.ArmLeftUpper, rotation: [2.59982, 0.0999, 0.25578] },
   ArmLeftLower: { ...MC_SEATED.ArmLeftLower, rotation: [0.5, 0, 0] },
 };
-const NODE_POSES: Record<string, NodeXform> = { 'Seated': MC_SEATED, 'Inspecting Item': MC_INSPECT, 'Roast': MC_ROAST };
+export const NODE_POSES: Record<string, NodeXform> = { 'Seated': MC_SEATED, 'Inspecting Item': MC_INSPECT, 'Roast': MC_ROAST };
 
 // Backdrop swatches — exact mcrender rgb values + order.
 const BACKDROPS = [
@@ -222,7 +222,7 @@ function defaultHeldXf(id: string): HeldXf {
 }
 
 const ARMOR_TIERS = ['leather', 'chainmail', 'iron', 'gold', 'diamond', 'netherite', 'turtle'] as const;
-type ArmorSlots = { helmet: string | null; chestplate: string | null; leggings: string | null; boots: string | null };
+export type ArmorSlots = { helmet: string | null; chestplate: string | null; leggings: string | null; boots: string | null };
 const EMPTY_ARMOR: ArmorSlots = { helmet: null, chestplate: null, leggings: null, boots: null };
 // Real Minecraft capes (mcrender's exact set + order). texture `/capes/<id>.png`,
 // thumbnail `/capes/preview/<id>.png`. Rendered on cape.gltf, not a colour quad.
@@ -1599,7 +1599,7 @@ function ArmorSlots({ armor, setArmor, elytra, setElytra }: { armor: ArmorSlots;
 
 /* ─────────────────────────── three.js viewer ─────────────────────────── */
 
-type StudioApi = {
+export type StudioApi = {
   setPose: (p: PoseState) => void;
   setNode: (nt: NodeXform) => void;
   setRoastStick: (on: boolean) => void;
@@ -1710,7 +1710,7 @@ const voxFaceGeom = (face: string, b: VoxBox): VoxFace | null => {
   }
 };
 
-async function bootViewer(mount: HTMLDivElement, isDisposed: () => boolean): Promise<StudioApi | null> {
+export async function bootViewer(mount: HTMLDivElement, isDisposed: () => boolean): Promise<StudioApi | null> {
   const THREE = await import('three');
   const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
   const { OrbitControls } = await import('three/examples/jsm/controls/OrbitControls.js');

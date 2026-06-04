@@ -1,7 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { PlayerCapeView3D } from '@/components/PlayerCapeView3D';
+import dynamic from 'next/dynamic';
+
+// Heavy three.js studio engine — load client-side only, off the initial bundle.
+const StudioHero = dynamic(() => import('@/components/StudioHero'), {
+  ssr: false,
+  loading: () => <div className="h-full w-full" />,
+});
 
 /**
  * Public client-mod download page — Minecraft-flavoured.
@@ -73,13 +79,9 @@ export default function DownloadPage() {
         {/* ── Hero: rotating player + cape ── */}
         <div className="flex flex-col items-center gap-4">
           <div className="mc-frame p-2">
-            <PlayerCapeView3D
-              capeUrl={`/capes/${cape}.png`}
-              rotate
-              view="back"
-              width={240}
-              height={320}
-            />
+            <div style={{ width: 260, height: 360 }}>
+              <StudioHero capeUrl={`/capes/${cape}.png`} />
+            </div>
             <CornerTicks />
           </div>
 
