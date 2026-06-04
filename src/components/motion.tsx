@@ -154,6 +154,27 @@ export function CountUp({
   return <>{text}</>;
 }
 
+/* ───────────────────────── useDelayedFlag ───────────────────────── */
+
+/**
+ * Returns `true` only once `active` has stayed true for `delayMs`. Gate a
+ * loading skeleton on this so a fast fetch never flashes one: the skeleton
+ * appears only when the wait is long enough to be worth showing, otherwise
+ * the content just arrives. Resets the moment `active` goes false.
+ */
+export function useDelayedFlag(active: boolean, delayMs = 250): boolean {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (!active) {
+      setShown(false);
+      return;
+    }
+    const t = setTimeout(() => setShown(true), delayMs);
+    return () => clearTimeout(t);
+  }, [active, delayMs]);
+  return shown;
+}
+
 /* ───────────────────────── PageTransition ───────────────────────── */
 
 /**

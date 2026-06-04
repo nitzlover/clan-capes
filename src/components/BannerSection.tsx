@@ -15,6 +15,7 @@ import { SelectServerPrompt } from '@/components/ServerPicker';
 import { EMPTY_SPEC, type BannerSpec } from '@/lib/banners';
 import { useSelectedServer } from '@/lib/selected-server';
 import { SkeletonRows } from '@/components/Skeleton';
+import { useDelayedFlag } from '@/components/motion';
 
 /**
  * Lists every PowerClans clan and lets the admin set a shield banner for
@@ -65,6 +66,11 @@ export function BannerSection() {
     reload();
   }, [reload]);
 
+  // Only show the loading skeleton when the fetch is actually slow — a fast
+  // load would otherwise flash a skeleton then snap to content (the
+  // /dashboard/banners "skeleton flicker" report).
+  const showSkeleton = useDelayedFlag(loadState === 'loading');
+
   async function save(tag: string, spec: BannerSpec) {
     if (scopeId === null) return;
     setBusyTag(tag);
@@ -108,7 +114,7 @@ export function BannerSection() {
 
   return (
     <div>
-      {loadState === 'loading' && (
+      {showSkeleton && (
         <div className="py-2">
           <SkeletonRows rows={5} />
         </div>
