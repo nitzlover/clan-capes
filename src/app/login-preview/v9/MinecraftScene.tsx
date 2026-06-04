@@ -57,16 +57,21 @@ export type PropSpec =
   | { type: 'tree'; position: Vec3; trunk?: number; rotationY?: number }
   /** Stone cliff / quarry wall / boulder — a big stone (or cobblestone) box.
    *  position = the BASE centre (bottom sits on position.y). */
-  | { type: 'cliff'; position: Vec3; width?: number; height?: number; depth?: number; cobble?: boolean; rotationY?: number }
+  | { type: 'cliff'; position: Vec3; width?: number; height?: number; depth?: number; cobble?: boolean; rotationY?: number; tint?: number }
   /** Glowing ore block — stone cube with a soft emissive (reads as a mineral
    *  vein in B&W, NOT fire). */
-  | { type: 'ore'; position: Vec3; size?: number };
+  | { type: 'ore'; position: Vec3; size?: number }
+  /** Beacon light beam — a bright unlit pillar that pierces the fog into the
+   *  sky (a glowing core + a fainter halo + a base light). */
+  | { type: 'beam'; position: Vec3; width?: number; height?: number };
 
 export type SceneSpec = {
   characters: CharSpec[];
   props: PropSpec[];
-  camera?: { position?: Vec3; target?: Vec3; fov?: number };
+  camera?: { position?: Vec3; target?: Vec3; fov?: number; /** subtle looping dolly toward the target (scene units of travel) */ push?: number };
   fire?: boolean;
+  /** Rolling ground mist — soft drifting billboards near the floor for cinematic depth. */
+  mist?: { count?: number; y?: number; opacity?: number; z?: number };
   /** Ground plane Y. Characters/props are authored relative to this. */
   groundY?: number;
   /** Ground surface texture (defaults to grassy earth). Swap per scene —
@@ -256,10 +261,13 @@ export function MinecraftScene({
         sun.lookAt(cam.position);
         threeScene.add(sun);
 
-        // stacked faint SQUARE glow halos behind it (blocky, matches the sprite)
-        for (const [size, op] of [[42, 0.09], [62, 0.045]] as const) {
+        // soft round glow halos behind it (radial falloff, additive — not hard
+        // squares that read as a picture frame)
+        const glowTex = makeGlowTexture(THREE);
+        disposables.push(glowTex);
+        for (const [size, op] of [[64, 0.5], [120, 0.28]] as const) {
           const gGeo = new THREE.PlaneGeometry(size, size);
-          const gMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: op, fog: false });
+          const gMat = new THREE.MeshBasicMaterial({ map: glowTex, color: 0xffffff, transparent: true, opacity: op, fog: false, depthWrite: false, blending: THREE.AdditiveBlending });
           disposables.push(gGeo, gMat);
           const g = new THREE.Mesh(gGeo, gMat);
           g.position.set(bg.moon[0], bg.moon[1], bg.moon[2] - 1);
@@ -331,7 +339,7 @@ export function MinecraftScene({
           threeScene.add(tr);
         } else if (prop.type === 'cliff') {
           const cl = buildCliff(THREE, disposables, pixelTex, {
-            w: prop.width ?? 60, h: prop.height ?? 40, d: prop.depth ?? 16, cobble: prop.cobble,
+            w: prop.width ?? 60, h: prop.height ?? 40, d: prop.depth ?? 16, cobble: prop.cobble, tint: prop.tint,
           });
           cl.position.set(...prop.position);
           cl.rotation.y = prop.rotationY ?? 0;
@@ -340,6 +348,10 @@ export function MinecraftScene({
           const or = buildOre(THREE, disposables, pixelTex, prop.size ?? 9);
           or.position.set(...prop.position);
           threeScene.add(or);
+        } else if (prop.type === 'beam') {
+          const bm = buildBeam(THREE, disposables, { w: prop.width ?? 6, h: prop.height ?? 440 });
+          bm.position.set(...prop.position);
+          threeScene.add(bm);
         }
       }
 
@@ -556,6 +568,58 @@ export function MinecraftScene({
           }
         } catch (err) {
           console.error('[MinecraftScene] character load failed:', err);
+        }
+      }
+
+      /* ── camera dolly — a slow, looping push toward the target (cinematic life) ── */
+      if (scene.camera?.push && !reduced) {
+        const basePos = cam.position.clone();
+        const tgt = new THREE.Vector3(...(scene.camera?.target ?? [0, -1, 0]));
+        const dir = tgt.clone().sub(basePos).normalize();
+        const amp = scene.camera.push;
+        animators.push((now) => {
+          const k = (1 - Math.cos(now * 0.00018)) * 0.5; // slow ease 0..1..0
+          cam.position.copy(basePos).addScaledVector(dir, k * amp);
+          cam.lookAt(tgt);
+        });
+      }
+
+      /* ── rolling ground mist — soft additive billboards drifting near the floor ── */
+      if (scene.mist) {
+        const mcfg = scene.mist;
+        const cnt = mcfg.count ?? 6;
+        const mtex = makeGlowTexture(THREE); // white radial — additive needs a bright source, not the black blob
+        disposables.push(mtex);
+        const my = mcfg.y ?? groundY + 6;
+        const baseOp = mcfg.opacity ?? 0.22;
+        const mz = mcfg.z ?? -24;
+        const puffs: { m: THREE.Mesh; bx: number; ph: number; sp: number }[] = [];
+        for (let i = 0; i < cnt; i++) {
+          const w = 70 + ((i * 37) % 90);
+          const h = 22 + ((i * 17) % 18);
+          const geo = new THREE.PlaneGeometry(w, h);
+          const mat = new THREE.MeshBasicMaterial({
+            map: mtex, transparent: true, depthWrite: false, fog: false,
+            blending: THREE.AdditiveBlending,
+            opacity: baseOp * (0.55 + 0.45 * (((i * 13) % 10) / 10)),
+          });
+          disposables.push(geo, mat);
+          const m = new THREE.Mesh(geo, mat);
+          const bx = -130 + ((i * 70) % 260);
+          m.position.set(bx, my + (i % 3) * 5, mz - ((i * 23) % 70));
+          m.renderOrder = 5;
+          threeScene.add(m);
+          puffs.push({ m, bx, ph: i * 1.7, sp: 0.00003 + 0.000012 * (i % 4) });
+        }
+        if (!reduced) {
+          animators.push((now) => {
+            for (const p of puffs) {
+              p.m.position.x = p.bx + Math.sin(now * p.sp + p.ph) * 20;
+              p.m.lookAt(cam.position);
+            }
+          });
+        } else {
+          for (const p of puffs) p.m.lookAt(cam.position);
         }
       }
 
@@ -817,17 +881,18 @@ function buildCliff(
   THREE: T,
   disp: { dispose: () => void }[],
   pixelTex: PixelTex,
-  o: { w: number; h: number; d: number; cobble?: boolean },
+  o: { w: number; h: number; d: number; cobble?: boolean; tint?: number },
 ) {
   const path = o.cobble ? '/mc-tex/cobblestone.png' : '/mc-tex/stone.png';
   const rep = (a: number, b: number): [number, number] => [Math.max(1, Math.round(a / 16)), Math.max(1, Math.round(b / 16))];
   const sideTex = pixelTex(path, rep(o.w, o.h));
   const endTex = pixelTex(path, rep(o.d, o.h));
   const topTex = pixelTex(path, rep(o.w, o.d));
+  const tint = o.tint ?? 0x8a8a8a;
   const geo = new THREE.BoxGeometry(o.w, o.h, o.d);
-  const matSide = new THREE.MeshStandardMaterial({ map: sideTex, color: 0x8a8a8a, roughness: 1 });
-  const matEnd = new THREE.MeshStandardMaterial({ map: endTex, color: 0x8a8a8a, roughness: 1 });
-  const matTop = new THREE.MeshStandardMaterial({ map: topTex, color: 0x8a8a8a, roughness: 1 });
+  const matSide = new THREE.MeshStandardMaterial({ map: sideTex, color: tint, roughness: 1 });
+  const matEnd = new THREE.MeshStandardMaterial({ map: endTex, color: tint, roughness: 1 });
+  const matTop = new THREE.MeshStandardMaterial({ map: topTex, color: tint, roughness: 1 });
   disp.push(geo, matSide, matEnd, matTop);
   // face order: +x,-x,+y,-y,+z,-z  → ends on ±x, top/bottom on ±y, faces on ±z
   const m = new THREE.Mesh(geo, [matEnd, matEnd, matTop, matTop, matSide, matSide]);
@@ -860,6 +925,55 @@ function buildOre(
   const m = new THREE.Mesh(geo, mat);
   m.castShadow = true;
   return m;
+}
+
+/**
+ * Beacon light beam — a vertical pillar of light that pierces the night.
+ * Built from unlit (MeshBasic) boxes so it always reads full-bright regardless
+ * of scene lighting, with `fog:false` so it punches through the fog into the
+ * sky, and `depthWrite:false` so the halo blends over the dark backdrop. A
+ * bright opaque core + a wide faint halo + a soft base light that pools on the
+ * ground around the beacon.
+ */
+function buildBeam(
+  THREE: T,
+  disp: { dispose: () => void }[],
+  o: { w: number; h: number },
+) {
+  const grp = new THREE.Group();
+
+  const coreGeo = new THREE.BoxGeometry(o.w, o.h, o.w);
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.92, fog: false, depthWrite: false });
+  const glowGeo = new THREE.BoxGeometry(o.w * 2.4, o.h, o.w * 2.4);
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.14, fog: false, depthWrite: false });
+  disp.push(coreGeo, coreMat, glowGeo, glowMat);
+
+  const glow = new THREE.Mesh(glowGeo, glowMat);
+  glow.position.y = o.h / 2;
+  const core = new THREE.Mesh(coreGeo, coreMat);
+  core.position.y = o.h / 2;
+  grp.add(glow, core);
+
+  // soft pool of light at the base (lights the gathered figures)
+  const light = new THREE.PointLight(0xffffff, 3.2, 170, 1.6);
+  light.position.y = 8;
+  grp.add(light);
+
+  return grp;
+}
+
+/** Soft white radial glow texture (moon/light halos, soft mist). */
+function makeGlowTexture(THREE: T) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(64, 64, 2, 64, 64, 64);
+  g.addColorStop(0, 'rgba(255,255,255,0.95)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0.22)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
 }
 
 /** Radial soft-shadow blob texture for character ground contact. */
