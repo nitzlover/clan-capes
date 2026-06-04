@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, getToken, UnauthorizedError } from '@/lib/api';
-import { Stagger, StaggerItem } from '@/components/motion';
 import { Skeleton } from '@/components/Skeleton';
 
 type ModLatest = {
@@ -13,9 +12,12 @@ type ModLatest = {
 } | null;
 
 /**
- * Client-mod distribution. Upload a Fabric jar + its version; it lands on
- * the Railway Volume and becomes what /api/mod/version advertises and
- * /api/mod/download serves. The mod nags players to update on join.
+ * Client-mod distribution — "technical ledger" layout.
+ *
+ * A flat hairline grid (no floating cards) divides the surface into
+ * numbered sections like a spec sheet: a big version readout, a
+ * dotted-leader specification list, and a registration-marked publish
+ * dropzone. Strictly B&W; structure comes from rules + type, not boxes.
  */
 export default function ModPage() {
   const [latest, setLatest] = useState<ModLatest>(null);
@@ -42,7 +44,6 @@ export default function ModPage() {
     load();
   }, [load]);
 
-  /** Accept a picked/dropped file and auto-fill the version from its name. */
   function chooseFile(f: File | null) {
     setMsg(null);
     setFile(f);
@@ -93,67 +94,61 @@ export default function ModPage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
-      /* clipboard blocked — no-op, the link is still visible below */
+      /* clipboard blocked — link is still visible in the spec */
     }
   }
 
   return (
     <div>
-      <div className="page-band">
+      {/* Masthead — coordinate eyebrow, title, live readout */}
+      <header className="mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--rule)] pb-5">
         <div>
-          <h1 className="page-title">Client mod</h1>
-          <p className="page-subtitle">
-            Publish the Fabric jar. Players get an in-game nag with the download
-            link the next time they join on an older version.
+          <p className="font-mono text-[11px] uppercase tracking-[0.34em] text-[var(--text-faint)]">
+            Client ∕ Mod
+          </p>
+          <h1 className="mt-2 font-sans text-4xl font-semibold tracking-tight text-white">
+            Distribution
+          </h1>
+        </div>
+        <div className="text-right">
+          <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--text-faint)]">
+            Status
+          </p>
+          <p className="mt-1.5 font-mono text-[13px] tracking-wide">
+            {loading ? (
+              <span className="text-[var(--text-faint)]">— checking —</span>
+            ) : latest ? (
+              <span className="text-white">
+                <span className="text-[var(--ink-0)]">●</span> live · v{latest.version}
+              </span>
+            ) : (
+              <span className="text-[var(--text-faint)]">○ none published</span>
+            )}
           </p>
         </div>
-        <span className={`status-pill ${latest ? 'ok' : 'bad'}`}>
-          <span className="status-dot" aria-hidden />
-          {latest ? `v${latest.version} live` : 'none published'}
-        </span>
-      </div>
+      </header>
 
-      <Stagger className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
-        {/* ── Current build ─────────────────────────────────────────── */}
-        <StaggerItem>
-          <section className="brutal-card flex h-full flex-col p-6 md:p-8">
-            <div className="mb-6 flex items-center justify-between">
-              <span className="label-mono">Current build</span>
-              {latest && (
-                <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
-                  {(latest.size / 1024).toFixed(0)} KB
-                </span>
-              )}
-            </div>
-
+      {/* Hairline grid — cells separated by 1px rules, no cards */}
+      <div className="overflow-hidden border border-[var(--rule)]">
+        <div className="grid gap-px bg-[var(--rule)] md:grid-cols-2">
+          {/* 01 — readout */}
+          <div className="flex flex-col bg-[var(--bg)] p-7 md:p-9">
+            <IndexLabel n="01" label="Current build" />
             {loading ? (
-              <div className="space-y-5">
-                <Skeleton className="h-12 w-32" rounded="md" />
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-                  <Skeleton className="h-9" rounded="sm" />
-                  <Skeleton className="h-9" rounded="sm" />
-                  <Skeleton className="h-9" rounded="sm" />
-                </div>
-                <Skeleton className="h-9 w-40" rounded="pill" />
+              <div className="mt-7 space-y-4">
+                <Skeleton className="h-4 w-16" rounded="sm" />
+                <Skeleton className="h-16 w-44" rounded="md" />
+                <Skeleton className="mt-6 h-9 w-40" rounded="pill" />
               </div>
             ) : latest ? (
               <>
-                <div className="flex items-baseline gap-3">
-                  <span className="font-sans text-5xl font-extrabold leading-none tracking-tight text-white tabular">
-                    v{latest.version}
-                  </span>
-                </div>
-
-                <dl className="mt-7 grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3">
-                  <Fact label="File" value={latest.filename} mono break />
-                  <Fact label="Size" value={`${(latest.size / 1024).toFixed(1)} KB`} mono />
-                  <Fact
-                    label="Published"
-                    value={new Date(latest.uploadedAt).toLocaleString()}
-                  />
-                </dl>
-
-                <div className="mt-auto flex flex-wrap items-center gap-3 pt-8">
+                <p className="mt-7 font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--text-faint)]">
+                  Version
+                </p>
+                <p className="font-sans text-[clamp(3.5rem,8vw,5.5rem)] font-extrabold leading-[0.85] tracking-[-0.04em] text-white tabular">
+                  {latest.version}
+                </p>
+                <div className="mt-auto flex flex-wrap items-center gap-3 pt-9">
                   <a href="/api/mod/download" className="btn-primary">
                     <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
                       download
@@ -169,32 +164,56 @@ export default function ModPage() {
                 </div>
               </>
             ) : (
-              <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
-                <span
-                  className="material-symbols-outlined mb-3 text-[var(--text-faint)]"
-                  style={{ fontSize: 40 }}
-                >
-                  deployed_code
-                </span>
-                <p className="font-sans text-sm font-medium text-[var(--text-soft)]">
-                  No build published yet
+              <div className="flex flex-1 flex-col items-start justify-center py-10">
+                <p className="font-sans text-2xl font-semibold tracking-tight text-[var(--text-soft)]">
+                  No build yet
                 </p>
-                <p className="mt-1 max-w-xs text-xs text-[var(--text-faint)]">
-                  Players can&apos;t auto-download until you publish a jar on the
-                  right.
+                <p className="mt-2 max-w-xs text-sm text-[var(--text-faint)]">
+                  Players can&apos;t auto-download until a jar is published in
+                  section 03.
                 </p>
               </div>
             )}
-          </section>
-        </StaggerItem>
+          </div>
 
-        {/* ── Publish new version ───────────────────────────────────── */}
-        <StaggerItem>
-          <section className="brutal-card flex h-full flex-col p-6 md:p-8">
-            <span className="label-mono mb-6 block">Publish new version</span>
+          {/* 02 — specification */}
+          <div className="bg-[var(--bg)] p-7 md:p-9">
+            <IndexLabel n="02" label="Specification" />
+            <div className="mt-7 space-y-3.5">
+              {loading ? (
+                <>
+                  <Skeleton className="h-4 w-full" rounded="sm" />
+                  <Skeleton className="h-4 w-full" rounded="sm" />
+                  <Skeleton className="h-4 w-full" rounded="sm" />
+                  <Skeleton className="h-4 w-full" rounded="sm" />
+                </>
+              ) : latest ? (
+                <>
+                  <SpecRow k="File" v={latest.filename} />
+                  <SpecRow k="Size" v={`${(latest.size / 1024).toFixed(1)} KB`} />
+                  <SpecRow k="Published" v={new Date(latest.uploadedAt).toLocaleString()} />
+                  <SpecRow k="Download" v="/api/mod/download" />
+                  <SpecRow k="Manifest" v="/api/mod/version" />
+                </>
+              ) : (
+                <>
+                  <SpecRow k="File" v="—" />
+                  <SpecRow k="Size" v="—" />
+                  <SpecRow k="Published" v="—" />
+                  <SpecRow k="Download" v="/api/mod/download" />
+                  <SpecRow k="Manifest" v="/api/mod/version" />
+                </>
+              )}
+            </div>
+          </div>
 
-            <form onSubmit={upload} className="flex flex-1 flex-col gap-5">
-              {/* Dropzone */}
+          {/* 03 — publish (full width) */}
+          <div className="bg-[var(--bg)] p-7 md:col-span-2 md:p-9">
+            <IndexLabel n="03" label="Publish new version" />
+            <form
+              onSubmit={upload}
+              className="mt-7 grid items-start gap-6 md:grid-cols-[1.5fr_1fr]"
+            >
               <input
                 ref={fileInput}
                 type="file"
@@ -203,7 +222,7 @@ export default function ModPage() {
                 onChange={(e) => chooseFile(e.target.files?.[0] ?? null)}
               />
               {file ? (
-                <div className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--rule)] bg-[var(--surface-1)] px-4 py-3">
+                <div className="flex items-center gap-3 border border-[var(--rule)] bg-[var(--surface-1)] px-4 py-4">
                   <span
                     className="material-symbols-outlined text-[var(--text-soft)]"
                     style={{ fontSize: 22 }}
@@ -211,11 +230,9 @@ export default function ModPage() {
                     deployed_code
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-mono text-[12px] text-white">
-                      {file.name}
-                    </p>
+                    <p className="truncate font-mono text-[12px] text-white">{file.name}</p>
                     <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)] tabular">
-                      {(file.size / 1024).toFixed(1)} KB
+                      {(file.size / 1024).toFixed(1)} KB · ready
                     </p>
                   </div>
                   <button
@@ -244,101 +261,106 @@ export default function ModPage() {
                     const f = e.dataTransfer.files?.[0];
                     if (f) chooseFile(f);
                   }}
-                  className={`flex flex-col items-center justify-center gap-2 rounded-[var(--radius)] border border-dashed px-6 py-10 text-center transition-colors ${
-                    dragOver
-                      ? 'border-white bg-[var(--surface-2)]'
-                      : 'border-[var(--rule-strong)] hover:border-[rgba(255,255,255,0.3)] hover:bg-[var(--surface-1)]'
+                  className={`relative flex flex-col items-center justify-center gap-2 px-6 py-9 text-center transition-colors ${
+                    dragOver ? 'bg-[var(--surface-2)]' : 'bg-[var(--surface-1)] hover:bg-[var(--surface-2)]'
                   }`}
                 >
+                  <CornerTicks active={dragOver} />
                   <span
                     className="material-symbols-outlined text-[var(--text-mute)]"
-                    style={{ fontSize: 30 }}
+                    style={{ fontSize: 28 }}
                   >
                     upload
                   </span>
                   <span className="font-sans text-sm font-medium text-[var(--text-soft)]">
-                    Drop a <span className="font-mono">.jar</span> here, or click to
-                    browse
+                    Drop a <span className="font-mono">.jar</span> here, or click to browse
                   </span>
-                  <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
                     Fabric client mod
                   </span>
                 </button>
               )}
 
-              {/* Version */}
-              <label className="field">
-                <span className="label-soft">Version</span>
-                <input
-                  type="text"
-                  value={version}
-                  onChange={(e) => setVersion(e.target.value)}
-                  placeholder="e.g. 1.0.5"
-                  spellCheck={false}
-                  className="input font-mono"
-                />
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-                  Auto-filled from the filename. Saved as
-                  {' '}clan-capes-fabric-&lt;version&gt;.jar
-                </span>
-              </label>
+              <div className="flex flex-col gap-4">
+                <label className="field">
+                  <span className="label-soft">Version</span>
+                  <input
+                    type="text"
+                    value={version}
+                    onChange={(e) => setVersion(e.target.value)}
+                    placeholder="e.g. 1.0.5"
+                    spellCheck={false}
+                    className="input font-mono"
+                  />
+                  <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+                    Auto-read from the filename
+                  </span>
+                </label>
 
-              <div className="mt-auto flex flex-wrap items-center gap-3 pt-2">
-                <button
-                  type="submit"
-                  disabled={busy || !file || !version.trim()}
-                  className="btn-primary disabled:opacity-40"
-                >
-                  {busy ? 'Publishing…' : 'Publish'}
-                </button>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="submit"
+                    disabled={busy || !file || !version.trim()}
+                    className="btn-primary disabled:opacity-40"
+                  >
+                    {busy ? 'Publishing…' : 'Publish build'}
+                  </button>
+                </div>
                 {msg && (
-                  <span
+                  <p
                     className={`font-sans text-[13px] ${
                       msg.kind === 'ok' ? 'text-[var(--text-soft)]' : 'text-white'
                     }`}
                   >
                     {msg.kind === 'ok' ? '✓ ' : '! '}
                     {msg.text}
-                  </span>
+                  </p>
                 )}
               </div>
             </form>
-          </section>
-        </StaggerItem>
-      </Stagger>
-
-      {/* Endpoints — muted footnote, not a primary action. */}
-      <p className="mt-6 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-        Endpoints · <span className="text-[var(--text-mute)]">/api/mod/version</span>{' '}
-        advertises · <span className="text-[var(--text-mute)]">/api/mod/download</span>{' '}
-        serves
-      </p>
+            <p className="mt-6 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+              Stored on the volume as clan-capes-fabric-&lt;version&gt;.jar · advertised to
+              clients within one poll.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-/** One label/value pair in the current-build facts grid. */
-function Fact({
-  label,
-  value,
-  mono,
-  break: brk,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-  break?: boolean;
-}) {
+/** "01 —— Label" coordinate-style section marker. */
+function IndexLabel({ n, label }: { n: string; label: string }) {
   return (
-    <div className="min-w-0">
-      <dt className="label-mono">{label}</dt>
-      <dd
-        className={`mt-1.5 text-[var(--text-soft)] ${mono ? 'font-mono text-[12px]' : 'text-sm'} ${
-          brk ? 'break-all' : ''
-        }`}
-      >
-        {value}
-      </dd>
+    <p className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.28em] text-[var(--text-mute)]">
+      <span className="text-white">{n}</span>
+      <span className="h-px w-7 bg-[var(--rule-strong)]" />
+      <span>{label}</span>
+    </p>
+  );
+}
+
+/** Mono key with a dotted leader running to a right-aligned value. */
+function SpecRow({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex items-baseline gap-3 font-mono text-[12px]">
+      <span className="shrink-0 uppercase tracking-[0.2em] text-[var(--text-faint)]">{k}</span>
+      <span className="mb-1 flex-1 self-end border-b border-dotted border-[var(--rule-strong)]" />
+      <span className="max-w-[62%] break-all text-right text-[var(--text-soft)]">{v}</span>
     </div>
+  );
+}
+
+/** Registration / crosshair marks at the four corners of a panel. */
+function CornerTicks({ active }: { active?: boolean }) {
+  const tone = active ? 'border-white' : 'border-[rgba(255,255,255,0.35)]';
+  const base = `pointer-events-none absolute h-2.5 w-2.5 ${tone}`;
+  return (
+    <>
+      <span className={`${base} left-0 top-0 border-l border-t`} aria-hidden />
+      <span className={`${base} right-0 top-0 border-r border-t`} aria-hidden />
+      <span className={`${base} bottom-0 left-0 border-b border-l`} aria-hidden />
+      <span className={`${base} bottom-0 right-0 border-b border-r`} aria-hidden />
+    </>
   );
 }
