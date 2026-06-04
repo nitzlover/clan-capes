@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, getToken, UnauthorizedError } from '@/lib/api';
-import { SkeletonText } from '@/components/Skeleton';
+import { Stagger, StaggerItem } from '@/components/motion';
+import { Skeleton } from '@/components/Skeleton';
 
 type ModLatest = {
   version: string;
@@ -20,9 +21,12 @@ export default function ModPage() {
   const [latest, setLatest] = useState<ModLatest>(null);
   const [file, setFile] = useState<File | null>(null);
   const [version, setVersion] = useState('');
-  const [msg, setMsg] = useState('');
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [dragOver, setDragOver] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -38,14 +42,24 @@ export default function ModPage() {
     load();
   }, [load]);
 
+  /** Accept a picked/dropped file and auto-fill the version from its name. */
+  function chooseFile(f: File | null) {
+    setMsg(null);
+    setFile(f);
+    if (f) {
+      const m = f.name.match(/(\d+\.\d+\.\d+(?:[.-][A-Za-z0-9]+)*)/);
+      if (m && !version) setVersion(m[1]);
+    }
+  }
+
   async function upload(e: React.FormEvent) {
     e.preventDefault();
-    if (!file || !version) {
-      setMsg('Pick a .jar and enter its version.');
+    if (!file || !version.trim()) {
+      setMsg({ kind: 'err', text: 'Pick a .jar and enter its version.' });
       return;
     }
     setBusy(true);
-    setMsg('');
+    setMsg(null);
     const fd = new FormData();
     fd.append('jar', file);
     fd.append('version', version.trim());
@@ -58,17 +72,29 @@ export default function ModPage() {
     const data = (await res.json().catch(() => ({}))) as {
       error?: string;
       filename?: string;
-      size?: number;
     };
     setBusy(false);
     if (!res.ok) {
-      setMsg(data.error ?? 'Upload failed');
+      setMsg({ kind: 'err', text: data.error ?? 'Upload failed.' });
       return;
     }
-    setMsg(`Uploaded ${data.filename} — players are nagged to update on join.`);
+    setMsg({
+      kind: 'ok',
+      text: `Published ${data.filename} — players are nagged to update on join.`,
+    });
     setFile(null);
     setVersion('');
     load();
+  }
+
+  async function copyDownload() {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/api/mod/download`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      /* clipboard blocked — no-op, the link is still visible below */
+    }
   }
 
   return (
@@ -77,81 +103,242 @@ export default function ModPage() {
         <div>
           <h1 className="page-title">Client mod</h1>
           <p className="page-subtitle">
-            Upload the Fabric jar. Players get an in-game update nag with the
-            download link when their version is older.
+            Publish the Fabric jar. Players get an in-game nag with the download
+            link the next time they join on an older version.
           </p>
         </div>
-        <span className="meta-tag">
-          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
-            extension
-          </span>
-          {latest ? `v${latest.version} live` : 'none uploaded'}
+        <span className={`status-pill ${latest ? 'ok' : 'bad'}`}>
+          <span className="status-dot" aria-hidden />
+          {latest ? `v${latest.version} live` : 'none published'}
         </span>
       </div>
 
-      <section className="brutal-card p-6">
-        <p className="label-mono mb-4">Current</p>
-        {loading ? (
-          <SkeletonText lines={4} />
-        ) : latest ? (
-          <ul className="font-mono text-[12px] leading-relaxed text-[var(--text-soft)]">
-            <li>version: <span className="text-white">{latest.version}</span></li>
-            <li>file: {latest.filename}</li>
-            <li>size: {(latest.size / 1024).toFixed(1)} KB</li>
-            <li>uploaded: {new Date(latest.uploadedAt).toLocaleString()}</li>
-            <li className="mt-2">
-              <a
-                href="/api/mod/download"
-                className="text-[var(--accent,#7cc)] underline"
-              >
-                /api/mod/download
-              </a>{' '}
-              ·{' '}
-              <a href="/api/mod/version" className="underline">
-                /api/mod/version
-              </a>
-            </li>
-          </ul>
-        ) : (
-          <p className="text-sm text-[var(--text-faint)]">
-            No jar uploaded yet — players can&apos;t auto-download until you upload one.
-          </p>
-        )}
-      </section>
+      <Stagger className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+        {/* ── Current build ─────────────────────────────────────────── */}
+        <StaggerItem>
+          <section className="brutal-card flex h-full flex-col p-6 md:p-8">
+            <div className="mb-6 flex items-center justify-between">
+              <span className="label-mono">Current build</span>
+              {latest && (
+                <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+                  {(latest.size / 1024).toFixed(0)} KB
+                </span>
+              )}
+            </div>
 
-      <section className="brutal-card mt-6 p-6">
-        <p className="label-mono mb-4">Upload new jar</p>
-        <form onSubmit={upload} className="flex flex-col gap-4">
-          <input
-            type="file"
-            accept=".jar"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="text-sm text-[var(--text-soft)] file:mr-3 file:border file:border-[var(--rule-strong)] file:bg-transparent file:px-3 file:py-1.5 file:font-mono file:text-[11px] file:uppercase file:tracking-[0.18em] file:text-white"
-          />
-          <input
-            type="text"
-            value={version}
-            onChange={(e) => setVersion(e.target.value)}
-            placeholder="version e.g. 1.0.4"
-            className="w-48 border border-[var(--rule-strong)] bg-transparent px-3 py-2 font-mono text-sm text-white placeholder:text-[var(--text-faint)]"
-          />
-          <div className="flex items-center gap-4">
-            <button
-              type="submit"
-              disabled={busy}
-              className="border-2 border-[var(--rule-strong)] px-4 py-2 font-mono text-[11px] uppercase tracking-[0.22em] text-white transition-colors hover:border-white hover:bg-white hover:text-black disabled:opacity-40"
-            >
-              {busy ? 'Uploading…' : 'Upload'}
-            </button>
-            {msg && (
-              <span className="font-mono text-[11px] text-[var(--text-soft)]">{msg}</span>
+            {loading ? (
+              <div className="space-y-5">
+                <Skeleton className="h-12 w-32" rounded="md" />
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                  <Skeleton className="h-9" rounded="sm" />
+                  <Skeleton className="h-9" rounded="sm" />
+                  <Skeleton className="h-9" rounded="sm" />
+                </div>
+                <Skeleton className="h-9 w-40" rounded="pill" />
+              </div>
+            ) : latest ? (
+              <>
+                <div className="flex items-baseline gap-3">
+                  <span className="font-sans text-5xl font-extrabold leading-none tracking-tight text-white tabular">
+                    v{latest.version}
+                  </span>
+                </div>
+
+                <dl className="mt-7 grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3">
+                  <Fact label="File" value={latest.filename} mono break />
+                  <Fact label="Size" value={`${(latest.size / 1024).toFixed(1)} KB`} mono />
+                  <Fact
+                    label="Published"
+                    value={new Date(latest.uploadedAt).toLocaleString()}
+                  />
+                </dl>
+
+                <div className="mt-auto flex flex-wrap items-center gap-3 pt-8">
+                  <a href="/api/mod/download" className="btn-primary">
+                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                      download
+                    </span>
+                    Download jar
+                  </a>
+                  <button type="button" onClick={copyDownload} className="btn-ghost">
+                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                      {copied ? 'check' : 'link'}
+                    </span>
+                    {copied ? 'Copied' : 'Copy link'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+                <span
+                  className="material-symbols-outlined mb-3 text-[var(--text-faint)]"
+                  style={{ fontSize: 40 }}
+                >
+                  deployed_code
+                </span>
+                <p className="font-sans text-sm font-medium text-[var(--text-soft)]">
+                  No build published yet
+                </p>
+                <p className="mt-1 max-w-xs text-xs text-[var(--text-faint)]">
+                  Players can&apos;t auto-download until you publish a jar on the
+                  right.
+                </p>
+              </div>
             )}
-          </div>
-        </form>
-        <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
-          File saved as clan-capes-fabric-&lt;version&gt;.jar on the volume.
-        </p>
-      </section>
+          </section>
+        </StaggerItem>
+
+        {/* ── Publish new version ───────────────────────────────────── */}
+        <StaggerItem>
+          <section className="brutal-card flex h-full flex-col p-6 md:p-8">
+            <span className="label-mono mb-6 block">Publish new version</span>
+
+            <form onSubmit={upload} className="flex flex-1 flex-col gap-5">
+              {/* Dropzone */}
+              <input
+                ref={fileInput}
+                type="file"
+                accept=".jar"
+                className="hidden"
+                onChange={(e) => chooseFile(e.target.files?.[0] ?? null)}
+              />
+              {file ? (
+                <div className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--rule)] bg-[var(--surface-1)] px-4 py-3">
+                  <span
+                    className="material-symbols-outlined text-[var(--text-soft)]"
+                    style={{ fontSize: 22 }}
+                  >
+                    deployed_code
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-mono text-[12px] text-white">
+                      {file.name}
+                    </p>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)] tabular">
+                      {(file.size / 1024).toFixed(1)} KB
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => chooseFile(null)}
+                    aria-label="Remove file"
+                    className="text-[var(--text-mute)] transition-colors hover:text-white"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>
+                      close
+                    </span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInput.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOver(true);
+                  }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    const f = e.dataTransfer.files?.[0];
+                    if (f) chooseFile(f);
+                  }}
+                  className={`flex flex-col items-center justify-center gap-2 rounded-[var(--radius)] border border-dashed px-6 py-10 text-center transition-colors ${
+                    dragOver
+                      ? 'border-white bg-[var(--surface-2)]'
+                      : 'border-[var(--rule-strong)] hover:border-[rgba(255,255,255,0.3)] hover:bg-[var(--surface-1)]'
+                  }`}
+                >
+                  <span
+                    className="material-symbols-outlined text-[var(--text-mute)]"
+                    style={{ fontSize: 30 }}
+                  >
+                    upload
+                  </span>
+                  <span className="font-sans text-sm font-medium text-[var(--text-soft)]">
+                    Drop a <span className="font-mono">.jar</span> here, or click to
+                    browse
+                  </span>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+                    Fabric client mod
+                  </span>
+                </button>
+              )}
+
+              {/* Version */}
+              <label className="field">
+                <span className="label-soft">Version</span>
+                <input
+                  type="text"
+                  value={version}
+                  onChange={(e) => setVersion(e.target.value)}
+                  placeholder="e.g. 1.0.5"
+                  spellCheck={false}
+                  className="input font-mono"
+                />
+                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+                  Auto-filled from the filename. Saved as
+                  {' '}clan-capes-fabric-&lt;version&gt;.jar
+                </span>
+              </label>
+
+              <div className="mt-auto flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={busy || !file || !version.trim()}
+                  className="btn-primary disabled:opacity-40"
+                >
+                  {busy ? 'Publishing…' : 'Publish'}
+                </button>
+                {msg && (
+                  <span
+                    className={`font-sans text-[13px] ${
+                      msg.kind === 'ok' ? 'text-[var(--text-soft)]' : 'text-white'
+                    }`}
+                  >
+                    {msg.kind === 'ok' ? '✓ ' : '! '}
+                    {msg.text}
+                  </span>
+                )}
+              </div>
+            </form>
+          </section>
+        </StaggerItem>
+      </Stagger>
+
+      {/* Endpoints — muted footnote, not a primary action. */}
+      <p className="mt-6 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+        Endpoints · <span className="text-[var(--text-mute)]">/api/mod/version</span>{' '}
+        advertises · <span className="text-[var(--text-mute)]">/api/mod/download</span>{' '}
+        serves
+      </p>
+    </div>
+  );
+}
+
+/** One label/value pair in the current-build facts grid. */
+function Fact({
+  label,
+  value,
+  mono,
+  break: brk,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  break?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="label-mono">{label}</dt>
+      <dd
+        className={`mt-1.5 text-[var(--text-soft)] ${mono ? 'font-mono text-[12px]' : 'text-sm'} ${
+          brk ? 'break-all' : ''
+        }`}
+      >
+        {value}
+      </dd>
     </div>
   );
 }
