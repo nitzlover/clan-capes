@@ -16,23 +16,28 @@ public final class ClanCapesConfig {
     private static ClanCapesConfig INSTANCE;
 
     /**
-     * Default plugin REST endpoint baked into the jar so a freshly-
-     * installed mod works without any manual config edit on first launch.
-     * Tracks the production Paper plugin running alongside the MC server.
+     * Cape API base baked into the jar so a freshly-installed mod works
+     * with no manual config edit. Points at the Crestoria panel on Railway,
+     * which now serves /api/player/{uuid} directly (the old standalone
+     * plugin HTTP server at 23.109.45.71:5897 is dead — the panel is the
+     * producer now).
      */
-    public static final String DEFAULT_API_BASE_URL = "http://23.109.45.71:5897";
+    public static final String DEFAULT_API_BASE_URL = "https://clan-capes-production.up.railway.app";
 
     /**
      * Any config still pointing at one of these legacy/dev defaults is
      * silently rewritten to {@link #DEFAULT_API_BASE_URL} on load. This is
-     * how older shipped builds (which defaulted to localhost) self-heal
-     * after the user updates the jar — no manual cleanup required.
+     * how older shipped builds self-heal after the user updates the jar —
+     * no manual cleanup required. Includes the dead 23.109.45.71:5897 IP so
+     * every existing clancapes.json migrates to the Railway panel on launch.
      */
     private static final String[] STALE_DEFAULT_URLS = {
             "http://127.0.0.1:8080",
             "http://localhost:8080",
             "http://127.0.0.1:5897",
             "http://localhost:5897",
+            "http://23.109.45.71:5897",
+            "https://23.109.45.71:5897",
     };
 
     public String apiBaseUrl = DEFAULT_API_BASE_URL;
