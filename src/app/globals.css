@@ -14,6 +14,18 @@
   color-scheme: dark;
 
   /*
+   * Font pipeline. `geist/font` (applied on <html>) exposes
+   * --font-geist-sans / --font-geist-mono, but the Tailwind fontFamily
+   * config and a number of raw `var(--font-sans)` usages expect the
+   * shorter names. Without this alias those var()s are undefined, which
+   * invalidates the whole `font-family` declaration and the panel silently
+   * falls back to the browser default (a serif) — i.e. Geist never
+   * actually applied. Alias them so Geist renders everywhere.
+   */
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /*
    * 1.0.14 — refreshed surface ladder. Step values are closer together
    * than the brutalist set so layered cards feel atmospheric instead
    * of stamped. Tokens stay B&W per project memory.
