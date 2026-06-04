@@ -3,6 +3,17 @@
 @tailwind utilities;
 
 /*
+ * Minecraftia — the authentic Minecraft bitmap face. Used only on the
+ * public /download page (NOT the admin dashboard, which stays Geist).
+ * The TTF already ships in /public/fonts for the in-game nametag render.
+ */
+@font-face {
+  font-family: 'Minecraftia';
+  src: url('/fonts/Minecraftia-Regular.ttf') format('truetype');
+  font-display: swap;
+}
+
+/*
  * Monochrome Modern — tokens.
  *
  * Strict B&W system: form, contrast, rhythm and typography do the work
@@ -331,6 +342,58 @@ canvas.pixelated {
   .btn-accent:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+  }
+
+  /* Minecraft bitmap face — /download page only. */
+  .font-mc {
+    font-family: 'Minecraftia', ui-monospace, monospace;
+    letter-spacing: 0.02em;
+  }
+
+  /*
+   * Minecraft-style beveled block button (gold variant). Hard 3px bevel
+   * (light top/left, dark bottom/right), no radius, pixel font, a chunky
+   * drop that compresses on press like a real MC GUI button.
+   */
+  .btn-mc {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 0.8rem 1.6rem;
+    font-family: 'Minecraftia', ui-monospace, monospace;
+    font-size: 1rem;
+    letter-spacing: 0.03em;
+    text-transform: none;
+    color: var(--accent-ink);
+    background: var(--accent);
+    border: 3px solid;
+    border-color: var(--accent-bright) #5a4410 #5a4410 var(--accent-bright);
+    border-radius: 0;
+    box-shadow: 0 4px 0 0 rgba(0, 0, 0, 0.45);
+    image-rendering: pixelated;
+    transition: background 0.1s steps(2), transform 0.05s, box-shadow 0.05s;
+  }
+  .btn-mc:hover {
+    background: var(--accent-bright);
+  }
+  .btn-mc:active {
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 0 rgba(0, 0, 0, 0.45);
+  }
+  .btn-mc:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Inventory-slot style frame for the 3D showcase. */
+  .mc-frame {
+    position: relative;
+    background: #0b0b0d;
+    border: 3px solid;
+    border-color: #050506 #2c2c30 #2c2c30 #050506;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+    image-rendering: pixelated;
   }
 
   /* Ghost — subtle pill, no fill, gentle hover wash. */
