@@ -90,7 +90,8 @@ export default function ModPage() {
 
   async function copyDownload() {
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/api/mod/download`);
+      // Share the friendly /download page with players, not the raw stream.
+      await navigator.clipboard.writeText(`${window.location.origin}/download`);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -193,7 +194,7 @@ export default function ModPage() {
                   <SpecRow k="File" v={latest.filename} />
                   <SpecRow k="Size" v={`${(latest.size / 1024).toFixed(1)} KB`} />
                   <SpecRow k="Published" v={new Date(latest.uploadedAt).toLocaleString()} />
-                  <SpecRow k="Download" v="/api/mod/download" />
+                  <SpecRow k="Share" v="/download" />
                   <SpecRow k="Manifest" v="/api/mod/version" />
                 </>
               ) : (
@@ -201,7 +202,7 @@ export default function ModPage() {
                   <SpecRow k="File" v="—" />
                   <SpecRow k="Size" v="—" />
                   <SpecRow k="Published" v="—" />
-                  <SpecRow k="Download" v="/api/mod/download" />
+                  <SpecRow k="Share" v="/download" />
                   <SpecRow k="Manifest" v="/api/mod/version" />
                 </>
               )}
