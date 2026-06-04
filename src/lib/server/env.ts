@@ -29,6 +29,13 @@ export const MOD_LATEST_VERSION = process.env.MOD_LATEST_VERSION ?? '1.0.4';
 export const MAX_MOD_UPLOAD_KB = Number(process.env.MAX_MOD_UPLOAD_KB) || 8192;
 
 /**
+ * Paper plugin jar distribution — same Railway Volume as the client mod.
+ * Served as a DIRECT 200 by /api/plugin/download (the plugin's auto-updater
+ * uses a non-redirect-following HttpClient, so the download URL must not 3xx).
+ */
+export const PLUGIN_DIR = process.env.PLUGIN_DIR ?? './data/plugin';
+
+/**
  * Public CDN URL used to construct cape URLs handed to the plugin. On Railway
  * this should be the panel's own public URL, e.g.:
  *   https://clancapes-XYZ.up.railway.app/api/static/capes
