@@ -45,6 +45,13 @@ type Props = {
    * matter what zoom the caller asked for.
    */
   zoom?: number;
+  /**
+   * Allow manual drag-rotate. Default true. Set false to LOCK the
+   * framing to the initial `view` — e.g. roster / inspect previews that
+   * must always show the cape from the back and can't be knocked to the
+   * front by a stray drag.
+   */
+  interactive?: boolean;
 };
 
 const DEFAULT_SKIN = '/skins/steve.png';
@@ -83,6 +90,7 @@ export function PlayerCapeView3D({
   backEquipment = 'cape',
   stance = 'stand',
   zoom,
+  interactive = true,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rotationRef = useRef<number | null>(null);
@@ -119,7 +127,7 @@ export function PlayerCapeView3D({
       local.playerObject.rotation.y = yaw;
 
       local.controls.enableZoom = false;
-      local.controls.enableRotate = true;
+      local.controls.enableRotate = interactive;
       local.controls.enablePan = false;
 
       // Default stance — the stance effect below will override if a
@@ -147,7 +155,7 @@ export function PlayerCapeView3D({
       setViewer(null);
       setSkinviewMod(null);
     };
-  }, [skinUrl, width, height, rotate, view]);
+  }, [skinUrl, width, height, rotate, view, interactive]);
 
   // Cape texture — re-runs when the viewer first becomes available
   // (because viewer is a state value) and on every subsequent change to

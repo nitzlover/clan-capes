@@ -30,7 +30,6 @@ import { useToast } from '@/components/Toast';
 type FilterMode = 'all' | 'with' | 'missing';
 type SortMode = 'recent' | 'az' | 'missing';
 type LayoutMode = 'grid' | 'list';
-type Angle = 'back' | 'front' | 'side';
 
 /** Relative "Nm ago" from an epoch-ms stamp; empty when unknown. */
 function relTime(ms?: number): string {
@@ -79,7 +78,6 @@ export default function CapesPage() {
   const [filter, setFilter] = useState<FilterMode>('all');
   const [sort, setSort] = useState<SortMode>('recent');
   const [layout, setLayout] = useState<LayoutMode>('grid');
-  const [angle, setAngle] = useState<Angle>('back');
   const [inspect, setInspect] = useState<ClanRow | null>(null);
 
   useEffect(() => {
@@ -197,6 +195,7 @@ export default function CapesPage() {
   function pickForStudio(clanTag: string) {
     setTag(clanTag);
     setInspect(null);
+    toast.info(`Cape Studio ready — drop a PNG for ${clanTag}`);
     requestAnimationFrame(() =>
       studioRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
     );
@@ -337,18 +336,6 @@ export default function CapesPage() {
             <option value="missing">Missing first</option>
           </select>
 
-          {layout === 'grid' && (
-            <Segmented
-              value={angle}
-              onChange={(v) => setAngle(v as Angle)}
-              options={[
-                { value: 'back', label: 'Back' },
-                { value: 'front', label: 'Front' },
-                { value: 'side', label: 'Side' },
-              ]}
-            />
-          )}
-
           <Segmented
             value={layout}
             onChange={(v) => setLayout(v as LayoutMode)}
@@ -397,7 +384,6 @@ export default function CapesPage() {
               <StaggerItem key={c.tag}>
                 <CapeCardGrid
                   clan={c}
-                  angle={angle}
                   onInspect={() => setInspect(c)}
                   onStudio={() => pickForStudio(c.tag)}
                   onDownload={() => downloadCape(c)}
@@ -607,7 +593,6 @@ function MetaLine({ clan }: { clan: ClanRow }) {
 
 function CapeCardGrid({
   clan,
-  angle,
   onInspect,
   onStudio,
   onDownload,
@@ -615,7 +600,6 @@ function CapeCardGrid({
   onDelete,
 }: {
   clan: ClanRow;
-  angle: Angle;
   onInspect: () => void;
   onStudio: () => void;
   onDownload: () => void;
@@ -632,11 +616,18 @@ function CapeCardGrid({
       <button
         type="button"
         onClick={has ? onInspect : onStudio}
-        className="relative flex items-center justify-center bg-black/40 py-4"
+        className="relative flex items-center justify-center bg-black py-4"
         title={has ? 'Inspect cape' : 'Add a cape'}
       >
         {has ? (
-          <PlayerCapeView3D capeUrl={clan.capeUrl} width={110} height={160} view={angle} zoom={0.7} />
+          <PlayerCapeView3D
+            capeUrl={clan.capeUrl}
+            width={110}
+            height={160}
+            view="back"
+            zoom={0.7}
+            interactive={false}
+          />
         ) : (
           <div className="flex h-[160px] w-[110px] flex-col items-center justify-center gap-2 text-[var(--text-faint)]">
             <span className="material-symbols-outlined" style={{ fontSize: 30 }}>
@@ -714,7 +705,7 @@ function CapeRow({
         type="button"
         onClick={has ? onInspect : onStudio}
         title={has ? 'Inspect cape' : 'Add a cape'}
-        className="grid h-12 w-20 shrink-0 place-items-center overflow-hidden rounded-[var(--radius-sm)] border border-[var(--rule)] bg-black/40"
+        className="grid h-12 w-20 shrink-0 place-items-center overflow-hidden rounded-[var(--radius-sm)] border border-[var(--rule)] bg-black"
       >
         {has ? (
           // Raw texture thumbnail — keeps the dense list off the WebGL
@@ -793,9 +784,6 @@ function InspectModal({
   onCopy: () => void;
   onDelete: () => void;
 }) {
-  const [equip, setEquip] = useState<'cape' | 'elytra'>('cape');
-  const [stance, setStance] = useState<'stand' | 'fly'>('stand');
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -829,33 +817,12 @@ function InspectModal({
             width={340}
             height={460}
             view="back"
-            backEquipment={equip}
-            stance={stance}
+            interactive={false}
           />
-          <div className="pointer-events-none absolute right-4 top-4 flex flex-col items-end gap-2">
-            <ModalToggle
-              value={equip}
-              onChange={(v) => setEquip(v as 'cape' | 'elytra')}
-              options={[
-                { value: 'cape', label: 'Cape' },
-                { value: 'elytra', label: 'Elytra' },
-              ]}
-            />
-            <ModalToggle
-              value={stance}
-              onChange={(v) => setStance(v as 'stand' | 'fly')}
-              options={[
-                { value: 'stand', label: 'Stand' },
-                { value: 'fly', label: 'Fly' },
-              ]}
-            />
-          </div>
-          <div className="pointer-events-none absolute bottom-4 left-4 flex items-center gap-2 border border-[var(--rule-strong)] bg-[var(--bg-raise)]/85 px-2.5 py-1 backdrop-blur-sm">
-            <span className="material-symbols-outlined text-[var(--text-mute)]" style={{ fontSize: 14 }}>
-              360
-            </span>
+          <div className="pointer-events-none absolute bottom-4 left-4 inline-flex items-center gap-2 border border-[var(--rule-strong)] bg-[var(--bg-raise)]/85 px-2.5 py-1 backdrop-blur-sm">
+            <span className="status-dot" style={{ background: 'var(--accent)' }} />
             <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-mute)]">
-              Drag to rotate
+              back view
             </span>
           </div>
         </div>
@@ -942,32 +909,3 @@ function InspectModal({
   );
 }
 
-function ModalToggle({
-  value,
-  onChange,
-  options,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: Array<{ value: string; label: string }>;
-}) {
-  return (
-    <div className="inline-flex border border-[var(--rule-strong)] bg-black/65 backdrop-blur-sm">
-      {options.map((o) => {
-        const active = value === o.value;
-        return (
-          <button
-            key={o.value}
-            type="button"
-            onClick={() => onChange(o.value)}
-            className={`px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] transition-colors ${
-              active ? 'bg-white text-black' : 'text-white/70 hover:text-white'
-            }`}
-          >
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
