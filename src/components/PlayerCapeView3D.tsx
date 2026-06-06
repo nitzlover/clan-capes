@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { SkinViewer as SkinViewerType } from 'skinview3d';
 
 type BackEquipment = 'cape' | 'elytra';
-type StanceMode = 'stand' | 'fly';
+type StanceMode = 'stand' | 'walk' | 'run' | 'fly';
 
 type Props = {
   /** Cape URL (http(s) or data:). When null/undefined, only the skin is shown. */
@@ -122,8 +122,12 @@ export function PlayerCapeView3D({
         background: 0x000000,
       });
 
+      // skinview3d 3.4.2 here renders yaw 0 as the BACK (cape toward the
+      // camera) and yaw π as the FRONT/face — verified from a locked
+      // view="back" preview that showed the face. Cape previews default to
+      // "back" so the cape is what you see.
       const yaw =
-        view === 'back' ? Math.PI : view === 'side' ? Math.PI / 2 : 0;
+        view === 'front' ? Math.PI : view === 'side' ? Math.PI / 2 : 0;
       local.playerObject.rotation.y = yaw;
 
       local.controls.enableZoom = false;
@@ -180,7 +184,11 @@ export function PlayerCapeView3D({
     viewer.animation =
       stance === 'fly'
         ? new skinviewMod.FlyingAnimation()
-        : new skinviewMod.IdleAnimation();
+        : stance === 'walk'
+          ? new skinviewMod.WalkingAnimation()
+          : stance === 'run'
+            ? new skinviewMod.RunningAnimation()
+            : new skinviewMod.IdleAnimation();
   }, [viewer, skinviewMod, stance]);
 
   // Zoom — pull the camera back in fly stance so the rotated-horizontal

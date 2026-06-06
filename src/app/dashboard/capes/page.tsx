@@ -4,11 +4,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { UploadSection } from '@/components/UploadSection';
 import { PlayerCapeView3D } from '@/components/PlayerCapeView3D';
 import { SelectServerPrompt } from '@/components/ServerPicker';
-import { api, type ClanRow, getToken, UnauthorizedError } from '@/lib/api';
+import {
+  api,
+  type ClanRow,
+  getToken,
+  UnauthorizedError,
+  fetchClanBanner,
+  saveClanBanner,
+  deleteClanBanner,
+  type ClanBannerDto,
+} from '@/lib/api';
 import { useSelectedServer, serverQueryString } from '@/lib/selected-server';
 import { Reveal, Stagger, StaggerItem, CountUp, useDelayedFlag } from '@/components/motion';
 import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
+import { ArmorTrimEditor, type ArmorTrimRecord } from '@/components/ArmorTrimEditor';
+import { BannerEditor } from '@/components/BannerEditor';
+import { BannerPreview } from '@/components/BannerPreview';
+import { EMPTY_SPEC, type BannerSpec } from '@/lib/banners';
 
 /**
  * Capes route — clan-cape library + uploader.
@@ -414,6 +427,7 @@ export default function CapesPage() {
       {inspect && (
         <InspectModal
           clan={inspect}
+          serverId={typeof serverId === 'number' ? serverId : null}
           onClose={() => setInspect(null)}
           onStudio={() => pickForStudio(inspect.tag)}
           onDownload={() => downloadCape(inspect)}
@@ -769,8 +783,11 @@ function CapeRow({
 
 /* ─────────────────────────── Inspect modal ─────────────────────────── */
 
+type CosmeticTab = 'cape' | 'trim' | 'banner';
+
 function InspectModal({
   clan,
+  serverId,
   onClose,
   onStudio,
   onDownload,
@@ -778,12 +795,15 @@ function InspectModal({
   onDelete,
 }: {
   clan: ClanRow;
+  serverId: number | null;
   onClose: () => void;
   onStudio: () => void;
   onDownload: () => void;
   onCopy: () => void;
   onDelete: () => void;
 }) {
+  const [tab, setTab] = useState<CosmeticTab>('cape');
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -796,12 +816,18 @@ function InspectModal({
     };
   }, [onClose]);
 
+  const tabs: { id: CosmeticTab; label: string; icon: string }[] = [
+    { id: 'cape', label: 'Cape', icon: 'checkroom' },
+    { id: 'trim', label: 'Trim', icon: 'shield' },
+    { id: 'banner', label: 'Banner', icon: 'flag' },
+  ];
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
-      aria-label={`Cape for ${clan.tag}`}
+      aria-label={`Cosmetics for ${clan.tag}`}
     >
       <button
         type="button"
@@ -809,102 +835,331 @@ function InspectModal({
         onClick={onClose}
         className="absolute inset-0 bg-black/80 backdrop-blur-sm"
       />
-      <div className="brutal-card relative z-10 grid max-h-[90vh] w-full max-w-3xl grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,1fr)_320px]">
-        {/* 3D viewer */}
-        <div className="relative flex min-h-[420px] items-center justify-center bg-black">
-          <PlayerCapeView3D
-            capeUrl={clan.capeUrl}
-            width={340}
-            height={460}
-            view="back"
-            interactive={false}
-          />
-          <div className="pointer-events-none absolute bottom-4 left-4 inline-flex items-center gap-2 border border-[var(--rule-strong)] bg-[var(--bg-raise)]/85 px-2.5 py-1 backdrop-blur-sm">
-            <span className="status-dot" style={{ background: 'var(--accent)' }} />
-            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-mute)]">
-              back view
-            </span>
-          </div>
-        </div>
-
-        {/* info + actions */}
-        <div className="flex flex-col border-t border-[var(--rule)] bg-[var(--bg-raise)] md:border-l md:border-t-0">
-          <div className="flex items-start justify-between gap-3 border-b border-[var(--rule)] px-5 py-4">
+      <div className="brutal-card relative z-10 flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden">
+        {/* header + tabs */}
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--rule)] px-5 py-4">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
             <div>
-              <p className="label-mono">Clan cape</p>
-              <h3 className="mt-1 font-sans text-2xl font-extrabold uppercase tracking-wider text-white">
+              <p className="label-mono">Clan cosmetics</p>
+              <h3 className="mt-0.5 font-sans text-xl font-extrabold uppercase tracking-wider text-white">
                 {clan.tag}
               </h3>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="font-mono text-sm text-[var(--text-mute)] hover:text-white"
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="space-y-4 px-5 py-5">
-            <div>
-              <p className="label-mono mb-2">Texture</p>
-              <div className="inline-block border border-[var(--rule-strong)] bg-black p-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={clan.capeUrl}
-                  alt={`${clan.tag} cape texture`}
-                  className="block [image-rendering:pixelated]"
-                  style={{ width: 256, height: 128 }}
-                />
-              </div>
+            <div className="flex items-center gap-1 self-end">
+              {tabs.map((t) => {
+                const active = tab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTab(t.id)}
+                    className={`inline-flex items-center gap-1.5 border-b-2 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] transition-colors ${
+                      active
+                        ? 'border-[var(--accent)] text-white'
+                        : 'border-transparent text-[var(--text-mute)] hover:text-white'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 15 }}>
+                      {t.icon}
+                    </span>
+                    {t.label}
+                  </button>
+                );
+              })}
             </div>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 font-mono text-[11px]">
-              <dt className="text-[var(--text-faint)]">File</dt>
-              <dd className="truncate text-[var(--text-soft)]">{capeFilename(clan.capeUrl)}</dd>
-              {clan.updatedAt > 0 && (
-                <>
-                  <dt className="text-[var(--text-faint)]">Updated</dt>
-                  <dd className="text-[var(--text-soft)]" title={new Date(clan.updatedAt).toLocaleString()}>
-                    {relTime(clan.updatedAt)}
-                  </dd>
-                </>
-              )}
-              {shortActor(clan.updatedBy) && (
-                <>
-                  <dt className="text-[var(--text-faint)]">By</dt>
-                  <dd className="truncate text-[var(--text-soft)]">{shortActor(clan.updatedBy)}</dd>
-                </>
-              )}
-            </dl>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="self-start font-mono text-sm text-[var(--text-mute)] hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
 
-          <div className="mt-auto flex flex-wrap gap-2 border-t border-[var(--rule)] px-5 py-4">
-            <button type="button" onClick={onStudio} className="btn-primary text-[13px]">
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
-                swap_horiz
-              </span>
-              Replace
-            </button>
-            <button type="button" onClick={onDownload} className="btn-ghost text-[13px]">
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
-                download
-              </span>
-              PNG
-            </button>
-            <button type="button" onClick={onCopy} className="btn-ghost text-[13px]">
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
-                link
-              </span>
-              URL
-            </button>
-            <span className="flex-1" />
-            <button type="button" onClick={onDelete} className="btn-danger-link self-center">
-              Remove
-            </button>
-          </div>
+        {/* body */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {tab === 'cape' ? (
+            <CapeTab
+              clan={clan}
+              onStudio={onStudio}
+              onDownload={onDownload}
+              onCopy={onCopy}
+              onDelete={onDelete}
+            />
+          ) : tab === 'trim' ? (
+            <TrimTab clan={clan} serverId={serverId} />
+          ) : (
+            <BannerTab clan={clan} serverId={serverId} />
+          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* Cape tab — 3D viewer (drag-rotate + cape/elytra + pose) + texture/meta + actions. */
+function CapeTab({
+  clan,
+  onStudio,
+  onDownload,
+  onCopy,
+  onDelete,
+}: {
+  clan: ClanRow;
+  onStudio: () => void;
+  onDownload: () => void;
+  onCopy: () => void;
+  onDelete: () => void;
+}) {
+  const [equip, setEquip] = useState<'cape' | 'elytra'>('cape');
+  const [pose, setPose] = useState<'stand' | 'walk' | 'run' | 'fly'>('stand');
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="relative flex min-h-[460px] items-center justify-center bg-black">
+        <PlayerCapeView3D
+          capeUrl={clan.capeUrl}
+          width={340}
+          height={460}
+          view="back"
+          backEquipment={equip}
+          stance={pose}
+          interactive
+        />
+        <div className="absolute right-4 top-4">
+          <OverlayToggle
+            value={equip}
+            onChange={(v) => setEquip(v as 'cape' | 'elytra')}
+            options={[
+              { value: 'cape', label: 'Cape' },
+              { value: 'elytra', label: 'Elytra' },
+            ]}
+          />
+        </div>
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+          <OverlayToggle
+            value={pose}
+            onChange={(v) => setPose(v as 'stand' | 'walk' | 'run' | 'fly')}
+            options={[
+              { value: 'stand', label: 'Idle' },
+              { value: 'walk', label: 'Walk' },
+              { value: 'run', label: 'Run' },
+              { value: 'fly', label: 'Fly' },
+            ]}
+          />
+        </div>
+        <div className="pointer-events-none absolute right-4 bottom-4 inline-flex items-center gap-1.5 border border-[var(--rule-strong)] bg-[var(--bg-raise)]/85 px-2 py-1 backdrop-blur-sm">
+          <span className="material-symbols-outlined text-[var(--text-mute)]" style={{ fontSize: 13 }}>
+            360
+          </span>
+          <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--text-mute)]">
+            drag
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col border-t border-[var(--rule)] bg-[var(--bg-raise)] md:border-l md:border-t-0">
+        <div className="space-y-4 px-5 py-5">
+          <div>
+            <p className="label-mono mb-2">Texture</p>
+            <div className="inline-block border border-[var(--rule-strong)] bg-black p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={clan.capeUrl}
+                alt={`${clan.tag} cape texture`}
+                className="block [image-rendering:pixelated]"
+                style={{ width: 256, height: 128 }}
+              />
+            </div>
+          </div>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 font-mono text-[11px]">
+            <dt className="text-[var(--text-faint)]">File</dt>
+            <dd className="truncate text-[var(--text-soft)]">{capeFilename(clan.capeUrl)}</dd>
+            {clan.updatedAt > 0 && (
+              <>
+                <dt className="text-[var(--text-faint)]">Updated</dt>
+                <dd className="text-[var(--text-soft)]" title={new Date(clan.updatedAt).toLocaleString()}>
+                  {relTime(clan.updatedAt)}
+                </dd>
+              </>
+            )}
+            {shortActor(clan.updatedBy) && (
+              <>
+                <dt className="text-[var(--text-faint)]">By</dt>
+                <dd className="truncate text-[var(--text-soft)]">{shortActor(clan.updatedBy)}</dd>
+              </>
+            )}
+          </dl>
+        </div>
+
+        <div className="mt-auto flex flex-wrap gap-2 border-t border-[var(--rule)] px-5 py-4">
+          <button type="button" onClick={onStudio} className="btn-primary text-[13px]">
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+              swap_horiz
+            </span>
+            Replace
+          </button>
+          <button type="button" onClick={onDownload} className="btn-ghost text-[13px]">
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+              download
+            </span>
+            PNG
+          </button>
+          <button type="button" onClick={onCopy} className="btn-ghost text-[13px]">
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+              link
+            </span>
+            URL
+          </button>
+          <span className="flex-1" />
+          <button type="button" onClick={onDelete} className="btn-danger-link self-center">
+            Remove
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Trim tab — the shared ArmorTrimEditor, wired to the admin API. */
+function TrimTab({ clan, serverId }: { clan: ClanRow; serverId: number | null }) {
+  const qs = serverQueryString(serverId);
+  return (
+    <div className="overflow-x-auto px-5 py-5">
+      <ArmorTrimEditor
+        loadTrims={async () =>
+          (await api<{ trims: ArmorTrimRecord[] }>(`/panel/clans/${clan.tag}/armor-trim${qs}`)).trims
+        }
+        saveSlot={async (slot, material, pattern) => {
+          await api(`/panel/clans/${clan.tag}/armor-trim/${slot}${qs}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ material, pattern }),
+          });
+        }}
+        clearSlot={async (slot) => {
+          await api(`/panel/clans/${clan.tag}/armor-trim/${slot}${qs}`, { method: 'DELETE' });
+        }}
+      />
+    </div>
+  );
+}
+
+/* Banner tab — the shared BannerEditor + preview, wired to the admin API. */
+function BannerTab({ clan, serverId }: { clan: ClanRow; serverId: number | null }) {
+  const toast = useToast();
+  const [banner, setBanner] = useState<ClanBannerDto | null | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setBanner(undefined);
+    fetchClanBanner(clan.tag, serverId)
+      .then((b) => {
+        if (alive) setBanner(b);
+      })
+      .catch(() => {
+        if (alive) setBanner(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [clan.tag, serverId]);
+
+  const spec: BannerSpec = banner
+    ? { baseColor: banner.baseColor, patterns: banner.patterns }
+    : EMPTY_SPEC;
+
+  async function save(s: BannerSpec) {
+    setBusy(true);
+    setError(null);
+    try {
+      const dto = await saveClanBanner(clan.tag, s.baseColor, s.patterns, serverId);
+      setBanner(dto);
+      toast.success(`Banner saved for ${clan.tag}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Save failed';
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!confirm(`Remove the banner for ${clan.tag}?`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteClanBanner(clan.tag, serverId);
+      setBanner(null);
+      toast.success(`Banner removed for ${clan.tag}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Delete failed';
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (banner === undefined) {
+    return <p className="px-5 py-10 text-sm text-[var(--text-mute)]">Loading banner…</p>;
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-6 px-5 py-5 md:grid-cols-[auto_1fr]">
+      <div className="flex flex-col items-center gap-2">
+        <BannerPreview spec={spec} width={92} framed={false} shape="shield" />
+        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-faint)]">
+          {banner
+            ? `${banner.patterns.length} layer${banner.patterns.length === 1 ? '' : 's'}`
+            : 'vanilla shield'}
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <BannerEditor
+          initial={spec}
+          onSave={save}
+          onRemove={banner ? remove : undefined}
+          busy={busy}
+          error={error}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* Overlay pill toggle that actually receives clicks (pointer-events-auto). */
+function OverlayToggle({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <div className="pointer-events-auto inline-flex border border-[var(--rule-strong)] bg-black/65 backdrop-blur-sm">
+      {options.map((o) => {
+        const active = value === o.value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            className={`px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] transition-colors ${
+              active ? 'bg-[var(--accent)] text-[var(--accent-ink)]' : 'text-white/70 hover:text-white'
+            }`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
