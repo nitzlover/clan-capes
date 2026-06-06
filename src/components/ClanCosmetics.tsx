@@ -62,7 +62,7 @@ export function CapeManager({
 }) {
   const toast = useToast();
   const [equip, setEquip] = useState<'cape' | 'elytra'>('cape');
-  const [pose, setPose] = useState<'stand' | 'walk' | 'run' | 'fly'>('stand');
+  const [pose, setPose] = useState<'stand' | 'fly'>('stand');
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -95,7 +95,11 @@ export function CapeManager({
       const kb = Math.round(file.size / 1024);
       const ok = dimsOk && kb <= 512;
       setValid(ok);
-      setNote(ok ? `${img.width}×${img.height} · ${kb} KB` : `${img.width}×${img.height} · ${kb} KB — need 64×32 / 128×64, ≤512 KB`);
+      setNote(
+        ok
+          ? `${img.width}×${img.height} · ${kb} KB`
+          : `${img.width}×${img.height} · ${kb} KB — need 64×32 / 128×64, ≤512 KB`,
+      );
       URL.revokeObjectURL(u);
     };
     img.onerror = () => {
@@ -184,139 +188,178 @@ export function CapeManager({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-5 md:grid-cols-[minmax(0,300px)_1fr]">
-      {/* live preview */}
-      <div className="relative flex min-h-[320px] items-center justify-center bg-black">
-        {shownCape ? (
-          <PlayerCapeView3D
-            capeUrl={shownCape}
-            width={220}
-            height={300}
-            view="back"
-            backEquipment={equip}
-            stance={pose}
-            interactive
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,360px)_1fr]">
+      {/* ── stage ── */}
+      <div className="flex flex-col gap-3">
+        <div className="relative overflow-hidden rounded-[var(--radius-lg)] border border-[var(--rule)] bg-black">
+          {/* soft gold key light behind the figure */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute left-1/2 top-[42%] h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full"
+            style={{ background: 'var(--accent-glow)', filter: 'blur(80px)', opacity: shownCape ? 0.4 : 0.1 }}
           />
-        ) : (
-          <div className="flex flex-col items-center gap-2 text-[var(--text-faint)]">
-            <span className="material-symbols-outlined" style={{ fontSize: 30 }}>
-              checkroom
-            </span>
-            <span className="font-mono text-[10px] uppercase tracking-[0.2em]">no cape</span>
+          <CornerTicks />
+          <div className="relative flex min-h-[360px] items-center justify-center py-4">
+            {shownCape ? (
+              <PlayerCapeView3D
+                capeUrl={shownCape}
+                width={240}
+                height={330}
+                view="back"
+                backEquipment={equip}
+                stance={pose}
+                interactive
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-[var(--text-faint)]">
+                <span className="material-symbols-outlined" style={{ fontSize: 34 }}>
+                  checkroom
+                </span>
+                <span className="font-mono text-[10px] uppercase tracking-[0.2em]">no cape yet</span>
+              </div>
+            )}
           </div>
-        )}
-        {shownCape && (
-          <>
-            <div className="absolute right-3 top-3">
-              <OverlayToggle
-                value={equip}
-                onChange={(v) => setEquip(v as 'cape' | 'elytra')}
-                options={[
-                  { value: 'cape', label: 'Cape' },
-                  { value: 'elytra', label: 'Elytra' },
-                ]}
-              />
-            </div>
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
-              <OverlayToggle
-                value={pose}
-                onChange={(v) => setPose(v as 'stand' | 'walk' | 'run' | 'fly')}
-                options={[
-                  { value: 'stand', label: 'Idle' },
-                  { value: 'walk', label: 'Walk' },
-                  { value: 'run', label: 'Run' },
-                  { value: 'fly', label: 'Fly' },
-                ]}
-              />
-            </div>
-          </>
-        )}
-        {preview && (
-          <span className="pointer-events-none absolute left-3 top-3 border border-[var(--accent-line)] bg-black/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--accent-bright)]">
-            unsaved preview
-          </span>
-        )}
-      </div>
-
-      {/* controls */}
-      <div className="flex flex-col gap-4">
-        <label
-          htmlFor={`cape-file-${tag}`}
-          onDrop={onDrop}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          className={`flex cursor-pointer flex-col items-center justify-center border-2 border-dashed px-6 py-8 text-center transition-colors ${
-            dragOver
-              ? 'border-white bg-white/[0.06]'
-              : 'border-[var(--rule-strong)] hover:border-white hover:bg-white/[0.02]'
-          }`}
-        >
-          <span className="material-symbols-outlined mb-2 text-[var(--text-mute)]" style={{ fontSize: 28 }}>
-            upload_file
-          </span>
-          <p className="font-sans text-sm font-extrabold uppercase tracking-widest text-white">
-            {file ? 'Replace PNG' : 'Drop / pick PNG'}
-          </p>
-          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-faint)]">
-            64×32 or 128×64 · ≤512 KB
-          </p>
-          {note && (
-            <p
-              className={`mt-2 font-mono text-[10px] uppercase tracking-[0.16em] ${
-                valid ? 'text-[var(--text-soft)]' : 'text-white'
-              }`}
-            >
-              {valid ? '✓' : '!'} {note}
-            </p>
-          )}
-          <input
-            ref={inputRef}
-            id={`cape-file-${tag}`}
-            type="file"
-            accept="image/png"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="sr-only"
-          />
-        </label>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={upload} disabled={!valid || busy} className="btn-accent text-[13px] disabled:opacity-30">
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
-              cloud_upload
+          {preview && (
+            <span className="pointer-events-none absolute right-3 top-3 border border-[var(--accent-line)] bg-black/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--accent-bright)]">
+              unsaved
             </span>
-            {busy ? 'Deploying…' : cape ? 'Replace cape' : 'Deploy cape'}
-          </button>
-          {file && (
-            <button type="button" onClick={() => setFile(null)} className="btn-ghost text-[13px]">
-              Cancel
-            </button>
           )}
+          <span className="pointer-events-none absolute bottom-3 left-3 inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--text-faint)]">
+            <span className="status-dot" style={{ background: 'var(--accent)' }} />
+            back · drag to spin
+          </span>
         </div>
 
+        {/* control bar — below the stage, labelled segmented pills */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          <SegControl
+            label="Back"
+            value={equip}
+            onChange={(v) => setEquip(v as 'cape' | 'elytra')}
+            options={[
+              { value: 'cape', label: 'Cape' },
+              { value: 'elytra', label: 'Elytra' },
+            ]}
+          />
+          <SegControl
+            label="Pose"
+            value={pose}
+            onChange={(v) => setPose(v as 'stand' | 'fly')}
+            options={[
+              { value: 'stand', label: 'Idle' },
+              { value: 'fly', label: 'Fly' },
+            ]}
+          />
+        </div>
+      </div>
+
+      {/* ── panel ── */}
+      <div className="flex flex-col gap-6">
+        {/* upload */}
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="label-mono">{cape ? 'Replace texture' : 'Upload texture'}</p>
+            {cape ? (
+              <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--accent-bright)]">
+                <span className="status-dot" style={{ background: 'var(--accent)' }} />
+                active
+              </span>
+            ) : (
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">
+                empty
+              </span>
+            )}
+          </div>
+          <label
+            htmlFor={`cape-file-${tag}`}
+            onDrop={onDrop}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-[var(--radius-md)] border-2 border-dashed px-6 py-10 text-center transition-colors ${
+              dragOver
+                ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                : 'border-[var(--rule-strong)] hover:border-white hover:bg-white/[0.02]'
+            }`}
+          >
+            <span className="material-symbols-outlined mb-2 text-[var(--text-mute)]" style={{ fontSize: 28 }}>
+              upload_file
+            </span>
+            <p className="font-sans text-sm font-extrabold uppercase tracking-widest text-white">
+              {file ? 'Replace PNG' : 'Drop / pick PNG'}
+            </p>
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--text-faint)]">
+              64×32 or 128×64 · ≤512 KB
+            </p>
+            {note && (
+              <p
+                className={`mt-2 font-mono text-[10px] uppercase tracking-[0.16em] ${
+                  valid ? 'text-[var(--text-soft)]' : 'text-white'
+                }`}
+              >
+                {valid ? '✓' : '!'} {note}
+              </p>
+            )}
+            <input
+              ref={inputRef}
+              id={`cape-file-${tag}`}
+              type="file"
+              accept="image/png"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="sr-only"
+            />
+          </label>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button type="button" onClick={upload} disabled={!valid || busy} className="btn-accent text-[13px] disabled:opacity-30">
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                cloud_upload
+              </span>
+              {busy ? 'Deploying…' : cape ? 'Replace cape' : 'Deploy cape'}
+            </button>
+            {file && (
+              <button type="button" onClick={() => setFile(null)} className="btn-ghost text-[13px]">
+                Cancel
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* current */}
         {cape && (
-          <div className="border-t border-[var(--rule)] pt-4">
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 font-mono text-[11px]">
-              <dt className="text-[var(--text-faint)]">File</dt>
-              <dd className="truncate text-[var(--text-soft)]">{cape.capeUrl.split('?')[0].split('/').pop()}</dd>
-              {cape.updatedAt > 0 && (
-                <>
-                  <dt className="text-[var(--text-faint)]">Updated</dt>
-                  <dd className="text-[var(--text-soft)]" title={new Date(cape.updatedAt).toLocaleString()}>
-                    {relTime(cape.updatedAt)}
-                  </dd>
-                </>
-              )}
-              {shortActor(cape.updatedBy) && (
-                <>
-                  <dt className="text-[var(--text-faint)]">By</dt>
-                  <dd className="truncate text-[var(--text-soft)]">{shortActor(cape.updatedBy)}</dd>
-                </>
-              )}
-            </dl>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="border-t border-[var(--rule)] pt-6">
+            <p className="label-mono mb-3">Live texture</p>
+            <div className="flex flex-wrap items-start gap-4">
+              <div className="border border-[var(--rule-strong)] bg-black p-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={cape.capeUrl}
+                  alt={`${tag} cape texture`}
+                  className="block [image-rendering:pixelated]"
+                  style={{ width: 160, height: 80 }}
+                />
+              </div>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 font-mono text-[11px]">
+                <dt className="text-[var(--text-faint)]">File</dt>
+                <dd className="truncate text-[var(--text-soft)]">{cape.capeUrl.split('?')[0].split('/').pop()}</dd>
+                {cape.updatedAt > 0 && (
+                  <>
+                    <dt className="text-[var(--text-faint)]">Updated</dt>
+                    <dd className="text-[var(--text-soft)]" title={new Date(cape.updatedAt).toLocaleString()}>
+                      {relTime(cape.updatedAt)}
+                    </dd>
+                  </>
+                )}
+                {shortActor(cape.updatedBy) && (
+                  <>
+                    <dt className="text-[var(--text-faint)]">By</dt>
+                    <dd className="truncate text-[var(--text-soft)]">{shortActor(cape.updatedBy)}</dd>
+                  </>
+                )}
+              </dl>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               <button type="button" onClick={download} className="btn-ghost text-[13px]">
                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
                   download
@@ -453,34 +496,55 @@ export function BannerManager({ tag, serverId }: { tag: string; serverId: number
   );
 }
 
-/* ───────────────────────── shared overlay toggle ───────────────────────── */
+/* ───────────────────────── shared bits ───────────────────────── */
 
-function OverlayToggle({
+function SegControl({
+  label,
   value,
   onChange,
   options,
 }: {
+  label: string;
   value: string;
   onChange: (v: string) => void;
   options: Array<{ value: string; label: string }>;
 }) {
   return (
-    <div className="pointer-events-auto inline-flex border border-[var(--rule-strong)] bg-black/65 backdrop-blur-sm">
-      {options.map((o) => {
-        const active = value === o.value;
-        return (
-          <button
-            key={o.value}
-            type="button"
-            onClick={() => onChange(o.value)}
-            className={`px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em] transition-colors ${
-              active ? 'bg-[var(--accent)] text-[var(--accent-ink)]' : 'text-white/70 hover:text-white'
-            }`}
-          >
-            {o.label}
-          </button>
-        );
-      })}
+    <div className="flex items-center gap-2">
+      <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+        {label}
+      </span>
+      <div className="inline-flex rounded-[var(--radius-pill)] border border-[var(--rule-strong)] bg-[var(--surface-2)] p-0.5">
+        {options.map((o) => {
+          const active = value === o.value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => onChange(o.value)}
+              className={`rounded-[var(--radius-pill)] px-3 py-1 font-mono text-[10px] uppercase tracking-[0.16em] transition-colors ${
+                active
+                  ? 'bg-[var(--accent)] text-[var(--accent-ink)]'
+                  : 'text-[var(--text-mute)] hover:text-white'
+              }`}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
+  );
+}
+
+function CornerTicks() {
+  const base = 'pointer-events-none absolute h-3 w-3 border-[var(--accent-line)]';
+  return (
+    <>
+      <span className={`${base} left-0 top-0 border-l border-t`} aria-hidden />
+      <span className={`${base} right-0 top-0 border-r border-t`} aria-hidden />
+      <span className={`${base} bottom-0 left-0 border-b border-l`} aria-hidden />
+      <span className={`${base} bottom-0 right-0 border-b border-r`} aria-hidden />
+    </>
   );
 }
