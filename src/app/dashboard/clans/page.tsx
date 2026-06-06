@@ -6,9 +6,11 @@ import { useSelectedServer } from '@/lib/selected-server';
 import { api, UnauthorizedError } from '@/lib/api';
 import { nearestVanilla } from '@/lib/vanilla-color';
 import {
-  ArmorTrimEditor,
-  type ArmorTrimRecord,
-} from '@/components/ArmorTrimEditor';
+  CapeManager,
+  TrimManager,
+  BannerManager,
+  type CapeInfo,
+} from '@/components/ClanCosmetics';
 import { MemberCard3D } from '@/components/MemberCard3D';
 import { Select, type SelectOption } from '@/components/Select';
 import { Reveal } from '@/components/motion';
@@ -83,25 +85,38 @@ export default function ClansPage() {
   // `null` = no fresh heartbeat (snapshot stale) → UI shows the
   // "unknown" dot. Polled every 30s in lockstep with the panel cache.
   const [onlineUuids, setOnlineUuids] = useState<Set<string> | null>(null);
+  // tag -> current cape, fed into each clan's Cape tab. Fetched alongside the
+  // roster (and refreshed on its own after a cape upload/delete so the open
+  // editor doesn't collapse under a full reload).
+  const [capeMap, setCapeMap] = useState<Record<string, CapeInfo>>({});
 
   const load = useCallback(
     async (id: number | null) => {
       if (id === null) {
         setServers([]);
         setClans([]);
+        setCapeMap({});
         setLoading(false);
         return;
       }
       setLoading(true);
       setError('');
       try {
-        const res = await api<{
-          clans: Clan[];
-          servers: ServerOpt[];
-          serverId?: number;
-        }>(`/panel/clans-list?serverId=${id}`);
+        const [res, capeRes] = await Promise.all([
+          api<{ clans: Clan[]; servers: ServerOpt[]; serverId?: number }>(
+            `/panel/clans-list?serverId=${id}`,
+          ),
+          api<{ clans: Array<{ tag: string; capeUrl: string; updatedAt: number; updatedBy: string }> }>(
+            `/panel/clans?serverId=${id}`,
+          ).catch(() => ({ clans: [] as Array<{ tag: string; capeUrl: string; updatedAt: number; updatedBy: string }> })),
+        ]);
         setServers(res.servers);
         setClans(res.clans);
+        const m: Record<string, CapeInfo> = {};
+        for (const c of capeRes.clans) {
+          if (c.capeUrl) m[c.tag] = { capeUrl: c.capeUrl, updatedAt: c.updatedAt, updatedBy: c.updatedBy };
+        }
+        setCapeMap(m);
       } catch (e) {
         if (e instanceof UnauthorizedError) return;
         setError(e instanceof Error ? e.message : 'Failed to load');
@@ -111,6 +126,22 @@ export default function ClansPage() {
     },
     [],
   );
+
+  const refreshCapes = useCallback(async (id: number | null) => {
+    if (id === null) return;
+    try {
+      const r = await api<{ clans: Array<{ tag: string; capeUrl: string; updatedAt: number; updatedBy: string }> }>(
+        `/panel/clans?serverId=${id}`,
+      );
+      const m: Record<string, CapeInfo> = {};
+      for (const c of r.clans) {
+        if (c.capeUrl) m[c.tag] = { capeUrl: c.capeUrl, updatedAt: c.updatedAt, updatedBy: c.updatedBy };
+      }
+      setCapeMap(m);
+    } catch {
+      /* non-fatal — keep the stale map */
+    }
+  }, []);
 
   useEffect(() => {
     load(serverId);
@@ -186,7 +217,8 @@ export default function ClansPage() {
         <div>
           <h1 className="page-title">Clans</h1>
           <p className="page-subtitle">
-            DB-backed roster — inspect and edit every clan registered with the panel.
+            One hub per clan — members, cape, armour trims and banner. Expand a
+            row to edit.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -277,7 +309,9 @@ export default function ClansPage() {
                   clan={c}
                   serverId={serverId}
                   onlineUuids={onlineUuids}
+                  cape={capeMap[c.tag] ?? null}
                   onChange={() => load(serverId)}
+                  onCapeChanged={() => refreshCapes(serverId)}
                 />
               ))}
             </ul>
@@ -292,12 +326,16 @@ function ClanRow({
   clan,
   serverId,
   onlineUuids,
+  cape,
   onChange,
+  onCapeChanged,
 }: {
   clan: Clan;
   serverId: number | null;
   onlineUuids: Set<string> | null;
+  cape: CapeInfo;
   onChange: () => void;
+  onCapeChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const leader = clan.members.find((m) => m.role === 'leader');
@@ -361,37 +399,41 @@ function ClanRow({
           clan={clan}
           serverId={serverId}
           onlineUuids={onlineUuids}
+          cape={cape}
           onChange={onChange}
+          onCapeChanged={onCapeChanged}
         />
       )}
     </li>
   );
 }
 
+type EditorTab = 'overview' | 'cape' | 'trim' | 'banner' | 'activity';
+
 function ClanEditor({
   clan,
   serverId,
   onlineUuids,
+  cape,
   onChange,
+  onCapeChanged,
 }: {
   clan: Clan;
   serverId: number | null;
   onlineUuids: Set<string> | null;
+  cape: CapeInfo;
   onChange: () => void;
+  onCapeChanged: () => void;
 }) {
   const qs = serverId ? `?serverId=${serverId}` : '';
+  const [tab, setTab] = useState<EditorTab>('overview');
   const [name, setName] = useState(clan.name);
   const [color, setColor] = useState(clan.colorHex);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-  // Armour-trim section is opt-in — keeps the row compact when the
-  // operator is just renaming or kicking members, and avoids paying
-  // the WebGL + texture fetch cost until they actually want to edit
-  // trims.
-  const [showTrims, setShowTrims] = useState(false);
-  // 3D roster row is also opt-in — each card is its own WebGL
-  // context (skinview3d) and a 20-member clan would otherwise blow
-  // past the browser's context cap the moment the row expands.
+  // 3D roster row is opt-in — each card is its own WebGL context
+  // (skinview3d) and a 20-member clan would otherwise blow past the
+  // browser's context cap the moment the row expands.
   const [show3D, setShow3D] = useState(false);
 
   async function saveMeta() {
@@ -479,162 +521,172 @@ function ClanEditor({
   return (
     <div className="border-t border-[var(--rule)] bg-[var(--bg-sink)] px-6 py-5">
       <KpiStrip clan={clan} onlineCount={editorOnlineCount} />
-      <div className="grid gap-6 md:grid-cols-[1.4fr_1fr]">
-        <div>
-          <p className="label-mono mb-3">Edit clan</p>
-          <div className="space-y-3">
-            <label className="block">
-              <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
-                Name
+
+      {/* tab bar — Overview / Cape / Trim / Banner / Activity */}
+      <div className="mb-5 flex flex-wrap gap-1 border-b border-[var(--rule)]">
+        {(
+          [
+            { id: 'overview', label: 'Overview', icon: 'tune' },
+            { id: 'cape', label: 'Cape', icon: 'checkroom' },
+            { id: 'trim', label: 'Trim', icon: 'shield' },
+            { id: 'banner', label: 'Banner', icon: 'flag' },
+            { id: 'activity', label: 'Activity', icon: 'history' },
+          ] as { id: EditorTab; label: string; icon: string }[]
+        ).map((t) => {
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={`-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.18em] transition-colors ${
+                active
+                  ? 'border-[var(--accent)] text-white'
+                  : 'border-transparent text-[var(--text-mute)] hover:text-white'
+              }`}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 15 }}>
+                {t.icon}
               </span>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="input mt-1"
-                maxLength={32}
-              />
-            </label>
-            <label className="block">
-              <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
-                Color
-              </span>
-              <span className="mt-1 flex items-center gap-3">
-                <input
-                  type="color"
-                  value={color}
-                  onChange={(e) => setColor(e.target.value.toUpperCase())}
-                  className="h-10 w-12 cursor-pointer border-2 border-[var(--rule-strong)] bg-transparent"
-                />
-                <input
-                  value={color}
-                  onChange={(e) => setColor(e.target.value.toUpperCase())}
-                  className="input font-mono"
-                  maxLength={7}
-                />
-              </span>
-              <ColorSnapPreview hex={color} />
-            </label>
-            <FriendlyFireSwitch clan={clan} onChange={onChange} qs={qs} />
-            <div className="flex flex-wrap items-center gap-3">
-              <button onClick={saveMeta} disabled={busy} className="btn-primary disabled:opacity-40">
-                {busy ? 'Saving…' : 'Save'}
-              </button>
-              <button onClick={disband} disabled={busy} className="btn-danger-link">
-                Disband clan
-              </button>
-              {msg && (
-                <span
-                  className={`font-mono text-[11px] uppercase tracking-[0.22em] ${
-                    msg.kind === 'ok' ? 'text-[var(--text-soft)]' : 'text-white'
-                  }`}
-                >
-                  {msg.kind === 'ok' ? '✓' : '!'} {msg.text}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-        <div>
-          <p className="label-mono mb-3">Meta</p>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2 font-mono text-[11px]">
-            <Field label="ID" value={`#${clan.id}`} />
-            <Field label="Created" value={new Date(clan.createdAt).toLocaleString()} />
-            <Field label="Leader UUID" value={clan.leaderUuid} wide />
-          </div>
-        </div>
+              {t.label}
+            </button>
+          );
+        })}
       </div>
 
-      <button
-        type="button"
-        onClick={() => setShowTrims((s) => !s)}
-        className="mt-6 mb-2 flex w-full items-center justify-between border-b border-[var(--rule)] pb-2 text-left transition-colors hover:border-[var(--rule-strong)]"
-        aria-expanded={showTrims}
-      >
-        <span className="label-mono">Armour trims</span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-mute)]">
-          {showTrims ? '▾ hide' : '▸ show'}
-        </span>
-      </button>
-      {showTrims && (
-        <ArmorTrimEditor
-          loadTrims={async () => {
-            const r = await api<{ trims: ArmorTrimRecord[] }>(
-              `/panel/clans/${clan.tag}/armor-trim${qs}`,
-            );
-            return r.trims;
-          }}
-          saveSlot={async (slot, material, pattern) => {
-            await api(`/panel/clans/${clan.tag}/armor-trim/${slot}${qs}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ material, pattern }),
-            });
-          }}
-          clearSlot={async (slot) => {
-            await api(`/panel/clans/${clan.tag}/armor-trim/${slot}${qs}`, {
-              method: 'DELETE',
-            });
-          }}
+      {tab === 'overview' && (
+        <>
+          <div className="grid gap-6 md:grid-cols-[1.4fr_1fr]">
+            <div>
+              <p className="label-mono mb-3">Edit clan</p>
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+                    Name
+                  </span>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="input mt-1"
+                    maxLength={32}
+                  />
+                </label>
+                <label className="block">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-faint)]">
+                    Color
+                  </span>
+                  <span className="mt-1 flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={color}
+                      onChange={(e) => setColor(e.target.value.toUpperCase())}
+                      className="h-10 w-12 cursor-pointer border-2 border-[var(--rule-strong)] bg-transparent"
+                    />
+                    <input
+                      value={color}
+                      onChange={(e) => setColor(e.target.value.toUpperCase())}
+                      className="input font-mono"
+                      maxLength={7}
+                    />
+                  </span>
+                  <ColorSnapPreview hex={color} />
+                </label>
+                <FriendlyFireSwitch clan={clan} onChange={onChange} qs={qs} />
+                <div className="flex flex-wrap items-center gap-3">
+                  <button onClick={saveMeta} disabled={busy} className="btn-primary disabled:opacity-40">
+                    {busy ? 'Saving…' : 'Save'}
+                  </button>
+                  <button onClick={disband} disabled={busy} className="btn-danger-link">
+                    Disband clan
+                  </button>
+                  {msg && (
+                    <span
+                      className={`font-mono text-[11px] uppercase tracking-[0.22em] ${
+                        msg.kind === 'ok' ? 'text-[var(--text-soft)]' : 'text-white'
+                      }`}
+                    >
+                      {msg.kind === 'ok' ? '✓' : '!'} {msg.text}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div>
+              <p className="label-mono mb-3">Meta</p>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 font-mono text-[11px]">
+                <Field label="ID" value={`#${clan.id}`} />
+                <Field label="Created" value={new Date(clan.createdAt).toLocaleString()} />
+                <Field label="Leader UUID" value={clan.leaderUuid} wide />
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShow3D((s) => !s)}
+            className="mt-6 mb-2 flex w-full items-center justify-between border-b border-[var(--rule)] pb-2 text-left transition-colors hover:border-[var(--rule-strong)]"
+            aria-expanded={show3D}
+          >
+            <span className="label-mono">3D roster</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-mute)]">
+              {show3D ? '▾ hide' : '▸ show'}
+            </span>
+          </button>
+          {show3D && (
+            <div className="-mx-1 mb-4 flex flex-wrap justify-center gap-3 px-1 py-3">
+              {clan.members.map((m, i) => (
+                <MemberCard3D
+                  key={m.playerUuid}
+                  playerUuid={m.playerUuid}
+                  playerName={m.playerName}
+                  role={m.role}
+                  subtitle={
+                    onlineUuids === null
+                      ? undefined
+                      : onlineUuids.has(m.playerUuid.toLowerCase())
+                        ? '● online'
+                        : 'offline'
+                  }
+                  lazy={i >= 6}
+                />
+              ))}
+            </div>
+          )}
+
+          <p className="label-mono mt-6 mb-2">Members</p>
+          <ul className="border-t border-[var(--rule)]">
+            {clan.members.map((m) => (
+              <MemberRow
+                key={m.playerUuid}
+                m={m}
+                online={
+                  onlineUuids === null
+                    ? null
+                    : onlineUuids.has(m.playerUuid.toLowerCase())
+                }
+                onRoleChange={(role) => memberEdit(m.playerUuid, { role })}
+                onRename={(playerName) => memberEdit(m.playerUuid, { playerName })}
+                onKick={() => memberKick(m.playerUuid, m.playerName)}
+                onTransfer={() => transfer(m.playerUuid, m.playerName)}
+              />
+            ))}
+          </ul>
+
+          <AddMemberForm clanTag={clan.tag} qs={qs} onAdded={onChange} />
+        </>
+      )}
+
+      {tab === 'cape' && (
+        <CapeManager
+          tag={clan.tag}
+          serverId={serverId}
+          cape={cape}
+          onChanged={onCapeChanged}
         />
       )}
-
-      <button
-        type="button"
-        onClick={() => setShow3D((s) => !s)}
-        className="mt-6 mb-2 flex w-full items-center justify-between border-b border-[var(--rule)] pb-2 text-left transition-colors hover:border-[var(--rule-strong)]"
-        aria-expanded={show3D}
-      >
-        <span className="label-mono">3D roster</span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--text-mute)]">
-          {show3D ? '▾ hide' : '▸ show'}
-        </span>
-      </button>
-      {show3D && (
-        <div className="-mx-1 mb-4 flex flex-wrap justify-center gap-3 px-1 py-3">
-          {clan.members.map((m, i) => (
-            <MemberCard3D
-              key={m.playerUuid}
-              playerUuid={m.playerUuid}
-              playerName={m.playerName}
-              role={m.role}
-              subtitle={
-                onlineUuids === null
-                  ? undefined
-                  : onlineUuids.has(m.playerUuid.toLowerCase())
-                    ? '● online'
-                    : 'offline'
-              }
-              // Lazy-mount everyone past the first six so a clan
-              // with 30 members doesn't fire 30 WebGL contexts the
-              // moment 3D roster expands.
-              lazy={i >= 6}
-            />
-          ))}
-        </div>
-      )}
-
-      <p className="label-mono mt-6 mb-2">Members</p>
-      <ul className="border-t border-[var(--rule)]">
-        {clan.members.map((m) => (
-          <MemberRow
-            key={m.playerUuid}
-            m={m}
-            online={
-              onlineUuids === null
-                ? null
-                : onlineUuids.has(m.playerUuid.toLowerCase())
-            }
-            onRoleChange={(role) => memberEdit(m.playerUuid, { role })}
-            onRename={(playerName) => memberEdit(m.playerUuid, { playerName })}
-            onKick={() => memberKick(m.playerUuid, m.playerName)}
-            onTransfer={() => transfer(m.playerUuid, m.playerName)}
-          />
-        ))}
-      </ul>
-
-      <AddMemberForm clanTag={clan.tag} qs={qs} onAdded={onChange} />
-
-      <ActivityFeed clanTag={clan.tag} />
+      {tab === 'trim' && <TrimManager tag={clan.tag} serverId={serverId} />}
+      {tab === 'banner' && <BannerManager tag={clan.tag} serverId={serverId} />}
+      {tab === 'activity' && <ActivityFeed clanTag={clan.tag} />}
     </div>
   );
 }

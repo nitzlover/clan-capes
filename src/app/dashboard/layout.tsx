@@ -58,19 +58,7 @@ const NAV: Array<{
     href: '/dashboard/clans',
     label: 'Clans',
     icon: 'groups',
-    hint: 'DB roster + members',
-  },
-  {
-    href: '/dashboard/capes',
-    label: 'Capes',
-    icon: 'image',
-    hint: 'PNG upload + roster',
-  },
-  {
-    href: '/dashboard/banners',
-    label: 'Banners',
-    icon: 'shield',
-    hint: 'Per-clan crest',
+    hint: 'Roster · capes · trims · banners',
   },
   {
     href: '/dashboard/events',
