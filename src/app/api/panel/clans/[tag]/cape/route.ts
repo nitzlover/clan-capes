@@ -22,6 +22,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/server/auth';
 import { validateAndNormalizePng } from '@/lib/server/capeValidate';
 import { getClanByTag, listClansForServer } from '@/lib/server/clan-repo';
+import { TAG_RE } from '@/lib/server/clan-validators';
 import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import { CDN_PUBLIC_URL, MAX_UPLOAD_KB } from '@/lib/server/env';
 import { capeFilePath, ensureDirs } from '@/lib/server/storage';
@@ -31,7 +32,6 @@ import { resolveServerId as sharedResolveServerId } from '@/lib/server/resolve-s
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const TAG_RE = /^[A-Z0-9]{2,6}$/;
 
 /**
  * 1.0.13 — replace the route's own "default to newest server" helper

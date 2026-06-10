@@ -34,7 +34,16 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request, ctx: { params: Promise<{ tag: string }> }) {
   const user = requireAuth(req);
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  const { tag } = await ctx.params;
+  const { tag: rawTag } = await ctx.params;
+  let tag: string;
+  try {
+    tag = normaliseTag(rawTag);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'invalid tag' },
+      { status: 400 },
+    );
+  }
 
   // DB is the only source of truth now — the plugin is a consumer of
   // this API, not a producer, so there's no plugin proxy to fall back
@@ -46,7 +55,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ tag: string }> 
   if (!serverId) {
     return NextResponse.json({ error: 'no servers registered' }, { status: 409 });
   }
-  const dto = await getClanByTag(serverId, tag.toUpperCase());
+  const dto = await getClanByTag(serverId, tag);
   if (!dto) return NextResponse.json({ error: 'not found' }, { status: 404 });
   return NextResponse.json({ source: 'db', clan: dto });
 }

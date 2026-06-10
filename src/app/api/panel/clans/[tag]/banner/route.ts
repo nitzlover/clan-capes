@@ -21,6 +21,7 @@ import { dbEnabled, getDb, schema } from '@/lib/server/db';
 import { resolveServerId } from '@/lib/server/resolve-server';
 import { getRequestId } from '@/lib/server/request-id';
 import { getServerSettings } from '@/lib/server/settings-repo';
+import { normaliseTag } from '@/lib/server/clan-validators';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,7 +35,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ tag: string }> 
   const user = requireAuth(req);
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   const { tag: rawTag } = await ctx.params;
-  const tag = rawTag.toUpperCase();
+  let tag: string;
+  try {
+    tag = normaliseTag(rawTag);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'invalid tag' },
+      { status: 400 },
+    );
+  }
 
   // Preferred: DB
   if (dbEnabled()) {
@@ -69,7 +78,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ tag: string }>
     return NextResponse.json({ error: 'db disabled' }, { status: 503 });
   }
   const { tag: rawTag } = await ctx.params;
-  const tag = rawTag.toUpperCase();
+  let tag: string;
+  try {
+    tag = normaliseTag(rawTag);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'invalid tag' },
+      { status: 400 },
+    );
+  }
 
   let body: { baseColor?: number; patterns?: BannerPattern[] };
   try {
@@ -153,7 +170,15 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ tag: string 
     return NextResponse.json({ error: 'db disabled' }, { status: 503 });
   }
   const { tag: rawTag } = await ctx.params;
-  const tag = rawTag.toUpperCase();
+  let tag: string;
+  try {
+    tag = normaliseTag(rawTag);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'invalid tag' },
+      { status: 400 },
+    );
+  }
 
   const serverId = await resolveServerId(req);
   if (!serverId) {

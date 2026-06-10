@@ -26,9 +26,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         {/*
           Material Symbols still loads for backwards-compat with the
-          handful of pages that haven't migrated to Lucide React yet
-          (audit, banners, capes, ClanSelect, UploadSection). Each is
-          a separate PR; once they're all on Lucide this link goes.
+          dashboard surfaces that have not migrated to Lucide React yet
+          (clans hub, audit, events, overview, download). Once they are
+          all on Lucide this link goes.
         */}
         <link
           rel="stylesheet"

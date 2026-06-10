@@ -87,9 +87,14 @@ export function CapeManager({
       setNote('');
       return;
     }
+    // Cancellation guard — Image() decodes resolve async, so a fast
+    // re-pick could otherwise let an OLDER decode land last and set
+    // valid/note for the wrong file.
+    let cancelled = false;
     const u = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
+      if (cancelled) return;
       const dimsOk =
         (img.width === 64 && img.height === 32) || (img.width === 128 && img.height === 64);
       const kb = Math.round(file.size / 1024);
@@ -100,14 +105,17 @@ export function CapeManager({
           ? `${img.width}×${img.height} · ${kb} KB`
           : `${img.width}×${img.height} · ${kb} KB — need 64×32 / 128×64, ≤512 KB`,
       );
-      URL.revokeObjectURL(u);
     };
     img.onerror = () => {
+      if (cancelled) return;
       setValid(false);
       setNote('could not decode PNG');
-      URL.revokeObjectURL(u);
     };
     img.src = u;
+    return () => {
+      cancelled = true;
+      URL.revokeObjectURL(u);
+    };
   }, [file]);
 
   const shownCape = preview ?? cape?.capeUrl ?? null;
@@ -313,7 +321,16 @@ export function CapeManager({
               {busy ? 'Deploying…' : cape ? 'Replace cape' : 'Deploy cape'}
             </button>
             {file && (
-              <button type="button" onClick={() => setFile(null)} className="btn-ghost text-[13px]">
+              <button
+                type="button"
+                onClick={() => {
+                  setFile(null);
+                  // Clear the native input too — otherwise re-picking the
+                  // SAME file fires no change event and does nothing.
+                  if (inputRef.current) inputRef.current.value = '';
+                }}
+                className="btn-ghost text-[13px]"
+              >
                 Cancel
               </button>
             )}
@@ -410,21 +427,26 @@ export function BannerManager({ tag, serverId }: { tag: string; serverId: number
   const [banner, setBanner] = useState<ClanBannerDto | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A FAILED fetch must not be conflated with "no banner" — rendering an
+  // empty editor over an existing design would let Save overwrite it.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadRetry, setLoadRetry] = useState(0);
 
   useEffect(() => {
     let alive = true;
     setBanner(undefined);
+    setLoadError(null);
     fetchClanBanner(tag, serverId)
       .then((b) => {
-        if (alive) setBanner(b);
+        if (alive) setBanner(b); // null here = resolved 404 = genuinely no banner
       })
-      .catch(() => {
-        if (alive) setBanner(null);
+      .catch((e) => {
+        if (alive) setLoadError(e instanceof Error ? e.message : 'Failed to load banner');
       });
     return () => {
       alive = false;
     };
-  }, [tag, serverId]);
+  }, [tag, serverId, loadRetry]);
 
   const spec: BannerSpec = banner
     ? { baseColor: banner.baseColor, patterns: banner.patterns }
@@ -463,6 +485,22 @@ export function BannerManager({ tag, serverId }: { tag: string; serverId: number
     }
   }
 
+  if (loadError) {
+    return (
+      <div className="py-8">
+        <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-white">
+          ! {loadError}
+        </p>
+        <button
+          type="button"
+          onClick={() => setLoadRetry((n) => n + 1)}
+          className="btn-ghost mt-3 text-[13px]"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
   if (banner === undefined) {
     return <p className="py-8 text-sm text-[var(--text-mute)]">Loading banner…</p>;
   }
@@ -478,7 +516,12 @@ export function BannerManager({ tag, serverId }: { tag: string; serverId: number
         </span>
       </div>
       <div className="overflow-x-auto">
+        {/* key = remount when the saved identity changes (save/remove) so the
+            editor's internal copy of `initial` can't go stale — after Remove
+            it would otherwise still show the deleted design and Save would
+            resurrect it. */}
         <BannerEditor
+          key={banner ? `b-${banner.updatedAt}` : 'empty'}
           initial={spec}
           onSave={save}
           onRemove={banner ? remove : undefined}

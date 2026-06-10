@@ -243,8 +243,8 @@ function RecentAuditCard({ entries }: { entries: AuditEntry[] }) {
 
 function QuickLinksCard() {
   const links: Array<{ href: string; label: string; icon: string; hint: string }> = [
-    { href: '/dashboard/capes', label: 'Upload cape', icon: 'upload', hint: 'PNG → clan' },
-    { href: '/dashboard/banners', label: 'Edit banner', icon: 'shield', hint: 'Per-clan crest' },
+    { href: '/dashboard/clans', label: 'Clan cosmetics', icon: 'checkroom', hint: 'Capes · trims · banners' },
+    { href: '/dashboard/leaderboard', label: 'Leaderboard', icon: 'leaderboard', hint: 'K/D rankings' },
     { href: '/dashboard/audit', label: 'View audit', icon: 'receipt_long', hint: 'Full trail' },
   ];
   return (

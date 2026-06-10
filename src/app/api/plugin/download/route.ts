@@ -11,12 +11,21 @@
 
 import fs from 'node:fs/promises';
 import { NextResponse } from 'next/server';
+import { limit } from '@/lib/server/rate-limit';
 import { pluginJarPath, readPluginLatest } from '@/lib/server/storage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
+  // Public jar stream — cap per-IP. Legit traffic is one auto-update pull
+  // per server per release.
+  if (!limit(req, 'plugin-download', 20, 60_000)) {
+    return NextResponse.json(
+      { error: 'rate limited' },
+      { status: 429, headers: { 'retry-after': '60' } },
+    );
+  }
   const latest = await readPluginLatest();
   if (!latest) {
     return NextResponse.json({ error: 'no plugin jar uploaded yet' }, { status: 404 });

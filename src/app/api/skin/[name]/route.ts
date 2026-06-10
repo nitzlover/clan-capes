@@ -12,11 +12,18 @@
  */
 
 import { NextResponse } from 'next/server';
+import { limit } from '@/lib/server/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const NAME_RE = /^[A-Za-z0-9_]{1,16}$/;
+
+// Tiny success-only TTL cache so hot names don't re-hit Mojang on every
+// request — this route is public and does two server-side fetches per miss.
+const SKIN_TTL_MS = 10 * 60_000;
+const SKIN_CACHE_MAX = 500;
+const skinCache = new Map<string, { exp: number; res: SkinResult }>();
 
 type SkinResult = { ok: true; model: 'classic' | 'slim'; dataUrl: string } | { ok: false; error: string };
 
@@ -52,14 +59,30 @@ async function fromMinotar(name: string): Promise<SkinResult> {
   return { ok: true, model: 'classic', dataUrl: `data:image/png;base64,${buf.toString('base64')}` };
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ name: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ name: string }> }) {
   const { name } = await ctx.params;
   const clean = (name || '').trim();
   if (!NAME_RE.test(clean)) {
     return NextResponse.json({ ok: false, error: 'invalid name' }, { status: 400 });
   }
+  // Public route doing server-side Mojang fetches — without a cap it's a
+  // free lookup-amplification proxy. 30 lookups/min/IP is far above any
+  // legitimate studio/login usage.
+  if (!limit(req, 'skin-lookup', 30, 60_000)) {
+    return NextResponse.json(
+      { ok: false, error: 'rate limited' },
+      { status: 429, headers: { 'retry-after': '60' } },
+    );
+  }
+  const key = clean.toLowerCase();
+  const hit = skinCache.get(key);
+  if (hit && hit.exp > Date.now()) {
+    return NextResponse.json(hit.res, { headers: { 'cache-control': 'public, max-age=300' } });
+  }
   try {
     const res = await fromMojang(clean);
+    if (skinCache.size >= SKIN_CACHE_MAX) skinCache.clear();
+    skinCache.set(key, { exp: Date.now() + SKIN_TTL_MS, res });
     return NextResponse.json(res, { headers: { 'cache-control': 'public, max-age=300' } });
   } catch {
     try {

@@ -25,6 +25,16 @@ import { NextResponse, type NextRequest } from 'next/server';
 /** Routes that require same-origin POST/PATCH/DELETE for CSRF defence. */
 const CSRF_PROTECTED_PREFIXES = ['/api/panel/', '/api/leader/'];
 
+/**
+ * Plugin-called exceptions inside the protected prefixes. The Paper
+ * plugin's Java HttpClient sends no Origin/Referer, so any plugin→panel
+ * endpoint that lives under a protected prefix must be exempted here or
+ * the gate 403s it before its own Bearer auth ever runs. issue-token is
+ * exactly that: `/clan panel` in-game → plugin POSTs here with the
+ * plugin API key.
+ */
+const CSRF_EXEMPT_PATHS = new Set(['/api/leader/issue-token']);
+
 /** Mutating HTTP methods we gate. */
 const MUTATING_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
 
@@ -34,7 +44,8 @@ export function middleware(req: NextRequest) {
   // CSRF gate for browser-driven write endpoints.
   if (
     MUTATING_METHODS.has(req.method) &&
-    CSRF_PROTECTED_PREFIXES.some((p) => url.pathname.startsWith(p))
+    CSRF_PROTECTED_PREFIXES.some((p) => url.pathname.startsWith(p)) &&
+    !CSRF_EXEMPT_PATHS.has(url.pathname)
   ) {
     const origin = req.headers.get('origin');
     const referer = req.headers.get('referer');

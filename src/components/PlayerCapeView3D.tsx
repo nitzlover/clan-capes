@@ -175,12 +175,31 @@ export function PlayerCapeView3D({
   // CORS / format failures don't just silently leave the player bare —
   // an admin debugging an empty cape can read the actual error from
   // dev tools.
+  // Out-of-order guard: loadCape is async, so with rapid prop changes the
+  // LAST-RESOLVED (not last-requested) texture would win. Track the latest
+  // request token; when a stale load resolves, re-assert the current one.
+  const capeReqRef = useRef<string | null>(null);
   useEffect(() => {
     if (!viewer) return;
+    const token = capeUrl ? `${capeUrl}|${backEquipment}` : null;
+    capeReqRef.current = token;
     if (capeUrl) {
-      viewer.loadCape(capeUrl, { backEquipment }).catch((err) => {
-        console.error('[skinview3d] loadCape failed:', err);
-      });
+      viewer
+        .loadCape(capeUrl, { backEquipment })
+        .then(() => {
+          if (capeReqRef.current === token) return; // still current — done
+          if (capeReqRef.current === null) {
+            viewer.resetCape();
+          } else {
+            const [u, be] = capeReqRef.current.split('|');
+            viewer
+              .loadCape(u, { backEquipment: be as typeof backEquipment })
+              .catch(() => {});
+          }
+        })
+        .catch((err) => {
+          console.error('[skinview3d] loadCape failed:', err);
+        });
     } else {
       viewer.resetCape();
     }

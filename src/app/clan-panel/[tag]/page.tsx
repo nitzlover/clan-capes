@@ -12,7 +12,7 @@
  *   - Clan info: editable name + colour
  *   - Members: list with role + last-seen, kick + transfer buttons
  *   - Banner: small CTA pointing at the (admin-style) banner editor —
- *     full pattern picker is shared with /dashboard/banners so we just
+ *     full pattern picker is shared with the /dashboard/clans Banner tab so we just
  *     render the current swatch + a "manage banner" link inline.
  *   - Danger zone: disband (leader only)
  *
@@ -477,7 +477,7 @@ function BannerSection({
           </p>
           <p className="font-mono text-[11px] text-[var(--text-faint)]">
             Pattern editing lives on the admin panel for now —
-            use <code className="font-mono">/dashboard/banners</code> to design layers.
+            design layers in <code className="font-mono">/dashboard/clans</code> (Banner tab).
           </p>
           <button onClick={clearBanner} disabled={busy} className="btn-danger-link disabled:opacity-40">
             Remove banner
@@ -485,7 +485,7 @@ function BannerSection({
         </div>
       ) : (
         <p className="text-sm text-[var(--text-mute)]">
-          No banner yet. Ask an admin to design one in <code className="font-mono">/dashboard/banners</code>.
+          No banner yet. Ask an admin to design one in <code className="font-mono">/dashboard/clans</code> (Banner tab).
         </p>
       )}
     </section>

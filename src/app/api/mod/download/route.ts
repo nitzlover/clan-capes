@@ -6,12 +6,21 @@
 
 import fs from 'node:fs/promises';
 import { NextResponse } from 'next/server';
+import { limit } from '@/lib/server/rate-limit';
 import { modJarPath, readModLatest } from '@/lib/server/storage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
+  // Public jar stream — cap per-IP so it can't be used to soak bandwidth.
+  // Legit traffic is one download per player per release.
+  if (!limit(req, 'mod-download', 20, 60_000)) {
+    return NextResponse.json(
+      { error: 'rate limited' },
+      { status: 429, headers: { 'retry-after': '60' } },
+    );
+  }
   const latest = await readModLatest();
   if (!latest) {
     return NextResponse.json({ error: 'no mod jar uploaded yet' }, { status: 404 });

@@ -18,10 +18,14 @@ import { getToken } from '@/lib/api';
  * inherits the same redirect + global 401 listener.
  *
  * Routes wired here:
- *   /dashboard          — overview
- *   /dashboard/capes    — PNG upload + clan roster
- *   /dashboard/banners  — per-clan shield banner editor
- *   /dashboard/audit    — operator trail
+ *   /dashboard             — overview
+ *   /dashboard/servers     — server registry
+ *   /dashboard/mod         — client-mod jar + auto-update
+ *   /dashboard/clans       — the per-clan hub (roster · cape · trim · banner)
+ *   /dashboard/events      — airdrop / koth config
+ *   /dashboard/leaderboard — K/D rankings
+ *   /dashboard/audit       — operator trail
+ *   /dashboard/settings    — per-server knobs
  *
  * Visual idiom: B&W brutalist. 2px white-ish borders, 6px offset white
  * shadows, hard right-angle corners, uppercase tracked type. Active nav
@@ -67,10 +71,22 @@ const NAV: Array<{
     hint: 'Airdrop · KotH config',
   },
   {
+    href: '/dashboard/leaderboard',
+    label: 'Leaderboard',
+    icon: 'leaderboard',
+    hint: 'K/D rankings · season',
+  },
+  {
     href: '/dashboard/audit',
     label: 'Audit',
     icon: 'receipt_long',
     hint: 'Operator trail',
+  },
+  {
+    href: '/dashboard/settings',
+    label: 'Settings',
+    icon: 'tune',
+    hint: 'Palette · cooldowns · layers',
   },
 ];
 

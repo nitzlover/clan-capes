@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SelectServerPrompt } from '@/components/ServerPicker';
 import { useSelectedServer } from '@/lib/selected-server';
 import { api, UnauthorizedError } from '@/lib/api';
@@ -89,6 +89,10 @@ export default function ClansPage() {
   // roster (and refreshed on its own after a cape upload/delete so the open
   // editor doesn't collapse under a full reload).
   const [capeMap, setCapeMap] = useState<Record<string, CapeInfo>>({});
+  // Monotonic id for cape-map fetches — an out-of-order older response
+  // (slow full load racing a fast refresh, or rapid server switches)
+  // must not clobber a newer map.
+  const capeSeq = useRef(0);
 
   const load = useCallback(
     async (id: number | null) => {
@@ -101,38 +105,48 @@ export default function ClansPage() {
       }
       setLoading(true);
       setError('');
+      const seq = ++capeSeq.current;
       try {
         const [res, capeRes] = await Promise.all([
           api<{ clans: Clan[]; servers: ServerOpt[]; serverId?: number }>(
             `/panel/clans-list?serverId=${id}`,
           ),
+          // null (not {}) on failure — a failed capes fetch must not wipe
+          // the map we already have.
           api<{ clans: Array<{ tag: string; capeUrl: string; updatedAt: number; updatedBy: string }> }>(
             `/panel/clans?serverId=${id}`,
-          ).catch(() => ({ clans: [] as Array<{ tag: string; capeUrl: string; updatedAt: number; updatedBy: string }> })),
+          ).catch(() => null),
         ]);
         setServers(res.servers);
         setClans(res.clans);
-        const m: Record<string, CapeInfo> = {};
-        for (const c of capeRes.clans) {
-          if (c.capeUrl) m[c.tag] = { capeUrl: c.capeUrl, updatedAt: c.updatedAt, updatedBy: c.updatedBy };
+        if (capeRes && seq === capeSeq.current) {
+          const m: Record<string, CapeInfo> = {};
+          for (const c of capeRes.clans) {
+            if (c.capeUrl) m[c.tag] = { capeUrl: c.capeUrl, updatedAt: c.updatedAt, updatedBy: c.updatedBy };
+          }
+          setCapeMap(m);
         }
-        setCapeMap(m);
       } catch (e) {
         if (e instanceof UnauthorizedError) return;
         setError(e instanceof Error ? e.message : 'Failed to load');
         setClans([]);
+      } finally {
+        // finally — an UnauthorizedError early-return otherwise leaves the
+        // loading skeleton up forever.
+        setLoading(false);
       }
-      setLoading(false);
     },
     [],
   );
 
   const refreshCapes = useCallback(async (id: number | null) => {
     if (id === null) return;
+    const seq = ++capeSeq.current;
     try {
       const r = await api<{ clans: Array<{ tag: string; capeUrl: string; updatedAt: number; updatedBy: string }> }>(
         `/panel/clans?serverId=${id}`,
       );
+      if (seq !== capeSeq.current) return; // superseded by a newer fetch
       const m: Record<string, CapeInfo> = {};
       for (const c of r.clans) {
         if (c.capeUrl) m[c.tag] = { capeUrl: c.capeUrl, updatedAt: c.updatedAt, updatedBy: c.updatedBy };
@@ -283,8 +297,7 @@ export default function ClansPage() {
             </p>
             <p className="mt-2 text-xs text-[var(--text-faint)]">
               Leaders create clans in-game via{' '}
-              <code className="text-[var(--text-soft)]">/clan create</code> or hit{' '}
-              <strong className="text-white">+ Import PowerClans</strong> above.
+              <code className="text-[var(--text-soft)]">/clan create</code>.
             </p>
           </div>
         ) : visibleClans.length === 0 ? (
@@ -429,6 +442,16 @@ function ClanEditor({
   const [tab, setTab] = useState<EditorTab>('overview');
   const [name, setName] = useState(clan.name);
   const [color, setColor] = useState(clan.colorHex);
+  // Resync from the server row when it actually changes (post-reload) —
+  // same idiom FriendlyFireSwitch already uses. Without this a reload
+  // leaves stale text in the inputs and Save silently reverts edits made
+  // from another session.
+  useEffect(() => {
+    setName(clan.name);
+  }, [clan.name]);
+  useEffect(() => {
+    setColor(clan.colorHex);
+  }, [clan.colorHex]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   // 3D roster row is opt-in — each card is its own WebGL context
@@ -708,6 +731,11 @@ function MemberRow({
   onTransfer: () => void;
 }) {
   const [name, setName] = useState(m.playerName);
+  // Resync after roster reloads (e.g. "Refresh names") so a later blur
+  // doesn't write the stale placeholder back over the refreshed name.
+  useEffect(() => {
+    setName(m.playerName);
+  }, [m.playerName]);
   const dirty = name !== m.playerName;
   const dotClass =
     online === null

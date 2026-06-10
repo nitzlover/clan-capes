@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic';
 // Fallback when no jar has been uploaded to the Volume. Bump via the
 // PLUGIN_LATEST_VERSION env var to announce a new build without a
 // redeploy of the panel.
-const DEFAULT_VERSION = '1.2.1';
+const DEFAULT_VERSION = '1.2.2';
 
 export async function GET(req: Request) {
   const ctx = await requirePluginAuth(req);
