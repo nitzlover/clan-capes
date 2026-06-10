@@ -46,6 +46,12 @@ const STAND_Y = -2;
 export const campfireScene = (skins: string[]): SceneSpec => ({
   fire: true,
   groundY: -16,
+  // Soft fill — the scene used to be grayscale where silhouettes were the
+  // point; in the warm color grade a dark skin reads as a black blob
+  // without a touch of ambient lift.
+  fill: 0.25,
+  // Low rolling ground mist for cinematic depth (very subtle).
+  mist: { count: 10, y: -14, opacity: 0.35, z: 14 },
   camera: { position: [0, 13, 96], target: [0, -4, 0], fov: 33 },
   background: { stars: true, moon: [80, 60, -150], fog: [138, 346] },
   props: [
@@ -65,8 +71,14 @@ export const campfireScene = (skins: string[]): SceneSpec => ({
   ],
   characters: [
     { skin: skins[0], cape: CLAN_CAPE, slim: true, pose: { node: SEATED }, position: [-26, -9.5, 4], rotationY: Math.PI * 0.3, idle: 'breathe' },
-    { skin: skins[1], cape: CLAN_CAPE, pose: { node: SEATED }, position: [26, -9.5, 4], rotationY: -Math.PI * 0.3, idle: 'breathe' },
-    { skin: skins[2], pose: 'stand', position: [-43, -2, -31], rotationY: 0.7, idle: 'breathe' },
+    // Right member roasts a marshmallow — "something happening" beats a
+    // second idle statue.
+    { skin: skins[1], cape: CLAN_CAPE, pose: { node: SEATED }, position: [26, -9.5, 4], rotationY: -Math.PI * 0.3, idle: 'roast' },
+    // The old third character was MHF_Creeper — a creeper FACE on a human
+    // player rig. Under grayscale it passed as a lurking silhouette; the
+    // warm color grade exposed it as a green head on a pale human body
+    // (user: "фу"). The engine only renders player rigs, so out it goes —
+    // the lurker tree stays as scenery.
   ],
 });
 
