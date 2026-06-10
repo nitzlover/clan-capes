@@ -220,8 +220,9 @@ export function DioramaLogin({
         .v9-cta:disabled { opacity: 0.4; cursor: not-allowed; }
         .v9-cta:active { transform: translateY(1px); }
         .v9-scene canvas { image-rendering: auto; }
-        /* muted-color cinematic grade — warm lights (beacon/fire) glow gold */
-        .v9-scene { filter: saturate(0.6) contrast(1.08) brightness(1.1); }
+        /* near-native Minecraft color — nights are dark, not desaturated
+           (the muted grade made the world read grey/alien) */
+        .v9-scene { filter: saturate(1) contrast(1.03) brightness(1.05); }
         .v9-vignette { background: radial-gradient(120% 95% at 50% 42%, transparent 30%, rgba(0,0,0,0.34) 70%, rgba(0,0,0,0.72) 100%); }
       `}</style>
     </main>

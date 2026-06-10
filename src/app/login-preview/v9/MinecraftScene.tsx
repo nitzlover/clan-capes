@@ -57,7 +57,7 @@ export type PropSpec =
   | { type: 'tree'; position: Vec3; trunk?: number; rotationY?: number }
   /** Stone cliff / quarry wall / boulder — a big stone (or cobblestone) box.
    *  position = the BASE centre (bottom sits on position.y). */
-  | { type: 'cliff'; position: Vec3; width?: number; height?: number; depth?: number; cobble?: boolean; rotationY?: number; tint?: number }
+  | { type: 'cliff'; position: Vec3; width?: number; height?: number; depth?: number; cobble?: boolean; rotationY?: number; tint?: number; tex?: string }
   /** Glowing ore block — stone cube with a soft emissive (reads as a mineral
    *  vein in B&W, NOT fire). */
   | { type: 'ore'; position: Vec3; size?: number; color?: number }
@@ -339,7 +339,7 @@ export function MinecraftScene({
           threeScene.add(tr);
         } else if (prop.type === 'cliff') {
           const cl = buildCliff(THREE, disposables, pixelTex, {
-            w: prop.width ?? 60, h: prop.height ?? 40, d: prop.depth ?? 16, cobble: prop.cobble, tint: prop.tint,
+            w: prop.width ?? 60, h: prop.height ?? 40, d: prop.depth ?? 16, cobble: prop.cobble, tint: prop.tint, tex: prop.tex,
           });
           cl.position.set(...prop.position);
           cl.rotation.y = prop.rotationY ?? 0;
@@ -881,9 +881,9 @@ function buildCliff(
   THREE: T,
   disp: { dispose: () => void }[],
   pixelTex: PixelTex,
-  o: { w: number; h: number; d: number; cobble?: boolean; tint?: number },
+  o: { w: number; h: number; d: number; cobble?: boolean; tint?: number; tex?: string },
 ) {
-  const path = o.cobble ? '/mc-tex/cobblestone.png' : '/mc-tex/stone.png';
+  const path = o.tex ?? (o.cobble ? '/mc-tex/cobblestone.png' : '/mc-tex/stone.png');
   const rep = (a: number, b: number): [number, number] => [Math.max(1, Math.round(a / 16)), Math.max(1, Math.round(b / 16))];
   const sideTex = pixelTex(path, rep(o.w, o.h));
   const endTex = pixelTex(path, rep(o.d, o.h));
