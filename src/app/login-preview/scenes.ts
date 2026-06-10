@@ -95,8 +95,10 @@ export const gateScene = (): SceneSpec => ({
   fire: false,
   groundY: -16,
   // Bright enough that the grass stays GREEN at night — Minecraft nights
-  // are dark but never desaturated.
+  // are dark but never desaturated. grass_block_top.png is greyscale in
+  // vanilla (biome-tinted at render time), so tint it plains-green here.
   fill: 0.85,
+  ground: { tint: 0x72a854 },
   mist: { count: 12, y: -13, opacity: 0.42, z: 6 },
   camera: { position: [10, 12, 118], target: [-6, 18, -16], fov: 38, push: 6 },
   // Square moon back in — that's literally what the Minecraft moon looks like.

@@ -848,7 +848,7 @@ function buildTree(
 
   const leafMat = new THREE.MeshStandardMaterial({
     map: tex.leavesTex,
-    color: 0x7a7a7a,
+    color: 0x5d9c3a,
     roughness: 1,
     transparent: true,
     alphaTest: 0.5,
