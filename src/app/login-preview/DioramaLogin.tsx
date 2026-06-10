@@ -24,6 +24,7 @@ import { MinecraftScene, type SceneSpec } from './v9/MinecraftScene';
 export function DioramaLogin({
   members,
   buildScene,
+  backgroundImage,
   fallbackSkin = '/skins/steve.png',
   caption,
   loadingLabel = 'building the scene…',
@@ -32,7 +33,14 @@ export function DioramaLogin({
   /** Clan nicknames to resolve skins for (via the /api/skin Mojang proxy). */
   members: string[];
   /** Turns the resolved skins into the scene to stage. */
-  buildScene: (skins: string[]) => SceneSpec;
+  buildScene?: (skins: string[]) => SceneSpec;
+  /**
+   * Pre-rendered backdrop (shader-quality art) instead of the live three.js
+   * scene. When set, no skins are fetched and the 3D engine never loads —
+   * the image is the world (slow Ken-Burns drift for life). This is what the
+   * live /login uses; the three.js scenes remain for /login-preview/*.
+   */
+  backgroundImage?: string;
   fallbackSkin?: string;
   /** Optional bottom-centre caption over the scene. Omit for none. */
   caption?: string;
@@ -57,6 +65,7 @@ export function DioramaLogin({
   // immediately — the gate scene has no characters.
   const memberKey = members.join(',');
   useEffect(() => {
+    if (backgroundImage) return; // image backdrop — no skins to resolve
     let alive = true;
     (async () => {
       const resolved = await Promise.all(
@@ -79,7 +88,7 @@ export function DioramaLogin({
   }, [memberKey, fallbackSkin]);
 
   const scene = useMemo<SceneSpec | null>(
-    () => (skins ? buildScene(skins) : null),
+    () => (skins && buildScene ? buildScene(skins) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [skins],
   );
@@ -100,18 +109,26 @@ export function DioramaLogin({
 
   return (
     <main className="v9-root relative h-[100dvh] w-full overflow-hidden bg-black text-white">
-      {/* ── full-bleed scene ── */}
-      <div className="v9-scene absolute inset-0">
-        {scene ? (
-          <MinecraftScene scene={scene} className="h-full w-full" />
-        ) : (
-          <div className="grid h-full w-full place-items-center">
-            <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-white/25">
-              {loadingLabel}
-            </span>
-          </div>
-        )}
-      </div>
+      {/* ── full-bleed backdrop: pre-rendered art OR the live 3D scene ── */}
+      {backgroundImage ? (
+        <div
+          aria-hidden
+          className="v9-bg absolute inset-0"
+          style={{ backgroundImage: `url(${backgroundImage})` }}
+        />
+      ) : (
+        <div className="v9-scene absolute inset-0">
+          {scene ? (
+            <MinecraftScene scene={scene} className="h-full w-full" />
+          ) : (
+            <div className="grid h-full w-full place-items-center">
+              <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-white/25">
+                {loadingLabel}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
       {/* vignette — pulls the eye to the centre, hides the canvas edges */}
       <div className="v9-vignette pointer-events-none absolute inset-0" />
 
@@ -135,8 +152,9 @@ export function DioramaLogin({
         </div>
       </header>
 
-      {/* ── the glass gate card ── */}
-      <div className="absolute inset-0 z-10 grid place-items-center px-4">
+      {/* ── the glass gate card — centred on mobile; on wide screens it sits
+            right-of-centre so the artwork's lodge (left) stays visible ── */}
+      <div className="absolute inset-0 z-10 flex items-center justify-center px-4 lg:justify-end lg:pr-[9vw]">
         <form onSubmit={onSubmit} className="v9-card w-full max-w-[400px]" noValidate>
           <div className="flex items-center gap-3">
             <span aria-hidden className="block h-[2px] w-6 bg-[var(--accent)]" />
@@ -223,6 +241,21 @@ export function DioramaLogin({
         /* near-native Minecraft color — nights are dark, not desaturated
            (the muted grade made the world read grey/alien) */
         .v9-scene { filter: saturate(1) contrast(1.03) brightness(1.05); }
+        /* pre-rendered backdrop — slow Ken-Burns drift so the still image
+           breathes; the overscale also hides the animation's edges */
+        .v9-bg {
+          background-size: cover;
+          background-position: 38% 60%;
+          animation: v9-kenburns 50s ease-in-out infinite alternate;
+          will-change: transform;
+        }
+        @keyframes v9-kenburns {
+          from { transform: scale(1.03) translateX(0); }
+          to { transform: scale(1.1) translateX(-1.5%); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .v9-bg { animation: none; }
+        }
         .v9-vignette { background: radial-gradient(120% 95% at 50% 42%, transparent 30%, rgba(0,0,0,0.34) 70%, rgba(0,0,0,0.72) 100%); }
       `}</style>
     </main>

@@ -3,22 +3,16 @@
 /**
  * Login — the live operator gate.
  *
- * Full-bleed character-free "Gate" diorama: a gold beacon beam piercing the
- * night sky off-centre, moonlit treeline, ground mist — with the sign-in form
- * floating over it as a centered glass card. Scene data + shell live in
- * ../login-preview so the live login and the previews can never drift apart.
+ * The backdrop is pre-rendered shader-quality art (a cozy clan lodge at dusk,
+ * warm golden lanterns — /public/login-bg.webp) with a slow Ken-Burns drift;
+ * the sign-in form floats over it as a glass card, right-of-centre on wide
+ * screens. No three.js loads on this page at all — the previous live-engine
+ * diorama couldn't reach this visual bar (user refs = BSL-shader builds).
+ * The 3D scenes remain available on /login-preview/*.
  */
 
 import { DioramaLogin } from '../login-preview/DioramaLogin';
-import { gateScene } from '../login-preview/scenes';
 
 export default function LoginPage() {
-  return (
-    <DioramaLogin
-      members={[]}
-      buildScene={gateScene}
-      loadingLabel="raising the beacon…"
-      redirectIfAuthed
-    />
-  );
+  return <DioramaLogin members={[]} backgroundImage="/login-bg.webp" redirectIfAuthed />;
 }
