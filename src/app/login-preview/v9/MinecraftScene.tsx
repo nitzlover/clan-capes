@@ -60,10 +60,10 @@ export type PropSpec =
   | { type: 'cliff'; position: Vec3; width?: number; height?: number; depth?: number; cobble?: boolean; rotationY?: number; tint?: number }
   /** Glowing ore block — stone cube with a soft emissive (reads as a mineral
    *  vein in B&W, NOT fire). */
-  | { type: 'ore'; position: Vec3; size?: number }
+  | { type: 'ore'; position: Vec3; size?: number; color?: number }
   /** Beacon light beam — a bright unlit pillar that pierces the fog into the
    *  sky (a glowing core + a fainter halo + a base light). */
-  | { type: 'beam'; position: Vec3; width?: number; height?: number };
+  | { type: 'beam'; position: Vec3; width?: number; height?: number; color?: number };
 
 export type SceneSpec = {
   characters: CharSpec[];
@@ -345,11 +345,11 @@ export function MinecraftScene({
           cl.rotation.y = prop.rotationY ?? 0;
           threeScene.add(cl);
         } else if (prop.type === 'ore') {
-          const or = buildOre(THREE, disposables, pixelTex, prop.size ?? 9);
+          const or = buildOre(THREE, disposables, pixelTex, prop.size ?? 9, prop.color);
           or.position.set(...prop.position);
           threeScene.add(or);
         } else if (prop.type === 'beam') {
-          const bm = buildBeam(THREE, disposables, { w: prop.width ?? 6, h: prop.height ?? 440 });
+          const bm = buildBeam(THREE, disposables, { w: prop.width ?? 6, h: prop.height ?? 440, color: prop.color });
           bm.position.set(...prop.position);
           threeScene.add(bm);
         }
@@ -914,12 +914,13 @@ function buildOre(
   disp: { dispose: () => void }[],
   pixelTex: PixelTex,
   size: number,
+  color?: number,
 ) {
   const tex = pixelTex('/mc-tex/stone.png');
   const geo = new THREE.BoxGeometry(size, size, size);
   const mat = new THREE.MeshStandardMaterial({
     map: tex, color: 0xcccccc, roughness: 1, metalness: 0,
-    emissive: 0xffffff, emissiveIntensity: 1.6, // bright enough to read as a glowing vein after grayscale
+    emissive: color ?? 0xffffff, emissiveIntensity: 1.6, // bright enough to read as a glowing vein after grayscale
   });
   disp.push(geo, mat);
   const m = new THREE.Mesh(geo, mat);
@@ -938,14 +939,15 @@ function buildOre(
 function buildBeam(
   THREE: T,
   disp: { dispose: () => void }[],
-  o: { w: number; h: number },
+  o: { w: number; h: number; color?: number },
 ) {
   const grp = new THREE.Group();
 
   const coreGeo = new THREE.BoxGeometry(o.w, o.h, o.w);
-  const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.92, fog: false, depthWrite: false });
+  const beamColor = o.color ?? 0xffffff;
+  const coreMat = new THREE.MeshBasicMaterial({ color: beamColor, transparent: true, opacity: 0.92, fog: false, depthWrite: false });
   const glowGeo = new THREE.BoxGeometry(o.w * 2.4, o.h, o.w * 2.4);
-  const glowMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.14, fog: false, depthWrite: false });
+  const glowMat = new THREE.MeshBasicMaterial({ color: beamColor, transparent: true, opacity: 0.14, fog: false, depthWrite: false });
   disp.push(coreGeo, coreMat, glowGeo, glowMat);
 
   const glow = new THREE.Mesh(glowGeo, glowMat);
@@ -955,7 +957,7 @@ function buildBeam(
   grp.add(glow, core);
 
   // soft pool of light at the base (lights the gathered figures)
-  const light = new THREE.PointLight(0xffffff, 3.2, 170, 1.6);
+  const light = new THREE.PointLight(beamColor, 3.2, 170, 1.6);
   light.position.y = 8;
   grp.add(light);
 

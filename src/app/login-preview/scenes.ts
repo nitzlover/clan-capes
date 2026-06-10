@@ -82,6 +82,43 @@ export const campfireScene = (skins: string[]): SceneSpec => ({
   ],
 });
 
+/* ─────────────────────────── 1b · The Gate (live login, 2026-06-10) ────── */
+// The character-free brand scene: a GOLD beacon beam pierces the night sky
+// from a stepped stone pyramid, off-centre left; the sign-in card floats over
+// the clearing. No player rigs at all — real skins at hero scale kept reading
+// as blobs ("что на фоне белое") and posed props (the roast stick) as jank.
+// Atmosphere does the work instead: beam, moonlit treeline, ground mist.
+
+export const gateScene = (): SceneSpec => ({
+  fire: false,
+  groundY: -16,
+  fill: 0.5,
+  mist: { count: 12, y: -13, opacity: 0.42, z: 6 },
+  camera: { position: [10, 12, 118], target: [-6, 18, -16], fov: 38, push: 6 },
+  background: { stars: true, moon: [72, 66, -150], fog: [150, 430], fogColor: 0x0b0b0d },
+  props: [
+    // stepped pyramid, off-centre LEFT so the centered card never hides it
+    { type: 'cliff', position: [-46, -16, -34], width: 50, height: 9, depth: 50, cobble: true },
+    { type: 'cliff', position: [-46, -7, -34], width: 32, height: 7, depth: 32, cobble: true },
+    { type: 'cliff', position: [-46, 0, -34], width: 18, height: 6, depth: 18, cobble: true },
+    // the gold beacon block + beam
+    { type: 'ore', position: [-46, 10, -34], size: 10, color: 0xffd36b },
+    { type: 'beam', position: [-46, 14, -34], width: 7, height: 470, color: 0xf2c14e },
+    // framing treeline (near → far)
+    { type: 'tree', position: [-96, -16, -58], trunk: 46, rotationY: 0.5 },
+    { type: 'tree', position: [84, -16, -54], trunk: 50, rotationY: -0.6 },
+    { type: 'tree', position: [-56, -16, -100], trunk: 32, rotationY: 1.1 },
+    { type: 'tree', position: [44, -16, -98], trunk: 30, rotationY: -1.2 },
+    { type: 'tree', position: [-126, -16, -92], trunk: 34, rotationY: 0.3 },
+    { type: 'tree', position: [122, -16, -100], trunk: 30, rotationY: -0.9 },
+    { type: 'tree', position: [6, -16, -136], trunk: 26, rotationY: 1.7 },
+    // low boulders breaking up the clearing floor
+    { type: 'cliff', position: [38, -16, 8], width: 14, height: 7, depth: 11 },
+    { type: 'cliff', position: [-12, -16, 22], width: 9, height: 5, depth: 8 },
+  ],
+  characters: [],
+});
+
 /* ─────────────────────────── 2 · The Grove (preview 1) ─────────────────── */
 // Moonlit forest clearing. No fire — the pair stand together among the trees,
 // one big oak as the hero, the creeper peering from behind a far trunk.
