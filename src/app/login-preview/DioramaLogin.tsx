@@ -98,12 +98,12 @@ export function DioramaLogin({
     <main className="v9-root relative flex h-[100dvh] w-full flex-col overflow-hidden bg-black text-white">
       <header className="relative z-10 flex h-[56px] flex-none items-center justify-between border-b border-white/10 px-6 sm:px-10">
         <div className="flex items-center gap-3">
-          <div className="grid h-9 w-9 place-items-center border border-white/22">
-            <span className="text-[10px] font-bold tracking-[0.2em]">CC</span>
-          </div>
-          <div className="hidden flex-col sm:flex">
-            <span className="text-[13px] font-semibold tracking-[0.02em]">Clan Capes</span>
-            <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-white/45">
+          <span aria-hidden className="text-xl leading-none text-[var(--accent)]">❖</span>
+          <div className="flex flex-col">
+            <span className="text-[15px] font-semibold lowercase leading-none tracking-tight">
+              crestoria
+            </span>
+            <span className="mt-1 font-mono text-[10px] uppercase tracking-[0.28em] text-white/45">
               Operator panel
             </span>
           </div>
@@ -137,10 +137,15 @@ export function DioramaLogin({
         {/* Form */}
         <section className="relative flex min-h-0 items-center justify-center border-t border-white/10 px-6 py-8 lg:border-l lg:border-t-0 lg:px-10">
           <form onSubmit={onSubmit} className="w-full max-w-[340px]" noValidate>
-            <div className="font-mono text-[10px] uppercase tracking-[0.32em] text-white/50">
-              Operator gate
+            <div className="flex items-center gap-3">
+              <span aria-hidden className="block h-[2px] w-6 bg-[var(--accent)]" />
+              <span className="font-mono text-[10px] uppercase tracking-[0.32em] text-white/50">
+                Operator gate
+              </span>
             </div>
-            <h1 className="v9-title mt-3">Sign in.</h1>
+            <h1 className="v9-title mt-3">
+              Sign in<span className="text-[var(--accent)]">.</span>
+            </h1>
 
             <div className="mt-8 space-y-4">
               <Field id="username" label="Username" name="username" autoComplete="username" autoFocus placeholder="admin" />
@@ -190,15 +195,19 @@ export function DioramaLogin({
         .v9-label { display: block; font-family: var(--font-mono, var(--font-geist-mono, ui-monospace, 'JetBrains Mono', 'SFMono-Regular', monospace)); font-size: 0.6875rem; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(255,255,255,0.5); }
         .v9-input { width: 100%; height: 48px; padding: 0 1rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.16); color: #fff; font-family: var(--font-sans, var(--font-geist-sans, system-ui, -apple-system, 'Segoe UI', sans-serif)); font-size: 0.9375rem; outline: none; transition: border-color .15s ease, background .15s ease; caret-color: #fff; }
         .v9-input:hover { border-color: rgba(255,255,255,0.35); }
-        .v9-input:focus { border-color: #fff; background: rgba(255,255,255,0.06); }
+        .v9-input:focus { border-color: var(--accent, #f2c14e); background: rgba(255,255,255,0.06); box-shadow: 0 0 0 3px var(--accent-soft, rgba(242,193,78,0.13)); }
         .v9-input::placeholder { color: rgba(255,255,255,0.32); }
         .v9-eye { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-family: var(--font-mono, var(--font-geist-mono, ui-monospace, 'JetBrains Mono', 'SFMono-Regular', monospace)); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; padding: 6px 8px; color: rgba(255,255,255,0.5); transition: color .12s ease, background .12s ease; }
         .v9-eye:hover { color: #fff; background: rgba(255,255,255,0.06); }
-        .v9-cta { height: 52px; background: #fff; color: #000; font-family: var(--font-sans, var(--font-geist-sans, system-ui, -apple-system, 'Segoe UI', sans-serif)); font-weight: 700; font-size: 0.8125rem; letter-spacing: 0.2em; text-transform: uppercase; border: 1px solid #fff; }
+        .v9-cta { height: 52px; background: var(--accent, #f2c14e); color: var(--accent-ink, #241c00); font-family: var(--font-sans, var(--font-geist-sans, system-ui, -apple-system, 'Segoe UI', sans-serif)); font-weight: 700; font-size: 0.8125rem; letter-spacing: 0.2em; text-transform: uppercase; border: 1px solid var(--accent, #f2c14e); box-shadow: 0 8px 26px -10px var(--accent-glow, rgba(242,193,78,0.22)); transition: background .15s ease, box-shadow .15s ease; }
+        .v9-cta:hover:not(:disabled) { background: var(--accent-bright, #ffd36b); border-color: var(--accent-bright, #ffd36b); box-shadow: 0 10px 30px -10px var(--accent-glow, rgba(242,193,78,0.3)); }
         .v9-cta:disabled { opacity: 0.4; cursor: not-allowed; }
         .v9-cta:active { transform: translateY(1px); }
         .v9-scene canvas { image-rendering: auto; }
-        .v9-scene { filter: grayscale(1) contrast(1.12) brightness(1.16); }
+        /* Was grayscale(1) under the old strict-B&W rule. The panel identity
+           is dark + gold now — a muted-color grade lets the campfire glow
+           warm (on-brand gold light) while staying cinematic, not toy-like. */
+        .v9-scene { filter: saturate(0.55) contrast(1.1) brightness(1.12); }
         .v9-vignette { background: radial-gradient(116% 92% at 50% 44%, transparent 38%, rgba(0,0,0,0.28) 72%, rgba(0,0,0,0.62) 100%); mix-blend-mode: multiply; }
       `}</style>
     </main>
