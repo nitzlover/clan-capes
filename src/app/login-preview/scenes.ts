@@ -94,16 +94,19 @@ export const gateScene = (): SceneSpec => ({
   groundY: -16,
   fill: 0.5,
   mist: { count: 12, y: -13, opacity: 0.42, z: 6 },
+  // No moon — the sprite read as a flat white square in the muted color
+  // grade; stars + the gold beam carry the sky.
   camera: { position: [10, 12, 118], target: [-6, 18, -16], fov: 38, push: 6 },
-  background: { stars: true, moon: [72, 66, -150], fog: [150, 430], fogColor: 0x0b0b0d },
+  background: { stars: true, fog: [150, 430], fogColor: 0x0b0b0d },
   props: [
     // stepped pyramid, off-centre LEFT so the centered card never hides it
     { type: 'cliff', position: [-46, -16, -34], width: 50, height: 9, depth: 50, cobble: true },
     { type: 'cliff', position: [-46, -7, -34], width: 32, height: 7, depth: 32, cobble: true },
     { type: 'cliff', position: [-46, 0, -34], width: 18, height: 6, depth: 18, cobble: true },
-    // the gold beacon block + beam
-    { type: 'ore', position: [-46, 10, -34], size: 10, color: 0xffd36b },
-    { type: 'beam', position: [-46, 14, -34], width: 7, height: 470, color: 0xf2c14e },
+    // the gold beam straight off the pyramid top — the emissive "beacon
+    // block" blew out to a white cube under the grade, so the beam IS the
+    // beacon. Deeper gold so it survives the desaturated grade.
+    { type: 'beam', position: [-46, 6, -34], width: 7, height: 470, color: 0xe8a52e },
     // framing treeline (near → far)
     { type: 'tree', position: [-96, -16, -58], trunk: 46, rotationY: 0.5 },
     { type: 'tree', position: [84, -16, -54], trunk: 50, rotationY: -0.6 },
