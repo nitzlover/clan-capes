@@ -189,42 +189,36 @@ export function CapeManager({
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,360px)_1fr]">
-      {/* ── stage ── */}
+      {/* ── stage — seamless: skinview3d's canvas is always opaque (no alpha),
+            so it's cleared to the editor surface color and gets NO box, glow
+            or frame of its own; the figure floats on the row background. ── */}
       <div className="flex flex-col gap-3">
-        <div className="relative overflow-hidden rounded-[var(--radius-lg)] border border-[var(--rule)] bg-black">
-          {/* soft gold key light behind the figure */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute left-1/2 top-[42%] h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full"
-            style={{ background: 'var(--accent-glow)', filter: 'blur(80px)', opacity: shownCape ? 0.4 : 0.1 }}
-          />
-          <CornerTicks />
-          <div className="relative flex min-h-[360px] items-center justify-center py-4">
-            {shownCape ? (
-              <PlayerCapeView3D
-                capeUrl={shownCape}
-                width={240}
-                height={330}
-                view="back"
-                backEquipment={equip}
-                stance={pose}
-                interactive
-              />
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-[var(--text-faint)]">
-                <span className="material-symbols-outlined" style={{ fontSize: 34 }}>
-                  checkroom
-                </span>
-                <span className="font-mono text-[10px] uppercase tracking-[0.2em]">no cape yet</span>
-              </div>
-            )}
-          </div>
+        <div className="relative flex min-h-[360px] items-center justify-center">
+          {shownCape ? (
+            <PlayerCapeView3D
+              capeUrl={shownCape}
+              width={240}
+              height={330}
+              view="back"
+              backEquipment={equip}
+              stance={pose}
+              interactive
+              background={0x0d0d0d}
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-2 text-[var(--text-faint)]">
+              <span className="material-symbols-outlined" style={{ fontSize: 34 }}>
+                checkroom
+              </span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.2em]">no cape yet</span>
+            </div>
+          )}
           {preview && (
             <span className="pointer-events-none absolute right-3 top-3 border border-[var(--accent-line)] bg-black/70 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--accent-bright)]">
               unsaved
             </span>
           )}
-          <span className="pointer-events-none absolute bottom-3 left-3 inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--text-faint)]">
+          <span className="pointer-events-none absolute bottom-1 left-1 inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--text-faint)]">
             <span className="status-dot" style={{ background: 'var(--accent)' }} />
             back · drag to spin
           </span>
@@ -534,17 +528,5 @@ function SegControl({
         })}
       </div>
     </div>
-  );
-}
-
-function CornerTicks() {
-  const base = 'pointer-events-none absolute h-3 w-3 border-[var(--accent-line)]';
-  return (
-    <>
-      <span className={`${base} left-0 top-0 border-l border-t`} aria-hidden />
-      <span className={`${base} right-0 top-0 border-r border-t`} aria-hidden />
-      <span className={`${base} bottom-0 left-0 border-b border-l`} aria-hidden />
-      <span className={`${base} bottom-0 right-0 border-b border-r`} aria-hidden />
-    </>
   );
 }

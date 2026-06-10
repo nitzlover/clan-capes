@@ -52,6 +52,14 @@ type Props = {
    * front by a stray drag.
    */
   interactive?: boolean;
+  /**
+   * Opaque canvas background colour. skinview3d here builds its
+   * WebGLRenderer without an alpha buffer, so the canvas is ALWAYS an
+   * opaque rectangle — there is no true transparency. Pass the colour of
+   * the surrounding surface so the canvas blends into it instead of
+   * reading as a nested black box. Default black.
+   */
+  background?: number;
 };
 
 const DEFAULT_SKIN = '/skins/steve.png';
@@ -91,6 +99,7 @@ export function PlayerCapeView3D({
   stance = 'stand',
   zoom,
   interactive = true,
+  background = 0x000000,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rotationRef = useRef<number | null>(null);
@@ -116,10 +125,9 @@ export function PlayerCapeView3D({
         width,
         height,
         skin: skinUrl,
-        // Pure black so the canvas blends seamlessly into the
-        // surrounding right-pane background instead of showing as a
-        // 1px-tone-different rectangle inside it.
-        background: 0x000000,
+        // Opaque clear color — match the surface behind the canvas (see
+        // the `background` prop note; true transparency isn't available).
+        background,
       });
 
       // skinview3d 3.4.2 here renders yaw 0 as the BACK (cape toward the
@@ -159,7 +167,7 @@ export function PlayerCapeView3D({
       setViewer(null);
       setSkinviewMod(null);
     };
-  }, [skinUrl, width, height, rotate, view, interactive]);
+  }, [skinUrl, width, height, rotate, view, interactive, background]);
 
   // Cape texture — re-runs when the viewer first becomes available
   // (because viewer is a state value) and on every subsequent change to
